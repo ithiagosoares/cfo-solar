@@ -28,6 +28,16 @@ export function formatPercentual(valor: number, casas = 1): string {
   return `${valor.toFixed(casas).replace('.', ',')}%`
 }
 
+/**
+ * Margin ratios computed against a near-zero denominator (e.g. a company with
+ * R$0,10 in entradas and R$30k in saídas) are mathematically correct but
+ * visually meaningless — hide the literal percentage beyond +/-500%.
+ */
+export function formatMargem(valor: number, casas = 1): string {
+  if (valor < -500 || valor > 500) return 'Sem receita operacional'
+  return formatPercentual(valor, casas)
+}
+
 export function formatNumero(valor: number): string {
   return new Intl.NumberFormat('pt-BR').format(valor)
 }

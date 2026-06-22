@@ -1,28 +1,36 @@
 'use client'
 
 import { TrendingDown, TrendingUp, Minus } from 'lucide-react'
-import type { DadosEmpresa } from '@/types/financeiro'
-import { formatMoeda, formatPercentual } from '@/lib/utils'
+import type { EmpresaAnalise } from '@/types/financeiro'
+import { formatMoeda, formatMargem } from '@/lib/utils'
 
-interface EmpresaCardProps {
-  empresa: DadosEmpresa
+const COR_EMPRESA: Record<string, string> = {
+  'Solar System Matriz':    '#3b82f6',
+  'Solar System Filial PR': '#8b5cf6',
+  'Level2':                 '#22c55e',
+  'Ni Hao':                 '#f59e0b',
+  'AluMarket':              '#ef4444',
 }
 
-const COR_CODIGO: Record<string, string> = {
-  SS1:      '#3b82f6',
-  SS2:      '#8b5cf6',
-  LEVEL:    '#22c55e',
-  NIHAO:    '#f59e0b',
-  ALUMARKET:'#ef4444',
+function corEmpresa(nome: string): string {
+  if (COR_EMPRESA[nome]) return COR_EMPRESA[nome]
+  // Fallback via fuzzy match
+  const n = nome.toUpperCase()
+  if (n.includes('MATRIZ')) return '#3b82f6'
+  if (n.includes('FILIAL')) return '#8b5cf6'
+  if (n.includes('LEVEL'))  return '#22c55e'
+  if (n.includes('NI HAO') || n.includes('NIHAO')) return '#f59e0b'
+  if (n.includes('ALU'))    return '#ef4444'
+  return '#64748b'
 }
 
-export function EmpresaCard({ empresa }: EmpresaCardProps) {
-  const cor = COR_CODIGO[empresa.codigo] ?? '#64748b'
-  const margem = empresa.receitas > 0
-    ? ((empresa.receitas - empresa.despesas) / empresa.receitas) * 100
+export function EmpresaCard({ empresa }: { empresa: EmpresaAnalise }) {
+  const cor = corEmpresa(empresa.nome)
+  const margem = empresa.entradas > 0
+    ? ((empresa.entradas - empresa.saidas) / empresa.entradas) * 100
     : 0
-  const percentualSaldo = empresa.receitas > 0
-    ? (empresa.saldo / empresa.receitas) * 100
+  const percentualSaldo = empresa.entradas > 0
+    ? (empresa.saldo / empresa.entradas) * 100
     : 0
 
   const Icone = empresa.saldo > 0 ? TrendingUp : empresa.saldo < 0 ? TrendingDown : Minus
@@ -39,7 +47,7 @@ export function EmpresaCard({ empresa }: EmpresaCardProps) {
             className="text-xs font-bold uppercase tracking-widest px-2 py-0.5 rounded"
             style={{ background: `${cor}20`, color: cor }}
           >
-            {empresa.codigo}
+            {empresa.nome.split(' ').slice(-1)[0]}
           </span>
           <h3 className="mt-2 font-semibold leading-tight" style={{ color: '#e2e8f0' }}>
             {empresa.nome}
@@ -50,15 +58,15 @@ export function EmpresaCard({ empresa }: EmpresaCardProps) {
 
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <p className="text-xs uppercase tracking-wider mb-0.5" style={{ color: '#64748b' }}>Receitas</p>
+          <p className="text-xs uppercase tracking-wider mb-0.5" style={{ color: '#64748b' }}>Entradas</p>
           <p className="text-sm font-semibold tabular-nums" style={{ color: '#22c55e' }}>
-            {formatMoeda(empresa.receitas)}
+            {formatMoeda(empresa.entradas)}
           </p>
         </div>
         <div>
-          <p className="text-xs uppercase tracking-wider mb-0.5" style={{ color: '#64748b' }}>Despesas</p>
+          <p className="text-xs uppercase tracking-wider mb-0.5" style={{ color: '#64748b' }}>Saídas</p>
           <p className="text-sm font-semibold tabular-nums" style={{ color: '#ef4444' }}>
-            {formatMoeda(empresa.despesas)}
+            {formatMoeda(empresa.saidas)}
           </p>
         </div>
         <div>
@@ -70,16 +78,15 @@ export function EmpresaCard({ empresa }: EmpresaCardProps) {
         <div>
           <p className="text-xs uppercase tracking-wider mb-0.5" style={{ color: '#64748b' }}>Margem</p>
           <p className="text-sm font-semibold" style={{ color: margem >= 15 ? '#22c55e' : margem >= 5 ? '#f59e0b' : '#ef4444' }}>
-            {formatPercentual(margem)}
+            {formatMargem(margem)}
           </p>
         </div>
       </div>
 
-      {/* Barra saldo/receita */}
       <div className="mt-4">
         <div className="flex justify-between text-xs mb-1" style={{ color: '#64748b' }}>
-          <span>Saldo/Receita</span>
-          <span>{formatPercentual(percentualSaldo)}</span>
+          <span>Saldo/Entradas</span>
+          <span>{formatMargem(percentualSaldo)}</span>
         </div>
         <div className="h-1.5 w-full overflow-hidden rounded-full" style={{ background: '#2d3148' }}>
           <div
@@ -90,10 +97,6 @@ export function EmpresaCard({ empresa }: EmpresaCardProps) {
             }}
           />
         </div>
-      </div>
-
-      <div className="mt-3 text-xs" style={{ color: '#64748b' }}>
-        {empresa.transacoes.length} transações registradas
       </div>
     </div>
   )

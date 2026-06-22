@@ -1,11 +1,7 @@
 'use client'
 
-import type { ClientePrincipal } from '@/types/financeiro'
+import type { ClienteAnalise } from '@/types/financeiro'
 import { formatMoeda, formatPercentual } from '@/lib/utils'
-
-interface ClienteTabelaProps {
-  clientes: ClientePrincipal[]
-}
 
 const BADGE_CORES = [
   'bg-blue-500/15 text-blue-300',
@@ -21,7 +17,7 @@ function badgeCor(empresa: string): string {
   return BADGE_CORES[Math.abs(hash) % BADGE_CORES.length]
 }
 
-export function ClienteTabela({ clientes }: ClienteTabelaProps) {
+export function ClienteTabela({ clientes }: { clientes: ClienteAnalise[] }) {
   if (clientes.length === 0) {
     return (
       <div
@@ -33,6 +29,7 @@ export function ClienteTabela({ clientes }: ClienteTabelaProps) {
     )
   }
 
+  const totalValor = clientes.reduce((s, c) => s + c.valor, 0)
   const maxValor = clientes[0]?.valor ?? 1
 
   return (
@@ -58,42 +55,45 @@ export function ClienteTabela({ clientes }: ClienteTabelaProps) {
             </tr>
           </thead>
           <tbody>
-            {clientes.map((cliente, i) => (
-              <tr
-                key={i}
-                className="transition-colors hover:bg-white/[0.02]"
-                style={{ borderBottom: i < clientes.length - 1 ? '1px solid #1e2130' : 'none' }}
-              >
-                <td className="px-4 py-3 font-mono text-xs" style={{ color: '#64748b' }}>
-                  {String(i + 1).padStart(2, '0')}
-                </td>
-                <td className="px-4 py-3 font-medium max-w-[200px] truncate" style={{ color: '#e2e8f0' }}>
-                  {cliente.nome}
-                </td>
-                <td className="px-4 py-3 text-right font-semibold tabular-nums" style={{ color: '#e2e8f0' }}>
-                  {formatMoeda(cliente.valor)}
-                </td>
-                <td className="px-4 py-3 text-right font-medium" style={{ color: cliente.percentual > 30 ? '#f59e0b' : '#94a3b8' }}>
-                  {formatPercentual(cliente.percentual)}
-                </td>
-                <td className="px-4 py-3">
-                  <span className={`inline-block rounded px-2 py-0.5 text-xs font-medium ${badgeCor(cliente.empresa)}`}>
-                    {cliente.empresa}
-                  </span>
-                </td>
-                <td className="px-4 py-3">
-                  <div className="h-1.5 w-full overflow-hidden rounded-full" style={{ background: '#2d3148' }}>
-                    <div
-                      className="h-full rounded-full transition-all"
-                      style={{
-                        width: `${(cliente.valor / maxValor) * 100}%`,
-                        background: i === 0 ? '#3b82f6' : '#4b5563',
-                      }}
-                    />
-                  </div>
-                </td>
-              </tr>
-            ))}
+            {clientes.map((cliente, i) => {
+              const percentual = totalValor > 0 ? (cliente.valor / totalValor) * 100 : 0
+              return (
+                <tr
+                  key={i}
+                  className="transition-colors hover:bg-white/[0.02]"
+                  style={{ borderBottom: i < clientes.length - 1 ? '1px solid #1e2130' : 'none' }}
+                >
+                  <td className="px-4 py-3 font-mono text-xs" style={{ color: '#64748b' }}>
+                    {String(i + 1).padStart(2, '0')}
+                  </td>
+                  <td className="px-4 py-3 font-medium max-w-[200px] truncate" style={{ color: '#e2e8f0' }}>
+                    {cliente.nome}
+                  </td>
+                  <td className="px-4 py-3 text-right font-semibold tabular-nums" style={{ color: '#e2e8f0' }}>
+                    {formatMoeda(cliente.valor)}
+                  </td>
+                  <td className="px-4 py-3 text-right font-medium" style={{ color: percentual > 30 ? '#f59e0b' : '#94a3b8' }}>
+                    {formatPercentual(percentual)}
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className={`inline-block rounded px-2 py-0.5 text-xs font-medium ${badgeCor(cliente.empresa)}`}>
+                      {cliente.empresa}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="h-1.5 w-full overflow-hidden rounded-full" style={{ background: '#2d3148' }}>
+                      <div
+                        className="h-full rounded-full transition-all"
+                        style={{
+                          width: `${(cliente.valor / maxValor) * 100}%`,
+                          background: i === 0 ? '#3b82f6' : '#4b5563',
+                        }}
+                      />
+                    </div>
+                  </td>
+                </tr>
+              )
+            })}
           </tbody>
         </table>
       </div>

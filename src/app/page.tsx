@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import {
   Upload,
   BarChart2,
@@ -12,41 +12,108 @@ import {
   DollarSign,
   AlertTriangle,
   Download,
-  RefreshCw,
   Sun,
   ChevronRight,
   Briefcase,
+  CheckCircle,
+  FileSpreadsheet,
+  PieChart,
+  MessageCircle,
+  History,
+  Calendar,
 } from 'lucide-react'
-import { parsearExcel, FGI_FIXO, META_MENSAL } from '@/lib/excel-parser'
 import { gerarPDF } from '@/lib/pdf-generator'
 import { KPICard } from '@/components/dashboard/KPICard'
 import { FluxoGrafico } from '@/components/dashboard/FluxoGrafico'
 import { AlertasPanel } from '@/components/dashboard/AlertasPanel'
 import { ClienteTabela } from '@/components/dashboard/ClienteTabela'
 import { EmpresaCard } from '@/components/dashboard/EmpresaCard'
+import { DespesasPorCategoria } from '@/components/dashboard/DespesasPorCategoria'
 import { RelatorioView } from '@/components/relatorio/RelatorioView'
-import type { DadosConsolidados, RelatorioIA } from '@/types/financeiro'
-import { formatMoeda, formatPercentual } from '@/lib/utils'
+import { ChatPanel } from '@/components/chat/ChatPanel'
+import type { RelatorioCompleto, MensagemChat } from '@/types/financeiro'
+import { formatMoeda, formatPercentual, formatMargem, calcularVariacao } from '@/lib/utils'
 
-type Aba = 'dashboard' | 'empresas' | 'clientes' | 'relatorio'
+const FGI_FIXO = { gimenes: 5_000, barramares: 18_000, alumarketHera: 23_000, total: 46_000 }
+const META_MENSAL = 2_000_000
+
+const MESES_PT_CURTO = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
+
+function formatarPeriodoCurto(periodo: string): string {
+  const match = periodo.match(/^(\d{4})-(\d{2})$/)
+  if (!match) return periodo
+  const [, ano, mesStr] = match
+  const mes = MESES_PT_CURTO[parseInt(mesStr, 10) - 1] ?? mesStr
+  return `${mes}/${ano}`
+}
+
+interface PeriodoResumo {
+  periodo: string
+  faturamentoVendido: number
+  faturamentoFaturado: number
+  totalEntradas: number
+  totalSaidas: number
+  saldoGrupo: number
+  criadoEm: string
+  atualizadoEm: string
+}
+
+type Aba = 'dashboard' | 'empresas' | 'despesas' | 'clientes' | 'relatorio' | 'chat' | 'upload'
 
 const ABAS: { id: Aba; label: string; Icon: typeof BarChart2 }[] = [
-  { id: 'dashboard', label: 'Dashboard',    Icon: BarChart2 },
-  { id: 'empresas',  label: 'Empresas',     Icon: Building2 },
-  { id: 'clientes',  label: 'Clientes',     Icon: Users     },
-  { id: 'relatorio', label: 'Relatório IA', Icon: FileText  },
+  { id: 'dashboard', label: 'Dashboard',         Icon: BarChart2 },
+  { id: 'empresas',  label: 'Empresas',          Icon: Building2 },
+  { id: 'despesas',  label: 'Despesas',          Icon: PieChart  },
+  { id: 'clientes',  label: 'Clientes',          Icon: Users     },
+  { id: 'relatorio', label: 'Relatório IA',      Icon: FileText  },
+  { id: 'chat',      label: 'Chat',              Icon: MessageCircle },
+  { id: 'upload',    label: 'Adicionar Arquivo', Icon: Upload    },
 ]
 
-// ─── Upload Screen ─────────────────────────────────────────────────────────────
+// ─── Full-screen loading state (initial Supabase check + analyzing) ────────────────
 
-function TelaUpload({
-  onUpload,
-  loading,
+function TelaCarregando({ titulo, subtitulo }: { titulo: string; subtitulo: string }) {
+  return (
+    <div className="min-h-screen flex flex-col items-center justify-center gap-6" style={{ background: '#0f1117' }}>
+      <div className="flex items-center gap-3 mb-4">
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl" style={{ background: 'rgba(59,130,246,0.15)' }}>
+          <Sun className="h-5 w-5" style={{ color: '#3b82f6' }} />
+        </div>
+        <span className="font-bold" style={{ color: '#e2e8f0' }}>CFO Solar</span>
+      </div>
+      <div
+        className="h-14 w-14 rounded-full border-4 border-t-transparent animate-spin"
+        style={{
+          borderTopColor: '#3b82f6',
+          borderRightColor: '#2d3148',
+          borderBottomColor: '#2d3148',
+          borderLeftColor: '#2d3148',
+        }}
+      />
+      <div className="text-center">
+        <p className="text-lg font-semibold" style={{ color: '#e2e8f0' }}>{titulo}</p>
+        <p className="mt-1 text-sm" style={{ color: '#64748b' }}>{subtitulo}</p>
+      </div>
+    </div>
+  )
+}
+
+// ─── Upload Panel (embedded tab, not full-screen) ──────────────────────────────────
+
+function UploadPanel({
+  arquivo,
   erro,
+  periodo,
+  onPeriodoChange,
+  onFileSelect,
+  onAnalisar,
 }: {
-  onUpload: (file: File) => void
-  loading: boolean
+  arquivo: File | null
   erro: string | null
+  periodo: string
+  onPeriodoChange: (periodo: string) => void
+  onFileSelect: (file: File) => void
+  onAnalisar: () => void
 }) {
   const ref = useRef<HTMLInputElement>(null)
   const [isDragging, setIsDragging] = useState(false)
@@ -55,70 +122,100 @@ function TelaUpload({
     e.preventDefault()
     setIsDragging(false)
     const file = e.dataTransfer.files[0]
-    if (file) onUpload(file)
+    if (file) onFileSelect(file)
   }
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-4" style={{ background: '#0f1117' }}>
-      <div className="flex items-center gap-3 mb-10">
-        <div
-          className="flex h-12 w-12 items-center justify-center rounded-xl"
-          style={{ background: 'rgba(59,130,246,0.15)' }}
-        >
-          <Sun className="h-6 w-6" style={{ color: '#3b82f6' }} />
-        </div>
-        <div>
-          <h1 className="text-xl font-bold tracking-tight" style={{ color: '#e2e8f0' }}>CFO Solar</h1>
-          <p className="text-xs" style={{ color: '#64748b' }}>Grupo Solar System</p>
-        </div>
+    <div className="flex flex-col items-center px-4 py-4">
+      <div className="mb-6 text-center">
+        <h2 className="text-lg font-semibold" style={{ color: '#e2e8f0' }}>Adicionar novo relatório</h2>
+        <p className="text-sm mt-0.5" style={{ color: '#64748b' }}>
+          Envie a planilha mensal para gerar uma nova análise com IA e salvar no histórico.
+        </p>
       </div>
 
-      <div
-        onDragOver={e => { e.preventDefault(); setIsDragging(true) }}
-        onDragLeave={() => setIsDragging(false)}
-        onDrop={handleDrop}
-        onClick={() => ref.current?.click()}
-        className="cursor-pointer rounded-2xl border-2 border-dashed p-14 text-center transition-all duration-200 w-full max-w-lg"
-        style={{
-          borderColor: isDragging ? '#3b82f6' : '#2d3148',
-          background: isDragging ? 'rgba(59,130,246,0.06)' : '#1a1d27',
-        }}
-      >
-        {loading ? (
-          <div className="flex flex-col items-center gap-4">
-            <div
-              className="h-10 w-10 rounded-full border-4 border-t-transparent animate-spin"
-              style={{ borderColor: '#2d3148', borderTopColor: '#3b82f6' }}
-            />
-            <p className="font-medium" style={{ color: '#e2e8f0' }}>Processando planilha…</p>
+      {arquivo ? (
+        /* File selected — show preview + analyze button */
+        <div
+          className="w-full max-w-lg rounded-2xl border p-10 text-center"
+          style={{ background: '#1a1d27', borderColor: '#2d3148' }}
+        >
+          <div
+            className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-xl"
+            style={{ background: 'rgba(34,197,94,0.12)' }}
+          >
+            <FileSpreadsheet className="h-7 w-7" style={{ color: '#22c55e' }} />
           </div>
-        ) : (
-          <>
-            <div
-              className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-xl"
-              style={{ background: 'rgba(59,130,246,0.1)' }}
-            >
-              <Upload className="h-6 w-6" style={{ color: '#3b82f6' }} />
-            </div>
-            <p className="text-base font-semibold mb-1" style={{ color: '#e2e8f0' }}>
-              Arraste o arquivo Excel aqui
-            </p>
-            <p className="text-sm mb-4" style={{ color: '#64748b' }}>
-              ou clique para selecionar
-            </p>
-            <p className="text-xs leading-relaxed" style={{ color: '#4b5563' }}>
-              Suporta .xlsx e .xls com as abas:<br />
-              MATRIZ MAIO · FILIAL MAIO · LEVEL · NI HAO · ALUMARKET · FECHAMENTO
-            </p>
-          </>
-        )}
-      </div>
+          <p className="font-semibold" style={{ color: '#e2e8f0' }}>{arquivo.name}</p>
+          <p className="text-xs mt-1 mb-5" style={{ color: '#64748b' }}>
+            {(arquivo.size / 1024).toFixed(0)} KB · pronto para análise
+          </p>
+
+          <div className="mb-5 text-left">
+            <label className="mb-1.5 flex items-center gap-1.5 text-xs font-medium" style={{ color: '#94a3b8' }}>
+              <Calendar className="h-3.5 w-3.5" />
+              Período da planilha
+            </label>
+            <input
+              type="month"
+              value={periodo}
+              onChange={e => onPeriodoChange(e.target.value)}
+              className="w-full rounded-lg border bg-transparent px-3 py-2 text-sm outline-none"
+              style={{ borderColor: '#2d3148', color: '#e2e8f0' }}
+            />
+          </div>
+
+          <button
+            onClick={onAnalisar}
+            className="w-full rounded-xl py-3 text-sm font-bold transition-all"
+            style={{ background: '#3b82f6', color: '#fff' }}
+          >
+            Analisar com IA
+          </button>
+          <button
+            onClick={() => ref.current?.click()}
+            className="mt-3 w-full rounded-xl border py-2.5 text-xs font-medium transition-all"
+            style={{ borderColor: '#2d3148', color: '#64748b' }}
+          >
+            Trocar arquivo
+          </button>
+        </div>
+      ) : (
+        /* Empty drop zone */
+        <div
+          onDragOver={e => { e.preventDefault(); setIsDragging(true) }}
+          onDragLeave={() => setIsDragging(false)}
+          onDrop={handleDrop}
+          onClick={() => ref.current?.click()}
+          className="cursor-pointer rounded-2xl border-2 border-dashed p-14 text-center transition-all duration-200 w-full max-w-lg"
+          style={{
+            borderColor: isDragging ? '#3b82f6' : '#2d3148',
+            background: isDragging ? 'rgba(59,130,246,0.06)' : '#1a1d27',
+          }}
+        >
+          <div
+            className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-xl"
+            style={{ background: 'rgba(59,130,246,0.1)' }}
+          >
+            <Upload className="h-6 w-6" style={{ color: '#3b82f6' }} />
+          </div>
+          <p className="text-base font-semibold mb-1" style={{ color: '#e2e8f0' }}>
+            Arraste o arquivo Excel aqui
+          </p>
+          <p className="text-sm mb-4" style={{ color: '#64748b' }}>ou clique para selecionar</p>
+          <p className="text-xs leading-relaxed" style={{ color: '#4b5563' }}>
+            Suporta .xlsx e .xls com as abas:<br />
+            MATRIZ MAIO · FILIAL MAIO · LEVEL · NI HAO · ALUMARKET · FECHAMENTO
+          </p>
+        </div>
+      )}
+
       <input
         ref={ref}
         type="file"
         accept=".xlsx,.xls"
         className="hidden"
-        onChange={e => { const f = e.target.files?.[0]; if (f) onUpload(f) }}
+        onChange={e => { const f = e.target.files?.[0]; if (f) onFileSelect(f) }}
       />
 
       {erro && (
@@ -132,9 +229,9 @@ function TelaUpload({
 
       <div className="mt-10 grid grid-cols-3 gap-4 w-full max-w-lg">
         {[
-          { icon: BarChart2, label: 'KPIs Consolidados', desc: '5 empresas em tempo real' },
-          { icon: Target,    label: 'Meta R$ 2M',        desc: 'Acompanhamento automático' },
-          { icon: FileText,  label: 'Relatório IA',      desc: 'Análise por Claude' },
+          { icon: BarChart2,    label: 'KPIs Consolidados', desc: '5 empresas em tempo real' },
+          { icon: Target,       label: 'Meta R$ 2M',        desc: 'Acompanhamento automático' },
+          { icon: FileText,     label: 'Análise por IA',    desc: 'Claude lê a planilha direto' },
         ].map(({ icon: Icon, label, desc }) => (
           <div
             key={label}
@@ -151,105 +248,148 @@ function TelaUpload({
   )
 }
 
+// ─── Empty state for data tabs when nothing is loaded yet ──────────────────────────
+
+function EstadoVazio({ onIrParaUpload }: { onIrParaUpload: () => void }) {
+  return (
+    <div className="flex flex-col items-center justify-center gap-4 py-24 text-center animate-fadeIn">
+      <div className="flex h-14 w-14 items-center justify-center rounded-full" style={{ background: 'rgba(59,130,246,0.1)' }}>
+        <FileSpreadsheet className="h-7 w-7" style={{ color: '#3b82f6' }} />
+      </div>
+      <div>
+        <p className="font-semibold" style={{ color: '#e2e8f0' }}>Nenhum relatório carregado ainda</p>
+        <p className="mt-1 text-sm" style={{ color: '#64748b' }}>
+          Envie uma planilha na aba &quot;Adicionar Arquivo&quot; para começar.
+        </p>
+      </div>
+      <button
+        onClick={onIrParaUpload}
+        className="rounded-lg px-4 py-2 text-xs font-semibold transition-all"
+        style={{ background: '#3b82f6', color: '#fff' }}
+      >
+        Ir para Adicionar Arquivo
+      </button>
+    </div>
+  )
+}
+
 // ─── Progress Bar ───────────────────────────────────────────────────────────────
 
 function ProgressBar({ valor, max, cor }: { valor: number; max: number; cor: string }) {
   const pct = Math.min((valor / max) * 100, 100)
   return (
     <div className="h-2 w-full overflow-hidden rounded-full" style={{ background: '#2d3148' }}>
-      <div
-        className="h-full rounded-full transition-all duration-700"
-        style={{ width: `${pct}%`, background: cor }}
-      />
+      <div className="h-full rounded-full transition-all duration-700" style={{ width: `${pct}%`, background: cor }} />
     </div>
   )
 }
 
 // ─── Dashboard View ─────────────────────────────────────────────────────────────
 
-function DashboardView({ dados }: { dados: DadosConsolidados }) {
-  const { kpis, empresas, alertas } = dados
+function DashboardView({ relatorio, mesAnterior }: { relatorio: RelatorioCompleto; mesAnterior: PeriodoResumo | null }) {
+  const { faturamento, consolidado, empresas, analise } = relatorio
+
+  const margemLiquida = consolidado.totalEntradas > 0
+    ? ((consolidado.totalEntradas - consolidado.totalSaidas) / consolidado.totalEntradas) * 100
+    : 0
+  const comprometimentoFGI = faturamento.vendido > 0
+    ? (FGI_FIXO.total / faturamento.vendido) * 100
+    : 0
+  const progressoMeta = Math.min((faturamento.vendido / META_MENSAL) * 100, 100)
 
   return (
     <div className="flex flex-col gap-6">
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-5">
         <KPICard
-          titulo="Saldo Consolidado"
-          valor={kpis.saldoConsolidado}
+          titulo="Saldo do Grupo"
+          valor={consolidado.saldoGrupo}
           formato="moeda"
           Icon={DollarSign}
-          cor={kpis.saldoConsolidado >= 0 ? 'green' : 'red'}
-          variacao={kpis.variacaoSaldo}
+          cor={consolidado.saldoGrupo >= 0 ? 'green' : 'red'}
+          variacao={mesAnterior ? calcularVariacao(consolidado.saldoGrupo, mesAnterior.saldoGrupo) : undefined}
         />
         <KPICard
-          titulo="Faturamento Total"
-          valor={kpis.faturamentoTotal}
+          titulo="Faturamento Vendido"
+          valor={faturamento.vendido}
           formato="moeda"
           Icon={TrendingUp}
           cor="blue"
-          variacao={kpis.variacaoFaturamento}
+          variacao={mesAnterior ? calcularVariacao(faturamento.vendido, mesAnterior.faturamentoVendido) : undefined}
         />
         <KPICard
-          titulo="Margem Bruta"
-          valor={kpis.margemBruta}
-          formato="percentual"
-          Icon={BarChart2}
-          cor={kpis.margemBruta >= 20 ? 'green' : kpis.margemBruta >= 10 ? 'yellow' : 'red'}
+          titulo="Faturamento Faturado"
+          valor={faturamento.faturado}
+          formato="moeda"
+          Icon={CheckCircle}
+          cor="blue"
+          variacao={mesAnterior ? calcularVariacao(faturamento.faturado, mesAnterior.faturamentoFaturado) : undefined}
+          descricao={`${formatPercentual(faturamento.vendido > 0 ? (faturamento.faturado / faturamento.vendido) * 100 : 0)} do vendido`}
         />
         <KPICard
           titulo="Comprometimento FGI"
-          valor={kpis.comprometimentoFGI}
+          valor={comprometimentoFGI}
           formato="percentual"
           Icon={AlertTriangle}
-          cor={kpis.comprometimentoFGI <= 20 ? 'green' : kpis.comprometimentoFGI <= 30 ? 'yellow' : 'red'}
+          cor={comprometimentoFGI <= 20 ? 'green' : comprometimentoFGI <= 30 ? 'yellow' : 'red'}
           descricao="R$ 46.000/mês fixo"
         />
         <KPICard
           titulo="Meta R$ 2M"
-          valor={kpis.progressoMeta}
+          valor={progressoMeta}
           formato="percentual"
           Icon={Target}
-          cor={kpis.progressoMeta >= 80 ? 'green' : kpis.progressoMeta >= 50 ? 'yellow' : 'red'}
-          descricao={`${formatMoeda(kpis.faturamentoTotal)} de ${formatMoeda(META_MENSAL)}`}
+          cor={progressoMeta >= 80 ? 'green' : progressoMeta >= 50 ? 'yellow' : 'red'}
+          descricao={`${formatMoeda(faturamento.vendido)} de ${formatMoeda(META_MENSAL)}`}
         />
       </div>
 
-      {/* Meta progress + FGI breakdown */}
+      {/* Entradas vs Saídas + FGI breakdown */}
       <div
         className="rounded-xl border px-5 py-4 animate-fadeIn"
         style={{ background: '#1a1d27', borderColor: '#2d3148' }}
       >
-        <div className="flex items-center justify-between mb-3">
+        <div className="grid grid-cols-2 gap-6 mb-4">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-widest" style={{ color: '#64748b' }}>
-              Progresso da Meta Mensal
+            <p className="text-xs font-semibold uppercase tracking-widest mb-1" style={{ color: '#64748b' }}>
+              Entradas no Banco
             </p>
-            <p className="mt-1 text-lg font-bold" style={{ color: '#e2e8f0' }}>
-              {formatMoeda(kpis.faturamentoTotal)}{' '}
-              <span className="text-sm font-normal" style={{ color: '#64748b' }}>
-                / {formatMoeda(META_MENSAL)}
-              </span>
+            <p className="text-xl font-bold tabular-nums" style={{ color: '#22c55e' }}>
+              {formatMoeda(consolidado.totalEntradas)}
             </p>
           </div>
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-widest mb-1" style={{ color: '#64748b' }}>
+              Saídas do Banco
+            </p>
+            <p className="text-xl font-bold tabular-nums" style={{ color: '#ef4444' }}>
+              {formatMoeda(consolidado.totalSaidas)}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-xs font-semibold uppercase tracking-widest" style={{ color: '#64748b' }}>
+            Progresso da Meta Mensal
+          </p>
           <span
-            className="text-xl font-bold"
-            style={{ color: kpis.progressoMeta >= 80 ? '#22c55e' : kpis.progressoMeta >= 50 ? '#f59e0b' : '#ef4444' }}
+            className="text-lg font-bold tabular-nums"
+            style={{ color: progressoMeta >= 80 ? '#22c55e' : progressoMeta >= 50 ? '#f59e0b' : '#ef4444' }}
           >
-            {formatPercentual(kpis.progressoMeta)}
+            {formatPercentual(progressoMeta)}
           </span>
         </div>
         <ProgressBar
-          valor={kpis.faturamentoTotal}
+          valor={faturamento.vendido}
           max={META_MENSAL}
-          cor={kpis.progressoMeta >= 80 ? '#22c55e' : kpis.progressoMeta >= 50 ? '#f59e0b' : '#ef4444'}
+          cor={progressoMeta >= 80 ? '#22c55e' : progressoMeta >= 50 ? '#f59e0b' : '#ef4444'}
         />
 
         <div className="mt-4 pt-4 border-t grid grid-cols-4 gap-3" style={{ borderColor: '#2d3148' }}>
           {[
-            { label: 'Gimenes', valor: FGI_FIXO.gimenes },
-            { label: 'Barramares', valor: FGI_FIXO.barramares },
+            { label: 'Gimenes',     valor: FGI_FIXO.gimenes },
+            { label: 'Barramares',  valor: FGI_FIXO.barramares },
             { label: 'AluMkt/Hera', valor: FGI_FIXO.alumarketHera },
-            { label: 'Total FGI', valor: FGI_FIXO.total, destaque: true },
+            { label: 'Total FGI',   valor: FGI_FIXO.total, destaque: true },
           ].map(item => (
             <div key={item.label} className="text-center">
               <p className="text-xs" style={{ color: '#64748b' }}>{item.label}</p>
@@ -262,13 +402,23 @@ function DashboardView({ dados }: { dados: DadosConsolidados }) {
             </div>
           ))}
         </div>
+
+        <div className="mt-3 pt-3 border-t flex items-center justify-between" style={{ borderColor: '#2d3148' }}>
+          <p className="text-xs" style={{ color: '#64748b' }}>Margem líquida de caixa</p>
+          <span
+            className="text-sm font-bold"
+            style={{ color: margemLiquida >= 0 ? '#22c55e' : '#ef4444' }}
+          >
+            {formatPercentual(margemLiquida)}
+          </span>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2">
           <FluxoGrafico empresas={empresas} />
         </div>
-        <AlertasPanel alertas={alertas} />
+        <AlertasPanel alertas={analise.alertas} />
       </div>
     </div>
   )
@@ -276,18 +426,20 @@ function DashboardView({ dados }: { dados: DadosConsolidados }) {
 
 // ─── Empresas View ──────────────────────────────────────────────────────────────
 
-function EmpresasView({ dados }: { dados: DadosConsolidados }) {
+function EmpresasView({ relatorio }: { relatorio: RelatorioCompleto }) {
+  const { empresas, faturamento, consolidado, periodo } = relatorio
+
   return (
     <div>
       <div className="mb-5">
         <h2 className="text-lg font-semibold" style={{ color: '#e2e8f0' }}>Empresas do Grupo</h2>
         <p className="text-sm mt-0.5" style={{ color: '#64748b' }}>
-          Performance financeira individual — {dados.periodo}
+          Performance financeira individual — {periodo}
         </p>
       </div>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-        {dados.empresas.map(empresa => (
-          <EmpresaCard key={empresa.codigo} empresa={empresa} />
+        {empresas.map(empresa => (
+          <EmpresaCard key={empresa.nome} empresa={empresa} />
         ))}
       </div>
 
@@ -301,7 +453,7 @@ function EmpresasView({ dados }: { dados: DadosConsolidados }) {
         <table className="w-full text-sm">
           <thead>
             <tr style={{ borderBottom: '1px solid #2d3148' }}>
-              {['Empresa', 'Receitas', 'Despesas', 'Saldo', 'Margem', 'Transações'].map(h => (
+              {['Empresa', 'Entradas', 'Saídas', 'Saldo', 'Margem'].map(h => (
                 <th key={h} className="pb-2 pr-6 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#64748b' }}>
                   {h}
                 </th>
@@ -309,39 +461,35 @@ function EmpresasView({ dados }: { dados: DadosConsolidados }) {
             </tr>
           </thead>
           <tbody>
-            {dados.empresas.map(e => {
-              const margem = e.receitas > 0 ? ((e.receitas - e.despesas) / e.receitas) * 100 : 0
+            {empresas.map(e => {
+              const margem = e.entradas > 0 ? ((e.entradas - e.saidas) / e.entradas) * 100 : 0
               return (
-                <tr key={e.codigo} style={{ borderBottom: '1px solid #1e2130' }}>
+                <tr key={e.nome} style={{ borderBottom: '1px solid #1e2130' }}>
                   <td className="py-2.5 pr-6 font-medium" style={{ color: '#e2e8f0' }}>{e.nome}</td>
-                  <td className="py-2.5 pr-6 tabular-nums" style={{ color: '#22c55e' }}>{formatMoeda(e.receitas)}</td>
-                  <td className="py-2.5 pr-6 tabular-nums" style={{ color: '#ef4444' }}>{formatMoeda(e.despesas)}</td>
+                  <td className="py-2.5 pr-6 tabular-nums" style={{ color: '#22c55e' }}>{formatMoeda(e.entradas)}</td>
+                  <td className="py-2.5 pr-6 tabular-nums" style={{ color: '#ef4444' }}>{formatMoeda(e.saidas)}</td>
                   <td className="py-2.5 pr-6 tabular-nums font-semibold" style={{ color: e.saldo >= 0 ? '#22c55e' : '#ef4444' }}>
                     {formatMoeda(e.saldo)}
                   </td>
-                  <td className="py-2.5 pr-6" style={{ color: margem >= 15 ? '#22c55e' : margem >= 5 ? '#f59e0b' : '#ef4444' }}>
-                    {formatPercentual(margem)}
+                  <td className="py-2.5" style={{ color: margem >= 15 ? '#22c55e' : margem >= 5 ? '#f59e0b' : '#ef4444' }}>
+                    {formatMargem(margem)}
                   </td>
-                  <td className="py-2.5 tabular-nums" style={{ color: '#94a3b8' }}>{e.transacoes.length}</td>
                 </tr>
               )
             })}
             <tr style={{ borderTop: '2px solid #2d3148' }}>
-              <td className="pt-3 pr-6 font-bold" style={{ color: '#3b82f6' }}>TOTAL</td>
+              <td className="pt-3 pr-6 font-bold" style={{ color: '#3b82f6' }}>CONSOLIDADO</td>
               <td className="pt-3 pr-6 tabular-nums font-bold" style={{ color: '#22c55e' }}>
-                {formatMoeda(dados.kpis.faturamentoTotal)}
+                {formatMoeda(consolidado.totalEntradas)}
               </td>
               <td className="pt-3 pr-6 tabular-nums font-bold" style={{ color: '#ef4444' }}>
-                {formatMoeda(dados.empresas.reduce((s, e) => s + e.despesas, 0))}
+                {formatMoeda(consolidado.totalSaidas)}
               </td>
-              <td className="pt-3 pr-6 tabular-nums font-bold" style={{ color: dados.kpis.saldoConsolidado >= 0 ? '#22c55e' : '#ef4444' }}>
-                {formatMoeda(dados.kpis.saldoConsolidado)}
+              <td className="pt-3 pr-6 tabular-nums font-bold" style={{ color: consolidado.saldoGrupo >= 0 ? '#22c55e' : '#ef4444' }}>
+                {formatMoeda(consolidado.saldoGrupo)}
               </td>
-              <td className="pt-3 pr-6 font-bold" style={{ color: dados.kpis.margemBruta >= 15 ? '#22c55e' : '#f59e0b' }}>
-                {formatPercentual(dados.kpis.margemBruta)}
-              </td>
-              <td className="pt-3 tabular-nums font-bold" style={{ color: '#94a3b8' }}>
-                {dados.empresas.reduce((s, e) => s + e.transacoes.length, 0)}
+              <td className="pt-3 font-semibold" style={{ color: '#94a3b8' }}>
+                {formatMoeda(faturamento.vendido)} vendido
               </td>
             </tr>
           </tbody>
@@ -354,59 +502,124 @@ function EmpresasView({ dados }: { dados: DadosConsolidados }) {
 // ─── Main ───────────────────────────────────────────────────────────────────────
 
 export default function Home() {
-  const [dados, setDados] = useState<DadosConsolidados | null>(null)
-  const [relatorio, setRelatorio] = useState<RelatorioIA | null>(null)
-  const [loading, setLoading] = useState(false)
+  const [relatorio, setRelatorio] = useState<RelatorioCompleto | null>(null)
+  const [arquivo, setArquivo] = useState<File | null>(null)
   const [analisando, setAnalisando] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
   const [abaAtiva, setAbaAtiva] = useState<Aba>('dashboard')
   const [nomeArquivo, setNomeArquivo] = useState('')
+  const [mensagensChat, setMensagensChat] = useState<MensagemChat[]>([])
+  const [periodoUpload, setPeriodoUpload] = useState(() => new Date().toISOString().slice(0, 7))
+  const [historico, setHistorico] = useState<PeriodoResumo[]>([])
+  const [trocandoPeriodo, setTrocandoPeriodo] = useState(false)
+  const [carregandoInicial, setCarregandoInicial] = useState(true)
 
-  const handleUpload = useCallback(async (file: File) => {
-    setLoading(true)
-    setErro(null)
-    setRelatorio(null)
-    try {
-      const buffer = await file.arrayBuffer()
-      const resultado = parsearExcel(buffer)
-      setDados(resultado)
-      setNomeArquivo(file.name)
-      setAbaAtiva('dashboard')
-    } catch (e) {
-      setErro(e instanceof Error ? e.message : 'Erro ao processar o arquivo Excel.')
-    } finally {
-      setLoading(false)
+  // On first load, show whatever is most recent in Supabase instead of forcing an
+  // upload — the upload flow only kicks in if there's truly nothing saved yet.
+  useEffect(() => {
+    let cancelado = false
+    async function carregarMaisRecente() {
+      try {
+        const res = await fetch('/api/historico')
+        const json = await res.json()
+        const lista: PeriodoResumo[] = Array.isArray(json.relatorios) ? json.relatorios : []
+        if (cancelado) return
+        if (lista.length === 0) {
+          setAbaAtiva('upload')
+          return
+        }
+        const resDetalhe = await fetch(`/api/historico?periodo=${lista[0].periodo}`)
+        const detalhe = await resDetalhe.json()
+        if (cancelado) return
+        if (resDetalhe.ok) {
+          setRelatorio(detalhe as RelatorioCompleto)
+          setNomeArquivo(`Histórico — ${detalhe.periodo}`)
+        } else {
+          setAbaAtiva('upload')
+        }
+      } catch {
+        if (!cancelado) setAbaAtiva('upload')
+      } finally {
+        if (!cancelado) setCarregandoInicial(false)
+      }
     }
+    carregarMaisRecente()
+    return () => { cancelado = true }
+  }, [])
+
+  useEffect(() => {
+    if (!relatorio) return
+    fetch('/api/historico')
+      .then(res => res.json())
+      .then(json => { if (Array.isArray(json.relatorios)) setHistorico(json.relatorios) })
+      .catch(() => {})
+  }, [relatorio?.periodoChave])
+
+  const indiceAtual = relatorio ? historico.findIndex(h => h.periodo === relatorio.periodoChave) : -1
+  const mesAnterior = indiceAtual !== -1 && indiceAtual + 1 < historico.length ? historico[indiceAtual + 1] : null
+
+  const handleFileSelect = useCallback((file: File) => {
+    setArquivo(file)
+    setNomeArquivo(file.name)
+    setErro(null)
   }, [])
 
   const handleAnalisar = useCallback(async () => {
-    if (!dados) return
+    if (!arquivo) return
     setAnalisando(true)
     setErro(null)
-    setAbaAtiva('relatorio')
     try {
-      const res = await fetch('/api/analisar', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(dados),
-      })
+      const formData = new FormData()
+      formData.append('arquivo', arquivo)
+      formData.append('periodo', periodoUpload)
+      const res = await fetch('/api/analisar', { method: 'POST', body: formData })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? 'Erro na API')
-      setRelatorio(json as RelatorioIA)
-    } catch (e) {
-      setErro(e instanceof Error ? e.message : 'Erro na análise com IA.')
+      setRelatorio(json as RelatorioCompleto)
+      setArquivo(null)
+      setMensagensChat([])
       setAbaAtiva('dashboard')
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : 'Erro ao analisar com IA.')
     } finally {
       setAnalisando(false)
     }
-  }, [dados])
+  }, [arquivo, periodoUpload])
+
+  const handleSelecionarPeriodo = useCallback(async (periodo: string) => {
+    if (!periodo || periodo === relatorio?.periodoChave) return
+    setTrocandoPeriodo(true)
+    setErro(null)
+    try {
+      const res = await fetch(`/api/historico?periodo=${periodo}`)
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error ?? 'Erro ao carregar período')
+      setRelatorio(json as RelatorioCompleto)
+      setNomeArquivo(`Histórico — ${json.periodo}`)
+      setMensagensChat([])
+      setAbaAtiva('dashboard')
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : 'Erro ao carregar período selecionado.')
+    } finally {
+      setTrocandoPeriodo(false)
+    }
+  }, [relatorio?.periodoChave])
 
   const handleExportPDF = useCallback(() => {
-    if (dados && relatorio) gerarPDF(dados, relatorio)
-  }, [dados, relatorio])
+    if (relatorio) gerarPDF(relatorio)
+  }, [relatorio])
 
-  if (!dados) {
-    return <TelaUpload onUpload={handleUpload} loading={loading} erro={erro} />
+  if (carregandoInicial) {
+    return <TelaCarregando titulo="Carregando dados mais recentes…" subtitulo="Verificando relatórios salvos no Supabase." />
+  }
+
+  if (analisando) {
+    return (
+      <TelaCarregando
+        titulo="Analisando planilha com IA…"
+        subtitulo="Claude está lendo e interpretando os dados financeiros. Aguarde até 90 segundos."
+      />
+    )
   }
 
   return (
@@ -418,68 +631,55 @@ export default function Home() {
       >
         <div className="mx-auto flex max-w-screen-2xl items-center gap-4 px-5 py-3">
           <div className="flex items-center gap-2.5 mr-4">
-            <div
-              className="flex h-8 w-8 items-center justify-center rounded-lg"
-              style={{ background: 'rgba(59,130,246,0.15)' }}
-            >
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg" style={{ background: 'rgba(59,130,246,0.15)' }}>
               <Sun className="h-4 w-4" style={{ color: '#3b82f6' }} />
             </div>
-            <span className="font-bold text-sm hidden sm:block" style={{ color: '#e2e8f0' }}>
-              CFO Solar
-            </span>
+            <span className="font-bold text-sm hidden sm:block" style={{ color: '#e2e8f0' }}>CFO Solar</span>
           </div>
 
           <div className="flex items-center gap-2 flex-1 min-w-0">
             <Briefcase className="h-3.5 w-3.5 shrink-0" style={{ color: '#64748b' }} />
             <span className="text-xs truncate max-w-[200px]" style={{ color: '#64748b' }}>
-              {nomeArquivo}
+              {relatorio ? nomeArquivo : 'Nenhum relatório carregado'}
             </span>
-            <ChevronRight className="h-3 w-3 shrink-0" style={{ color: '#4b5563' }} />
-            <span className="text-xs font-medium capitalize" style={{ color: '#94a3b8' }}>
-              {dados.periodo}
-            </span>
+            {relatorio && (
+              <>
+                <ChevronRight className="h-3 w-3 shrink-0" style={{ color: '#4b5563' }} />
+                <span className="text-xs font-medium capitalize" style={{ color: '#94a3b8' }}>{relatorio.periodo}</span>
+              </>
+            )}
           </div>
 
           <div className="flex items-center gap-2">
-            <label className="cursor-pointer">
-              <input
-                type="file"
-                accept=".xlsx,.xls"
-                className="hidden"
-                onChange={e => { const f = e.target.files?.[0]; if (f) handleUpload(f) }}
-              />
-              <span
-                className="flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer"
-                style={{ borderColor: '#2d3148', color: '#94a3b8' }}
-              >
-                <Upload className="h-3.5 w-3.5" />
-                <span className="hidden sm:block">Trocar arquivo</span>
-              </span>
-            </label>
+            {relatorio && historico.length > 0 && (
+              <div className="relative flex items-center">
+                <History className="pointer-events-none absolute left-2.5 h-3.5 w-3.5" style={{ color: '#64748b' }} />
+                <select
+                  value={relatorio.periodoChave}
+                  onChange={e => handleSelecionarPeriodo(e.target.value)}
+                  disabled={trocandoPeriodo}
+                  className="appearance-none rounded-lg border bg-transparent py-1.5 pl-8 pr-3 text-xs font-medium outline-none disabled:opacity-60"
+                  style={{ borderColor: '#2d3148', color: '#94a3b8', background: '#161925' }}
+                >
+                  {!historico.some(h => h.periodo === relatorio.periodoChave) && (
+                    <option value={relatorio.periodoChave}>{relatorio.periodo}</option>
+                  )}
+                  {historico.map(h => (
+                    <option key={h.periodo} value={h.periodo}>{formatarPeriodoCurto(h.periodo)}</option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             <button
-              onClick={handleAnalisar}
-              disabled={analisando}
-              className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all disabled:opacity-60"
-              style={{ background: '#3b82f6', color: '#fff' }}
+              onClick={handleExportPDF}
+              disabled={!relatorio}
+              className="flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-40"
+              style={{ borderColor: '#2d3148', color: '#94a3b8' }}
             >
-              {analisando
-                ? <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-                : <FileText className="h-3.5 w-3.5" />
-              }
-              <span className="hidden sm:block">{analisando ? 'Analisando…' : 'Analisar IA'}</span>
+              <Download className="h-3.5 w-3.5" />
+              <span className="hidden sm:block">PDF</span>
             </button>
-
-            {relatorio && (
-              <button
-                onClick={handleExportPDF}
-                className="flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors"
-                style={{ borderColor: '#2d3148', color: '#94a3b8' }}
-              >
-                <Download className="h-3.5 w-3.5" />
-                <span className="hidden sm:block">PDF</span>
-              </button>
-            )}
           </div>
         </div>
 
@@ -507,9 +707,6 @@ export default function Home() {
               >
                 <Icon className="h-3.5 w-3.5" />
                 {label}
-                {id === 'relatorio' && relatorio && (
-                  <span className="ml-1 inline-block h-1.5 w-1.5 rounded-full" style={{ background: '#22c55e' }} />
-                )}
               </button>
             )
           })}
@@ -517,14 +714,42 @@ export default function Home() {
       </header>
 
       <main className="mx-auto max-w-screen-2xl px-5 py-6">
-        {abaAtiva === 'dashboard' && <DashboardView dados={dados} />}
-        {abaAtiva === 'empresas'  && <EmpresasView dados={dados} />}
-        {abaAtiva === 'clientes'  && <ClienteTabela clientes={dados.clientes} />}
-        {abaAtiva === 'relatorio' && (
-          <RelatorioView
-            relatorio={relatorio}
-            analisando={analisando}
+        {abaAtiva === 'upload' && (
+          <UploadPanel
+            arquivo={arquivo}
+            erro={erro}
+            periodo={periodoUpload}
+            onPeriodoChange={setPeriodoUpload}
+            onFileSelect={handleFileSelect}
             onAnalisar={handleAnalisar}
+          />
+        )}
+        {abaAtiva === 'dashboard' && (
+          relatorio ? <DashboardView relatorio={relatorio} mesAnterior={mesAnterior} /> : <EstadoVazio onIrParaUpload={() => setAbaAtiva('upload')} />
+        )}
+        {abaAtiva === 'empresas' && (
+          relatorio ? <EmpresasView relatorio={relatorio} /> : <EstadoVazio onIrParaUpload={() => setAbaAtiva('upload')} />
+        )}
+        {abaAtiva === 'despesas' && (
+          relatorio ? (
+            <DespesasPorCategoria
+              despesasGrupo={relatorio.consolidado.despesasPorCategoriaGrupo}
+              resumoCustosGrupo={relatorio.consolidado.resumoCustosGrupo}
+              empresas={relatorio.empresas}
+            />
+          ) : <EstadoVazio onIrParaUpload={() => setAbaAtiva('upload')} />
+        )}
+        {abaAtiva === 'clientes' && (
+          relatorio ? <ClienteTabela clientes={relatorio.clientes} /> : <EstadoVazio onIrParaUpload={() => setAbaAtiva('upload')} />
+        )}
+        {abaAtiva === 'relatorio' && (
+          relatorio ? <RelatorioView analise={relatorio.analise} /> : <EstadoVazio onIrParaUpload={() => setAbaAtiva('upload')} />
+        )}
+        {abaAtiva === 'chat' && (
+          <ChatPanel
+            relatorio={relatorio}
+            mensagens={mensagensChat}
+            onMensagensChange={setMensagensChat}
           />
         )}
       </main>

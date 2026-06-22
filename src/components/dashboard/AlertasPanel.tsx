@@ -1,21 +1,16 @@
 'use client'
 
 import { AlertTriangle, CheckCircle, Info, XCircle } from 'lucide-react'
-import type { AlertaFinanceiro, TipoAlerta } from '@/types/financeiro'
-import { formatMoeda } from '@/lib/utils'
+import type { AlertaAnalise, NivelAlerta } from '@/types/financeiro'
 
-interface AlertasPanelProps {
-  alertas: AlertaFinanceiro[]
-}
-
-const CONFIG: Record<TipoAlerta, { Icon: typeof AlertTriangle; cor: string; borda: string; bg: string }> = {
+const CONFIG: Record<NivelAlerta, { Icon: typeof AlertTriangle; cor: string; borda: string; bg: string }> = {
   danger:  { Icon: XCircle,       cor: '#ef4444', borda: '#7f1d1d', bg: 'rgba(239,68,68,0.08)' },
   warning: { Icon: AlertTriangle, cor: '#f59e0b', borda: '#78350f', bg: 'rgba(245,158,11,0.08)' },
   success: { Icon: CheckCircle,   cor: '#22c55e', borda: '#14532d', bg: 'rgba(34,197,94,0.08)'  },
   info:    { Icon: Info,          cor: '#3b82f6', borda: '#1e3a5f', bg: 'rgba(59,130,246,0.08)' },
 }
 
-export function AlertasPanel({ alertas }: AlertasPanelProps) {
+export function AlertasPanel({ alertas }: { alertas: AlertaAnalise[] }) {
   if (alertas.length === 0) {
     return (
       <div
@@ -30,9 +25,9 @@ export function AlertasPanel({ alertas }: AlertasPanelProps) {
     )
   }
 
-  const ordem: TipoAlerta[] = ['danger', 'warning', 'info', 'success']
+  const ordem: NivelAlerta[] = ['danger', 'warning', 'info', 'success']
   const ordenados = [...alertas].sort(
-    (a, b) => ordem.indexOf(a.tipo) - ordem.indexOf(b.tipo),
+    (a, b) => ordem.indexOf(a.nivel) - ordem.indexOf(b.nivel),
   )
 
   return (
@@ -41,11 +36,11 @@ export function AlertasPanel({ alertas }: AlertasPanelProps) {
       style={{ background: '#1a1d27', borderColor: '#2d3148' }}
     >
       <h3 className="mb-4 text-sm font-semibold uppercase tracking-widest" style={{ color: '#64748b' }}>
-        Alertas Automáticos
+        Alertas
       </h3>
       <div className="flex flex-col gap-2">
         {ordenados.map((alerta, i) => {
-          const cfg = CONFIG[alerta.tipo]
+          const cfg = CONFIG[alerta.nivel] ?? CONFIG.info
           const { Icon } = cfg
           return (
             <div
@@ -65,13 +60,8 @@ export function AlertasPanel({ alertas }: AlertasPanelProps) {
                   {alerta.titulo}
                 </p>
                 <p className="mt-0.5 text-xs leading-relaxed" style={{ color: '#94a3b8' }}>
-                  {alerta.mensagem}
+                  {alerta.descricao}
                 </p>
-                {alerta.valor !== undefined && (
-                  <p className="mt-1 text-xs font-semibold" style={{ color: cfg.cor }}>
-                    {formatMoeda(alerta.valor)}
-                  </p>
-                )}
               </div>
             </div>
           )

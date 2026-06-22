@@ -10,12 +10,8 @@ import {
   Legend,
   ResponsiveContainer,
 } from 'recharts'
-import type { DadosEmpresa } from '@/types/financeiro'
+import type { EmpresaAnalise } from '@/types/financeiro'
 import { formatMoedaCompacta } from '@/lib/utils'
-
-interface FluxoGraficoProps {
-  empresas: DadosEmpresa[]
-}
 
 interface TooltipProps {
   active?: boolean
@@ -40,16 +36,16 @@ function CustomTooltip({ active, payload, label }: TooltipProps) {
   )
 }
 
-export function FluxoGrafico({ empresas }: FluxoGraficoProps) {
+export function FluxoGrafico({ empresas }: { empresas: EmpresaAnalise[] }) {
   const data = empresas.map(e => ({
-    nome: e.nome.split(' ').slice(-1)[0], // último token para labels curtos
+    nome: e.nome.split(' ').slice(-1)[0],
     nomeCompleto: e.nome,
-    Receitas: e.receitas,
-    Despesas: e.despesas,
+    Entradas: e.entradas,
+    Saídas: e.saidas,
     Saldo: e.saldo,
   }))
 
-  if (data.every(d => d.Receitas === 0 && d.Despesas === 0)) {
+  if (data.every(d => d.Entradas === 0 && d.Saídas === 0)) {
     return (
       <div className="flex h-64 items-center justify-center rounded-xl border" style={{ background: '#1a1d27', borderColor: '#2d3148' }}>
         <p className="text-sm" style={{ color: '#64748b' }}>Sem dados de fluxo para exibir</p>
@@ -86,8 +82,8 @@ export function FluxoGrafico({ empresas }: FluxoGraficoProps) {
             wrapperStyle={{ fontSize: 12, color: '#94a3b8', paddingTop: 12 }}
             iconType="square"
           />
-          <Bar dataKey="Receitas" fill="#3b82f6" radius={[4, 4, 0, 0]} maxBarSize={40} />
-          <Bar dataKey="Despesas" fill="#ef4444" radius={[4, 4, 0, 0]} maxBarSize={40} />
+          <Bar dataKey="Entradas" fill="#3b82f6" radius={[4, 4, 0, 0]} maxBarSize={40} />
+          <Bar dataKey="Saídas"   fill="#ef4444" radius={[4, 4, 0, 0]} maxBarSize={40} />
           <Bar dataKey="Saldo"    fill="#22c55e" radius={[4, 4, 0, 0]} maxBarSize={40} />
         </BarChart>
       </ResponsiveContainer>

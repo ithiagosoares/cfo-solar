@@ -21,6 +21,7 @@ import {
   MessageCircle,
   History,
   Calendar,
+  GitCompare,
 } from 'lucide-react'
 import { gerarPDF } from '@/lib/pdf-generator'
 import { KPICard } from '@/components/dashboard/KPICard'
@@ -31,43 +32,22 @@ import { EmpresaCard } from '@/components/dashboard/EmpresaCard'
 import { DespesasPorCategoria } from '@/components/dashboard/DespesasPorCategoria'
 import { RelatorioView } from '@/components/relatorio/RelatorioView'
 import { ChatPanel } from '@/components/chat/ChatPanel'
-import type { RelatorioCompleto, MensagemChat } from '@/types/financeiro'
-import { formatMoeda, formatPercentual, formatMargem, calcularVariacao } from '@/lib/utils'
+import { ComparativoView } from '@/components/comparativo/ComparativoView'
+import type { RelatorioCompleto, MensagemChat, PeriodoResumo } from '@/types/financeiro'
+import { formatMoeda, formatPercentual, formatMargem, calcularVariacao, formatarPeriodoCurto } from '@/lib/utils'
+import { FGI_FIXO, META_MENSAL } from '@/lib/constantes'
 
-const FGI_FIXO = { gimenes: 5_000, barramares: 18_000, alumarketHera: 23_000, total: 46_000 }
-const META_MENSAL = 2_000_000
-
-const MESES_PT_CURTO = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
-
-function formatarPeriodoCurto(periodo: string): string {
-  const match = periodo.match(/^(\d{4})-(\d{2})$/)
-  if (!match) return periodo
-  const [, ano, mesStr] = match
-  const mes = MESES_PT_CURTO[parseInt(mesStr, 10) - 1] ?? mesStr
-  return `${mes}/${ano}`
-}
-
-interface PeriodoResumo {
-  periodo: string
-  faturamentoVendido: number
-  faturamentoFaturado: number
-  totalEntradas: number
-  totalSaidas: number
-  saldoGrupo: number
-  criadoEm: string
-  atualizadoEm: string
-}
-
-type Aba = 'dashboard' | 'empresas' | 'despesas' | 'clientes' | 'relatorio' | 'chat' | 'upload'
+type Aba = 'dashboard' | 'empresas' | 'despesas' | 'clientes' | 'relatorio' | 'comparativo' | 'chat' | 'upload'
 
 const ABAS: { id: Aba; label: string; Icon: typeof BarChart2 }[] = [
-  { id: 'dashboard', label: 'Dashboard',         Icon: BarChart2 },
-  { id: 'empresas',  label: 'Empresas',          Icon: Building2 },
-  { id: 'despesas',  label: 'Despesas',          Icon: PieChart  },
-  { id: 'clientes',  label: 'Clientes',          Icon: Users     },
-  { id: 'relatorio', label: 'Relatório IA',      Icon: FileText  },
-  { id: 'chat',      label: 'Chat',              Icon: MessageCircle },
-  { id: 'upload',    label: 'Adicionar Arquivo', Icon: Upload    },
+  { id: 'dashboard',    label: 'Dashboard',         Icon: BarChart2 },
+  { id: 'empresas',     label: 'Empresas',          Icon: Building2 },
+  { id: 'despesas',     label: 'Despesas',          Icon: PieChart  },
+  { id: 'clientes',     label: 'Clientes',          Icon: Users     },
+  { id: 'relatorio',    label: 'Relatório IA',      Icon: FileText  },
+  { id: 'comparativo',  label: 'Comparativo',       Icon: GitCompare },
+  { id: 'chat',         label: 'Chat',              Icon: MessageCircle },
+  { id: 'upload',       label: 'Adicionar Arquivo', Icon: Upload    },
 ]
 
 // ─── Full-screen loading state (initial Supabase check + analyzing) ────────────────
@@ -745,6 +725,7 @@ export default function Home() {
         {abaAtiva === 'relatorio' && (
           relatorio ? <RelatorioView analise={relatorio.analise} /> : <EstadoVazio onIrParaUpload={() => setAbaAtiva('upload')} />
         )}
+        {abaAtiva === 'comparativo' && <ComparativoView />}
         {abaAtiva === 'chat' && (
           <ChatPanel
             relatorio={relatorio}

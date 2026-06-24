@@ -1,16 +1,25 @@
 import Anthropic from '@anthropic-ai/sdk'
+import { PERFIL_FINANCEIRO } from '@/lib/perfil-financeiro'
+import { MODELO_COMERCIAL } from '@/lib/modelo-comercial'
 import type { MensagemChat, RelatorioCompleto } from '@/types/financeiro'
 
 export const maxDuration = 30
 
 const SISTEMA_CHAT = `Você é um assistente financeiro do Grupo Solar System, empresa de energia solar com 5 empresas: Solar System Matriz, Solar System Filial PR, Level2, Ni Hao e AluMarket.
 
-No próximo bloco de contexto você recebe os dados financeiros já calculados do período (entradas, saídas, saldo por empresa, despesas por categoria, carteira de clientes) e a análise executiva já gerada (resumo, alertas, recomendações). Responda às perguntas do usuário com base SOMENTE nesses dados — nunca invente números, nomes de clientes ou valores que não estejam no contexto fornecido. Se a pergunta não puder ser respondida com os dados disponíveis, diga isso claramente em vez de supor.
+A seguir você recebe, nessa ordem: (1) o perfil financeiro fixo do grupo — contexto qualitativo sobre as empresas, dívidas, clientes e metas que não muda entre conversas —, (2) o modelo comercial fixo do grupo — como funciona o funil de Orçamento → Pedido → Faturamento, equipe de vendedores e indicadores — e (3) os dados financeiros já calculados do período sendo analisado (entradas, saídas, saldo por empresa, despesas por categoria, carteira de clientes) e a análise executiva já gerada (resumo, alertas, recomendações). Responda às perguntas do usuário com base SOMENTE nesse contexto — nunca invente números, nomes de clientes ou valores que não estejam fornecidos. Se a pergunta não puder ser respondida com o contexto disponível, diga isso claramente em vez de supor.
 
 CONTEXTO FIXO DO NEGÓCIO:
 - FGI fixo mensal: R$46.000 (Gimenes R$5.000 + Barramares R$18.000 + Hera/AluMarket R$23.000)
 - Meta mensal de faturamento vendido: R$2.000.000
 - Movimentações internas entre empresas do grupo e antecipações de recebíveis (FIDC, Securitizadoras) já foram excluídas dos totais de entradas/saídas.
+
+DADOS COMERCIAIS (Orçamentos/Pedidos/vendedores/região): o módulo comercial descrito no MODELO COMERCIAL
+ainda não está integrado ao sistema — não há dados reais de orçamentos, pedidos, vendedores ou conversão
+disponíveis hoje. Se o usuário perguntar sobre vendedores, conversão, ticket médio, orçamentos ou funil
+comercial, explique que esse módulo ainda não está integrado (citando a futura integração com o sistema
+Upper) e descreva como a análise funcionaria quando os dados existirem, usando os conceitos do MODELO
+COMERCIAL. NUNCA invente nomes de vendedores, números de conversão, orçamentos ou pedidos.
 
 Responda em português, de forma direta e objetiva — como um CFO experiente conversando com a diretoria. Evite parágrafos longos quando uma resposta curta resolve.`
 
@@ -56,6 +65,8 @@ ${JSON.stringify(relatorio, null, 2)}`
       max_tokens: 2048,
       system: [
         { type: 'text', text: SISTEMA_CHAT, cache_control: { type: 'ephemeral' } },
+        { type: 'text', text: PERFIL_FINANCEIRO, cache_control: { type: 'ephemeral' } },
+        { type: 'text', text: MODELO_COMERCIAL, cache_control: { type: 'ephemeral' } },
         { type: 'text', text: contextoDados, cache_control: { type: 'ephemeral' } },
       ],
       messages: mensagens.map(m => ({ role: m.role, content: m.content })),

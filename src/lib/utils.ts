@@ -58,3 +58,14 @@ export function sinalVariacao(variacao: number): string {
   if (variacao < 0) return '▼'
   return '—'
 }
+
+const MESES_PT_CURTO = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
+
+// Converts a machine period key ("2026-05") into a short display label ("Mai/2026").
+export function formatarPeriodoCurto(periodo: string): string {
+  const match = periodo.match(/^(\d{4})-(\d{2})$/)
+  if (!match) return periodo
+  const [, ano, mesStr] = match
+  const mes = MESES_PT_CURTO[parseInt(mesStr, 10) - 1] ?? mesStr
+  return `${mes}/${ano}`
+}

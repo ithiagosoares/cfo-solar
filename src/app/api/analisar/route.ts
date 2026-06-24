@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { agregarExcel, periodoAnterior, formatarPeriodoLabel } from '@/lib/excel-aggregator'
 import { salvarRelatorio, buscarRelatorioPorPeriodo } from '@/lib/relatorios-repository'
+import { PERFIL_FINANCEIRO } from '@/lib/perfil-financeiro'
 import type { RelatorioCompleto } from '@/types/financeiro'
 
 export const maxDuration = 60
@@ -19,7 +20,13 @@ CONTEXTO DO NEGÓCIO:
   antecipação de recebíveis (RICO C Securitizadora, Genesis FIDC, Lotus Performance FIDC).
 - Se um bloco "COMPARATIVO COM O MÊS ANTERIOR" for fornecido no contexto, inclua no resumoExecutivo
   uma comparação objetiva (variação de faturamento, saldo, entradas/saídas) com base nesses números.
-  Se esse bloco não for fornecido, não mencione mês anterior nem invente comparação.`
+  Se esse bloco não for fornecido, não mencione mês anterior nem invente comparação.
+- Você também recebe a seguir um PERFIL FINANCEIRO FIXO do grupo (regras de classificação, dívidas,
+  particularidades de cada empresa, clientes, metas). Use-o para enriquecer alertas e recomendações
+  com contexto qualitativo que os números isolados não mostram — por exemplo: não trate movimentações
+  de capital de giro entre empresas do grupo (ex: AluMarket↔Matriz) como dívida externa, e considere
+  compromissos futuros já conhecidos (como o aumento do FGI para ~R$69.000/mês a partir de agosto/2026)
+  ao avaliar risco. Não duplique informações que já estão no CONTEXTO DO NEGÓCIO acima.`
 
 const ESTRUTURA_SAIDA = `{
   "resumoExecutivo": "2-3 parágrafos objetivos sobre a situação financeira do grupo, citando os números fornecidos",
@@ -87,6 +94,11 @@ Saldo do Grupo: ${mesAnterior.saldoGrupo}
         {
           type: 'text',
           text: SISTEMA,
+          cache_control: { type: 'ephemeral' },
+        },
+        {
+          type: 'text',
+          text: PERFIL_FINANCEIRO,
           cache_control: { type: 'ephemeral' },
         },
       ],

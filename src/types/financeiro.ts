@@ -47,6 +47,45 @@ export interface MensagemChat {
   content: string
 }
 
+export interface PeriodoResumo {
+  periodo: string
+  faturamentoVendido: number
+  faturamentoFaturado: number
+  totalEntradas: number
+  totalSaidas: number
+  saldoGrupo: number
+  criadoEm: string
+  atualizadoEm: string
+}
+
+export interface VariacaoKpi {
+  valorA: number
+  valorB: number
+  variacaoPercentual: number
+}
+
+export interface VariacaoEmpresa {
+  nome: string
+  entradas: VariacaoKpi
+  saidas: VariacaoKpi
+  saldo: VariacaoKpi
+}
+
+export interface Variacoes {
+  faturamentoVendido: VariacaoKpi
+  faturamentoFaturado: VariacaoKpi
+  saldoGrupo: VariacaoKpi
+  totalEntradas: VariacaoKpi
+  totalSaidas: VariacaoKpi
+  empresas: VariacaoEmpresa[]
+}
+
+export interface ComparativoResponse {
+  relatorioA: RelatorioCompleto
+  relatorioB: RelatorioCompleto
+  variacoes: Variacoes
+}
+
 export interface RelatorioCompleto {
   periodo: string
   periodoChave: string // formato "AAAA-MM", usado como chave no histórico e em comparações entre meses

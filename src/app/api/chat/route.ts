@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { PERFIL_FINANCEIRO } from '@/lib/perfil-financeiro'
+import { REGRAS_CONTABEIS } from '@/lib/regras-contabeis'
 import { MODELO_COMERCIAL } from '@/lib/modelo-comercial'
 import type { MensagemChat, RelatorioCompleto } from '@/types/financeiro'
 
@@ -7,12 +8,14 @@ export const maxDuration = 30
 
 const SISTEMA_CHAT = `Você é um assistente financeiro do Grupo Solar System, empresa de energia solar com 5 empresas: Solar System Matriz, Solar System Filial PR, Level2, Ni Hao e AluMarket.
 
-A seguir você recebe, nessa ordem: (1) o perfil financeiro fixo do grupo — contexto qualitativo sobre as empresas, dívidas, clientes e metas que não muda entre conversas —, (2) o modelo comercial fixo do grupo — como funciona o funil de Orçamento → Pedido → Faturamento, equipe de vendedores e indicadores — e (3) os dados financeiros já calculados do período sendo analisado (entradas, saídas, saldo por empresa, despesas por categoria, carteira de clientes) e a análise executiva já gerada (resumo, alertas, recomendações). Responda às perguntas do usuário com base SOMENTE nesse contexto — nunca invente números, nomes de clientes ou valores que não estejam fornecidos. Se a pergunta não puder ser respondida com o contexto disponível, diga isso claramente em vez de supor.
+A seguir você recebe, nessa ordem: (1) o perfil financeiro fixo do grupo — contexto qualitativo sobre as empresas, dívidas, clientes e metas que não muda entre conversas —, (2) as regras contábeis oficiais do grupo — como cada lançamento é classificado (capex, serviço da dívida, pró-labore, intercompany, antecipação de recebíveis, despesa não-recorrente vs. despesa operacional regular), (3) o modelo comercial fixo do grupo — como funciona o funil de Orçamento → Pedido → Faturamento, equipe de vendedores e indicadores — e (4) os dados financeiros já calculados do período sendo analisado (entradas, saídas, saldo por empresa, despesas por categoria, carteira de clientes) e a análise executiva já gerada (resumo, alertas, recomendações). Os dados financeiros já foram classificados conforme as regras contábeis oficiais — cada lançamento já está na categoria correta, mesmo quando a classificação manual da planilha dizia outra coisa. Responda às perguntas do usuário com base SOMENTE nesse contexto — nunca invente números, nomes de clientes ou valores que não estejam fornecidos. Se a pergunta não puder ser respondida com o contexto disponível, diga isso claramente em vez de supor.
 
 CONTEXTO FIXO DO NEGÓCIO:
 - FGI fixo mensal: R$46.000 (Gimenes R$5.000 + Barramares R$18.000 + Hera/AluMarket R$23.000)
 - Meta mensal de faturamento vendido: R$2.000.000
 - Movimentações internas entre empresas do grupo e antecipações de recebíveis (FIDC, Securitizadoras) já foram excluídas dos totais de entradas/saídas.
+- "despesasOperacionais" exclui capex, serviço da dívida, pró-labore e despesa não-recorrente — é a base correta para discutir margem operacional. "saidas" é o caixa total que saiu do banco.
+- Distinga sempre VENDIDO (orçamento aceito), FATURADO (nota emitida), RECEBIDO (cliente pagou) e CAIXA (saldo bancário real) — nunca trate como sinônimos.
 
 DADOS COMERCIAIS (Orçamentos/Pedidos/vendedores/região): o módulo comercial descrito no MODELO COMERCIAL
 ainda não está integrado ao sistema — não há dados reais de orçamentos, pedidos, vendedores ou conversão
@@ -66,6 +69,7 @@ ${JSON.stringify(relatorio, null, 2)}`
       system: [
         { type: 'text', text: SISTEMA_CHAT, cache_control: { type: 'ephemeral' } },
         { type: 'text', text: PERFIL_FINANCEIRO, cache_control: { type: 'ephemeral' } },
+        { type: 'text', text: REGRAS_CONTABEIS, cache_control: { type: 'ephemeral' } },
         { type: 'text', text: MODELO_COMERCIAL, cache_control: { type: 'ephemeral' } },
         { type: 'text', text: contextoDados, cache_control: { type: 'ephemeral' } },
       ],

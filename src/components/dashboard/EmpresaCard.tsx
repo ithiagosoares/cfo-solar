@@ -26,8 +26,10 @@ function corEmpresa(nome: string): string {
 
 export function EmpresaCard({ empresa }: { empresa: EmpresaAnalise }) {
   const cor = corEmpresa(empresa.nome)
+  // Margem operacional exclui capex, serviço da dívida, pró-labore e despesa
+  // não-recorrente — usa despesasOperacionais, não o caixa total (saidas).
   const margem = empresa.entradas > 0
-    ? ((empresa.entradas - empresa.saidas) / empresa.entradas) * 100
+    ? ((empresa.entradas - empresa.despesasOperacionais) / empresa.entradas) * 100
     : 0
   const percentualSaldo = empresa.entradas > 0
     ? (empresa.saldo / empresa.entradas) * 100
@@ -76,7 +78,7 @@ export function EmpresaCard({ empresa }: { empresa: EmpresaAnalise }) {
           </p>
         </div>
         <div>
-          <p className="text-xs uppercase tracking-wider mb-0.5" style={{ color: '#64748b' }}>Margem</p>
+          <p className="text-xs uppercase tracking-wider mb-0.5" style={{ color: '#64748b' }}>Margem Operacional</p>
           <p className="text-sm font-semibold" style={{ color: margem >= 15 ? '#22c55e' : margem >= 5 ? '#f59e0b' : '#ef4444' }}>
             {formatMargem(margem)}
           </p>

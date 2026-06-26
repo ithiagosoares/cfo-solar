@@ -267,7 +267,7 @@ function ProgressBar({ valor, max, cor }: { valor: number; max: number; cor: str
 // ─── Dashboard View ─────────────────────────────────────────────────────────────
 
 function DashboardView({ relatorio, mesAnterior }: { relatorio: RelatorioCompleto; mesAnterior: PeriodoResumo | null }) {
-  const { faturamento, consolidado, empresas, analise } = relatorio
+  const { faturamento, consolidado, empresas, analise, antecipacoes } = relatorio
 
   const margemLiquida = consolidado.totalEntradas > 0
     ? ((consolidado.totalEntradas - consolidado.totalSaidas) / consolidado.totalEntradas) * 100
@@ -276,9 +276,31 @@ function DashboardView({ relatorio, mesAnterior }: { relatorio: RelatorioComplet
     ? (FGI_FIXO.total / faturamento.vendido) * 100
     : 0
   const progressoMeta = Math.min((faturamento.vendido / META_MENSAL) * 100, 100)
+  // "Entradas no Banco" já inclui antecipação de recebíveis (dinheiro real no banco,
+  // mas adiantado com desconto, não venda nova) — esse indicador preserva a
+  // visibilidade do risco sem voltar a excluir a antecipação do saldo real.
+  const dependenciaAntecipacao = consolidado.totalEntradas > 0
+    ? (antecipacoes.total / consolidado.totalEntradas) * 100
+    : 0
 
   return (
     <div className="flex flex-col gap-6">
+      {/* dados antigos persistidos antes deste campo existir trazem undefined em
+          runtime mesmo com o tipo dizendo boolean — só avisa quando o backend
+          confirmou explicitamente que não achou a aba de fechamento. */}
+      {faturamento.disponivel === false && (
+        <div
+          className="flex items-center gap-2.5 rounded-lg border-l-4 px-4 py-3 text-sm"
+          style={{ background: 'rgba(245,158,11,0.08)', borderLeftColor: '#f59e0b', border: '1px solid rgba(120,80,10,0.4)', borderLeftWidth: 4 }}
+        >
+          <AlertTriangle className="h-4 w-4 shrink-0" style={{ color: '#f59e0b' }} />
+          <span style={{ color: '#fcd34d' }}>
+            Não foi possível localizar dados de Faturamento Vendido/Faturado nesta planilha —
+            verifique se existe uma aba de fechamento.
+          </span>
+        </div>
+      )}
+
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-5">
         <KPICard
           titulo="Saldo do Grupo"
@@ -287,6 +309,7 @@ function DashboardView({ relatorio, mesAnterior }: { relatorio: RelatorioComplet
           Icon={DollarSign}
           cor={consolidado.saldoGrupo >= 0 ? 'green' : 'red'}
           variacao={mesAnterior ? calcularVariacao(consolidado.saldoGrupo, mesAnterior.saldoGrupo) : undefined}
+          descricao={antecipacoes.total > 0 ? `Dependência de Antecipação: ${formatPercentual(dependenciaAntecipacao)} do saldo bancário` : undefined}
         />
         <KPICard
           titulo="Faturamento Vendido"
@@ -433,7 +456,7 @@ function EmpresasView({ relatorio }: { relatorio: RelatorioCompleto }) {
         <table className="w-full text-sm">
           <thead>
             <tr style={{ borderBottom: '1px solid #2d3148' }}>
-              {['Empresa', 'Entradas', 'Saídas', 'Saldo', 'Margem'].map(h => (
+              {['Empresa', 'Entradas', 'Saídas', 'Saldo', 'Margem Operacional'].map(h => (
                 <th key={h} className="pb-2 pr-6 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#64748b' }}>
                   {h}
                 </th>
@@ -442,7 +465,7 @@ function EmpresasView({ relatorio }: { relatorio: RelatorioCompleto }) {
           </thead>
           <tbody>
             {empresas.map(e => {
-              const margem = e.entradas > 0 ? ((e.entradas - e.saidas) / e.entradas) * 100 : 0
+              const margem = e.entradas > 0 ? ((e.entradas - e.despesasOperacionais) / e.entradas) * 100 : 0
               return (
                 <tr key={e.nome} style={{ borderBottom: '1px solid #1e2130' }}>
                   <td className="py-2.5 pr-6 font-medium" style={{ color: '#e2e8f0' }}>{e.nome}</td>

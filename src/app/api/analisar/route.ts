@@ -2,31 +2,61 @@ import Anthropic from '@anthropic-ai/sdk'
 import { agregarExcel, periodoAnterior, formatarPeriodoLabel } from '@/lib/excel-aggregator'
 import { salvarRelatorio, buscarRelatorioPorPeriodo } from '@/lib/relatorios-repository'
 import { PERFIL_FINANCEIRO } from '@/lib/perfil-financeiro'
+import { REGRAS_CONTABEIS } from '@/lib/regras-contabeis'
+import { MODELO_COMERCIAL } from '@/lib/modelo-comercial'
 import type { RelatorioCompleto } from '@/types/financeiro'
 
-export const maxDuration = 60
+export const maxDuration = 180
 
 const SISTEMA = `Você é um analista financeiro especializado no Grupo Solar System (energia solar, 5 empresas).
 
 Os números abaixo já estão calculados e são definitivos — eles vieram de um cálculo determinístico
-feito em código sobre os extratos bancários e a aba FECHAMENTO. NÃO recalcule, NÃO some, NÃO
-verifique a aritmética. Sua única tarefa é INTERPRETAR os números e produzir texto executivo.
+feito em código sobre os extratos bancários e a aba FECHAMENTO, já aplicando as REGRAS CONTÁBEIS
+OFICIAIS fornecidas a seguir (cada lançamento já foi reclassificado conforme essas regras — capex,
+serviço da dívida, pró-labore, intercompany e antecipação de recebíveis já estão corretamente
+separados de despesa operacional regular). NÃO recalcule, NÃO some, NÃO verifique a aritmética. Sua
+única tarefa é INTERPRETAR os números e produzir texto executivo, usando as regras contábeis e o
+perfil financeiro como contexto qualitativo para enriquecer alertas e recomendações.
 
 CONTEXTO DO NEGÓCIO:
 - FGI fixo mensal: R$46.000 (Gimenes R$5.000 + Barramares R$18.000 + Hera/AluMarket R$23.000)
 - Meta mensal de faturamento vendido: R$2.000.000
-- "movimentacoesInternas" e "antecipacoes" já foram excluídas dos totais de entradas/saídas —
-  são mostradas apenas como contexto de quanto capital circulou entre empresas do grupo ou via
-  antecipação de recebíveis (RICO C Securitizadora, Genesis FIDC, Lotus Performance FIDC).
+- DOIS NÚMEROS DE "ENTRADA" DISTINTOS, NÃO CONFUNDA UM COM O OUTRO:
+  1. "consolidado.totalEntradas" (e "saldoGrupo" derivado dele) = CAIXA REAL que entrou
+     fisicamente no banco do grupo — inclui venda, antecipação de recebíveis (RICO C
+     Securitizadora, Genesis FIDC, Lotus Performance FIDC) e intercompany recebido de outra
+     empresa do grupo. É o número certo para falar de "saldo de caixa" e "saúde financeira
+     do caixa".
+  2. "empresas[].entradas" (por empresa) = RECEITA OPERACIONAL PURA — exclui antecipação e
+     intercompany de propósito. É a base certa para falar de "venda", "faturamento" e margem
+     operacional (junto com "despesasOperacionais"). NÃO use este número para descrever saldo
+     de caixa, e não use o número de caixa para descrever quanto a empresa vendeu.
+  3. "antecipacoes.total" é quanto do caixa real (item 1) veio de antecipação — não é venda
+     nova, é adiantamento de um valor que a empresa já vendeu, com desconto. Se esse valor for
+     uma fração grande do total de entradas, isso é um sinal de dependência de antecipação que
+     vale destacar como alerta (o caixa está "puxado para frente", não é sustentável crescer
+     assim indefinidamente).
+- "movimentacoesInternas" mostra apenas a magnitude de capital que circulou entre empresas do
+  grupo (qualquer direção) — não é despesa nem receita do grupo como um todo, é dinheiro que já
+  era do grupo só mudando de conta.
+- "despesasOperacionais" (empresa e grupo) exclui capex, serviço da dívida, pró-labore e despesa
+  não-recorrente — é a base correta para discutir margem operacional. "saidas" é o caixa total
+  que saiu do banco (inclui capex/dívida/pró-labore), correto para discutir saldo de caixa.
 - Se um bloco "COMPARATIVO COM O MÊS ANTERIOR" for fornecido no contexto, inclua no resumoExecutivo
   uma comparação objetiva (variação de faturamento, saldo, entradas/saídas) com base nesses números.
   Se esse bloco não for fornecido, não mencione mês anterior nem invente comparação.
 - Você também recebe a seguir um PERFIL FINANCEIRO FIXO do grupo (regras de classificação, dívidas,
-  particularidades de cada empresa, clientes, metas). Use-o para enriquecer alertas e recomendações
-  com contexto qualitativo que os números isolados não mostram — por exemplo: não trate movimentações
-  de capital de giro entre empresas do grupo (ex: AluMarket↔Matriz) como dívida externa, e considere
-  compromissos futuros já conhecidos (como o aumento do FGI para ~R$69.000/mês a partir de agosto/2026)
-  ao avaliar risco. Não duplique informações que já estão no CONTEXTO DO NEGÓCIO acima.`
+  particularidades de cada empresa, clientes, metas), as REGRAS CONTÁBEIS OFICIAIS completas, e o
+  MODELO COMERCIAL fixo (funil Orçamento → Pedido → Faturamento, vendedores, indicadores). Use-os
+  para enriquecer alertas e recomendações com contexto qualitativo que os números isolados não
+  mostram — por exemplo: não trate movimentações de capital de giro entre empresas do grupo (ex:
+  AluMarket↔Matriz) como dívida externa, e considere compromissos futuros já conhecidos (como o
+  aumento do FGI para ~R$69.000/mês a partir de agosto/2026) ao avaliar risco. Não duplique
+  informações que já estão no CONTEXTO DO NEGÓCIO acima.
+- O módulo comercial descrito no MODELO COMERCIAL ainda não está integrado ao sistema — não há dados
+  reais de orçamentos, pedidos, vendedores ou conversão disponíveis hoje. NÃO invente nomes de
+  vendedores, números de conversão, orçamentos ou pedidos; só use o MODELO COMERCIAL como contexto
+  qualitativo de como o negócio funciona, não como fonte de números.`
 
 const ESTRUTURA_SAIDA = `{
   "resumoExecutivo": "2-3 parágrafos objetivos sobre a situação financeira do grupo, citando os números fornecidos",
@@ -52,6 +82,18 @@ export async function POST(request: Request) {
       return Response.json({ error: 'Arquivo Excel não enviado' }, { status: 400 })
     }
 
+    const nomeArquivo = 'name' in arquivo && typeof arquivo.name === 'string' ? arquivo.name : ''
+    const extensaoValida = /\.(xlsx|xls)$/i.test(nomeArquivo)
+    const MIME_TYPES_EXCEL = [
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
+      'application/vnd.ms-excel', // .xls
+      'application/octet-stream', // alguns navegadores/SOs não preenchem o MIME corretamente
+      '',
+    ]
+    if (!extensaoValida || !MIME_TYPES_EXCEL.includes(arquivo.type)) {
+      return Response.json({ error: 'Envie um arquivo .xlsx ou .xls válido' }, { status: 400 })
+    }
+
     if (arquivo.size > 20 * 1024 * 1024) {
       return Response.json({ error: 'Arquivo muito grande (máximo 20 MB)' }, { status: 400 })
     }
@@ -63,7 +105,10 @@ export async function POST(request: Request) {
 
     const buffer = await arquivo.arrayBuffer()
 
-    // Deterministic calculation in plain JS — no arithmetic is delegated to the model.
+    // Extraction and classification are both deterministic — mapearCategoria()
+    // translates the colaboradora's manual classification into formal categories
+    // via a dictionary lookup, then the summation runs in plain JS. No AI involved
+    // until the interpretive step below (resumoExecutivo/alertas/recomendações).
     const dados = agregarExcel(buffer, periodoChave)
 
     // Best-effort lookup of the prior calendar month so Claude can produce an
@@ -101,6 +146,16 @@ Saldo do Grupo: ${mesAnterior.saldoGrupo}
           text: PERFIL_FINANCEIRO,
           cache_control: { type: 'ephemeral' },
         },
+        {
+          type: 'text',
+          text: REGRAS_CONTABEIS,
+          cache_control: { type: 'ephemeral' },
+        },
+        {
+          type: 'text',
+          text: MODELO_COMERCIAL,
+          cache_control: { type: 'ephemeral' },
+        },
       ],
       messages: [
         {
@@ -117,7 +172,11 @@ REGRAS PARA O JSON:
 - Gere 4-6 alertas cobrindo: FGI, meta, saldo do grupo, concentração de clientes, margem, empresas com saldo negativo
 - Gere 5-7 recomendações práticas ordenadas por prioridade (1 = mais urgente)
 - Seja específico — cite os valores reais abaixo, não invente números novos`,
-              cache_control: { type: 'ephemeral' },
+              // Sem cache_control aqui de propósito — a API aceita no máximo 4
+              // blocos com cache_control por request, e os 4 blocos do system
+              // (SISTEMA + PERFIL_FINANCEIRO + REGRAS_CONTABEIS + MODELO_COMERCIAL)
+              // já usam o limite inteiro. Esse bloco é pequeno comparado aos
+              // documentos de referência, então a perda de cache aqui é mínima.
             },
             {
               type: 'text',
@@ -177,6 +236,7 @@ Retorne SOMENTE o JSON válido, sem markdown, sem blocos de código, sem texto a
       empresas: dados.empresas,
       consolidado: dados.consolidado,
       clientes: dados.clientes,
+      antecipacoes: dados.antecipacoes,
       analise,
     }
 

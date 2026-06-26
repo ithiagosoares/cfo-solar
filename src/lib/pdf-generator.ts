@@ -24,7 +24,7 @@ export function gerarPDF(relatorio: RelatorioCompleto): void {
 
   const empresasHtml = empresas
     .map(e => {
-      const m = e.entradas > 0 ? ((e.entradas - e.saidas) / e.entradas) * 100 : 0
+      const m = e.entradas > 0 ? ((e.entradas - e.despesasOperacionais) / e.entradas) * 100 : 0
       return `<tr>
         <td><strong>${e.nome}</strong></td>
         <td>${formatMoeda(e.entradas)}</td>
@@ -162,7 +162,7 @@ export function gerarPDF(relatorio: RelatorioCompleto): void {
   <div class="section">
     <div class="section-title">Performance por Empresa</div>
     <table>
-      <thead><tr><th>Empresa</th><th>Entradas</th><th>Saídas</th><th>Saldo</th><th>Margem</th></tr></thead>
+      <thead><tr><th>Empresa</th><th>Entradas</th><th>Saídas</th><th>Saldo</th><th>Margem Operacional</th></tr></thead>
       <tbody>${empresasHtml}</tbody>
     </table>
   </div>

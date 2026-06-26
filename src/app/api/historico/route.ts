@@ -19,6 +19,7 @@ export async function GET(request: Request) {
         empresas: registro.dadosCompletos.empresas,
         consolidado: registro.dadosCompletos.consolidado,
         clientes: registro.dadosCompletos.clientes,
+        antecipacoes: registro.dadosCompletos.antecipacoes,
         analise: registro.analise,
       }
       return Response.json(relatorio)

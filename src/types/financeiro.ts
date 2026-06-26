@@ -1,6 +1,6 @@
 export type NivelAlerta = 'danger' | 'warning' | 'info' | 'success'
 
-export type GrupoCusto = 'fixo' | 'variavel' | 'outro'
+export type GrupoCusto = 'fixo' | 'variavel' | 'capex' | 'servico_da_divida' | 'pro_labore' | 'nao_recorrente' | 'sem_classificacao' | 'outro'
 
 export interface CategoriaDespesa {
   categoria: string
@@ -12,6 +12,12 @@ export interface CategoriaDespesa {
 export interface ResumoCustos {
   custosFixos: number
   custosVariaveis: number
+  capex: number
+  servicoDaDivida: number
+  proLabore: number
+  despesaNaoRecorrente: number
+  semClassificacao: number
+  quantidadeSemClassificacao: number
   outros: number
 }
 
@@ -20,6 +26,7 @@ export interface EmpresaAnalise {
   entradas: number
   saidas: number
   saldo: number
+  despesasOperacionais: number
   despesasPorCategoria: CategoriaDespesa[]
   resumoCustos: ResumoCustos
   categorizacaoDisponivel: boolean
@@ -92,16 +99,22 @@ export interface RelatorioCompleto {
   faturamento: {
     vendido: number
     faturado: number
+    disponivel: boolean
   }
   empresas: EmpresaAnalise[]
   consolidado: {
     totalEntradas: number
     totalSaidas: number
     saldoGrupo: number
+    despesasOperacionaisGrupo: number
     despesasPorCategoriaGrupo: CategoriaDespesa[]
     resumoCustosGrupo: ResumoCustos
   }
   clientes: ClienteAnalise[]
+  // Quanto do total de entradas no banco (consolidado.totalEntradas) é
+  // antecipação de recebíveis, não venda nova — base do indicador de
+  // "Dependência de Antecipação" no dashboard.
+  antecipacoes: { total: number; quantidade: number }
   analise: {
     resumoExecutivo: string
     alertas: AlertaAnalise[]

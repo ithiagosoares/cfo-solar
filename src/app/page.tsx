@@ -22,8 +22,10 @@ import {
   History,
   Calendar,
   GitCompare,
+  ShoppingCart,
 } from 'lucide-react'
 import { gerarPDF } from '@/lib/pdf-generator'
+import { NavTabs } from '@/components/layout/NavTabs'
 import { KPICard } from '@/components/dashboard/KPICard'
 import { FluxoGrafico } from '@/components/dashboard/FluxoGrafico'
 import { AlertasPanel } from '@/components/dashboard/AlertasPanel'
@@ -37,13 +39,14 @@ import type { RelatorioCompleto, MensagemChat, PeriodoResumo } from '@/types/fin
 import { formatMoeda, formatPercentual, formatMargem, calcularVariacao, formatarPeriodoCurto } from '@/lib/utils'
 import { FGI_FIXO, META_MENSAL } from '@/lib/constantes'
 
-type Aba = 'dashboard' | 'empresas' | 'despesas' | 'clientes' | 'relatorio' | 'comparativo' | 'chat' | 'upload'
+type Aba = 'dashboard' | 'empresas' | 'despesas' | 'clientes' | 'comercial' | 'relatorio' | 'comparativo' | 'chat' | 'upload'
 
-const ABAS: { id: Aba; label: string; Icon: typeof BarChart2 }[] = [
+const ABAS: { id: Aba; label: string; Icon: typeof BarChart2; href?: string }[] = [
   { id: 'dashboard',    label: 'Dashboard',         Icon: BarChart2 },
   { id: 'empresas',     label: 'Empresas',          Icon: Building2 },
   { id: 'despesas',     label: 'Despesas',          Icon: PieChart  },
   { id: 'clientes',     label: 'Clientes',          Icon: Users     },
+  { id: 'comercial',    label: 'Comercial',         Icon: ShoppingCart, href: '/comercial' },
   { id: 'relatorio',    label: 'Relatório IA',      Icon: FileText  },
   { id: 'comparativo',  label: 'Comparativo',       Icon: GitCompare },
   { id: 'chat',         label: 'Chat',              Icon: MessageCircle },
@@ -695,25 +698,7 @@ export default function Home() {
           </div>
         )}
 
-        <div className="mx-auto flex max-w-screen-2xl gap-0.5 px-5">
-          {ABAS.map(({ id, label, Icon }) => {
-            const ativa = abaAtiva === id
-            return (
-              <button
-                key={id}
-                onClick={() => setAbaAtiva(id)}
-                className="flex items-center gap-1.5 px-4 py-2.5 text-xs font-medium transition-all border-b-2"
-                style={{
-                  color: ativa ? '#3b82f6' : '#64748b',
-                  borderBottomColor: ativa ? '#3b82f6' : 'transparent',
-                }}
-              >
-                <Icon className="h-3.5 w-3.5" />
-                {label}
-              </button>
-            )
-          })}
-        </div>
+        <NavTabs itens={ABAS} ativo={abaAtiva} onSelecionar={setAbaAtiva} />
       </header>
 
       <main className="mx-auto max-w-screen-2xl px-5 py-6">

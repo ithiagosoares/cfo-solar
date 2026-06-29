@@ -69,3 +69,10 @@ export function formatarPeriodoCurto(periodo: string): string {
   const mes = MESES_PT_CURTO[parseInt(mesStr, 10) - 1] ?? mesStr
   return `${mes}/${ano}`
 }
+
+// Converts an ISO timestamp into "DD/MM/AAAA" for display in tables.
+export function formatData(isoString: string): string {
+  const data = new Date(isoString)
+  if (Number.isNaN(data.getTime())) return isoString
+  return data.toLocaleDateString('pt-BR')
+}

@@ -43,7 +43,10 @@ export async function proxy(request: NextRequest) {
   console.log('[proxy] sessão obtida:', user?.email ?? 'sem sessão')
 
   if (!user?.email) {
-    return NextResponse.redirect(new URL('/login', request.url))
+    const redir = NextResponse.redirect(new URL('/login', request.url))
+    redir.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate')
+    redir.headers.set('Pragma', 'no-cache')
+    return redir
   }
 
   console.log('[proxy] verificando autorização para:', user.email)
@@ -67,7 +70,10 @@ export async function proxy(request: NextRequest) {
 
   if (!autorizado) {
     console.log('[proxy] redirecionando para acesso-negado — motivo:', 'usuário não encontrado na tabela')
-    return NextResponse.redirect(new URL('/acesso-negado', request.url))
+    const redir = NextResponse.redirect(new URL('/acesso-negado', request.url))
+    redir.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate')
+    redir.headers.set('Pragma', 'no-cache')
+    return redir
   }
 
   // Injeta role e email nos headers para uso em API routes / Server Components

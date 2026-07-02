@@ -49,7 +49,7 @@ const ABAS: ItemNavTab<Aba>[] = [
 function TelaCarregando({ titulo, subtitulo }: { titulo: string; subtitulo: string }) {
   return (
     <div className={styles.page} style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 24 }}>
-      <span className={styles.serif} style={{ fontSize: 21, fontWeight: 600 }}>CFO Solar</span>
+      <img src="/logo.png" alt="CFO.IA" style={{ height: 48, width: 'auto', margin: '-8px 0' }} />
       <div
         className="h-10 w-10 rounded-full border-2 border-t-transparent animate-spin"
         style={{ borderTopColor: 'var(--foreground)', borderRightColor: 'var(--line2)', borderBottomColor: 'var(--line2)', borderLeftColor: 'var(--line2)' }}
@@ -414,14 +414,7 @@ export default function Home() {
   const [arquivo, setArquivo] = useState<File | null>(null)
   const [analisando, setAnalisando] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
-  const [abaAtiva, setAbaAtiva] = useState<Aba>(() => {
-    // Lê o parâmetro ?tab= da URL para que links diretos (ex: /?tab=relatorio)
-    // abram a aba correta sem precisar de um segundo clique.
-    if (typeof window === 'undefined') return 'dashboard'
-    const tab = new URLSearchParams(window.location.search).get('tab') as Aba | null
-    const validas: Aba[] = ['dashboard', 'empresas', 'despesas', 'clientes', 'relatorio', 'comparativo', 'chat', 'upload']
-    return (tab && validas.includes(tab)) ? tab : 'dashboard'
-  })
+  const [abaAtiva, setAbaAtiva] = useState<Aba>('dashboard')
   const [nomeArquivo, setNomeArquivo] = useState('')
   const [mensagensChat, setMensagensChat] = useState<MensagemChat[]>([])
   const [periodoUpload, setPeriodoUpload] = useState(() => new Date().toISOString().slice(0, 7))
@@ -434,6 +427,11 @@ export default function Home() {
   useEffect(() => {
     let cancelado = false
     async function carregarMaisRecente() {
+      // Lê ?tab= aqui dentro do useEffect — window está disponível (somos cliente)
+      const urlTab = new URLSearchParams(window.location.search).get('tab') as Aba | null
+      const TABS_VALIDAS: Aba[] = ['dashboard', 'empresas', 'despesas', 'clientes', 'relatorio', 'comparativo', 'chat', 'upload']
+      const tabDestino = (urlTab && TABS_VALIDAS.includes(urlTab)) ? urlTab : null
+
       try {
         const res = await fetch('/api/historico')
         const json = await res.json()
@@ -449,6 +447,7 @@ export default function Home() {
         if (resDetalhe.ok) {
           setRelatorio(detalhe as RelatorioCompleto)
           setNomeArquivo(`Histórico — ${detalhe.periodo}`)
+          if (tabDestino) setAbaAtiva(tabDestino)
         } else {
           setAbaAtiva('upload')
         }
@@ -542,8 +541,8 @@ export default function Home() {
       <div className={`${styles.hdr} ${styles.htop}`}>
         <div className={styles.wrap}>
           <div className={styles.brand} style={{ justifyContent: 'space-between', width: '100%' }}>
-            <div className="flex items-baseline gap-3.5">
-              <span className={`${styles.bname} ${styles.serif}`}>CFO Solar</span>
+            <div className="flex items-center gap-3.5">
+              <img src="/logo.png" alt="CFO.IA" style={{ height: 52, width: 'auto', margin: '-9px 0' }} />
               <span className="flex items-center gap-1.5" style={{ fontSize: 12, color: 'var(--ink3)' }}>
                 <Briefcase className="h-3 w-3" />
                 {relatorio ? nomeArquivo : 'Nenhum relatório carregado'}

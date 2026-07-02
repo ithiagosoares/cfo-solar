@@ -66,8 +66,9 @@ ${JSON.stringify(relatorio, null, 2)}`
     const anthropicStream = client.messages.stream({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 2048,
+      // ATENÇÃO: exatamente 4 blocos com cache_control abaixo — limite da API Anthropic
       system: [
-        { type: 'text', text: SISTEMA_CHAT, cache_control: { type: 'ephemeral' } },
+        { type: 'text', text: SISTEMA_CHAT },
         { type: 'text', text: PERFIL_FINANCEIRO, cache_control: { type: 'ephemeral' } },
         { type: 'text', text: REGRAS_CONTABEIS, cache_control: { type: 'ephemeral' } },
         { type: 'text', text: MODELO_COMERCIAL, cache_control: { type: 'ephemeral' } },

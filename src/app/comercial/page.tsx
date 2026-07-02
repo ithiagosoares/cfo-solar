@@ -340,8 +340,8 @@ export default function ComercialPage() {
   const cabecalho = (
     <div className={`${styles.hdr} ${styles.htop}`}>
       <div className={styles.wrap}>
-        <div className={styles.brand}>
-          <div className={`${styles.bname} ${styles.serif}`}>CFO Solar</div>
+        <div className={styles.brand} style={{ alignItems: 'center' }}>
+          <img src="/logo.png" alt="CFO.IA" style={{ height: 52, width: 'auto', margin: '-9px 0' }} />
           <div className={styles.bsub}>Painel financeiro · Estruturas para energia solar</div>
         </div>
         <NavTabs itens={ABAS_NAV} ativo="comercial" />

@@ -11,17 +11,19 @@ import {
   Legend,
   ResponsiveContainer,
 } from 'recharts'
-import { ArrowUp, ArrowDown, Minus, GitCompare, Sparkles, AlertTriangle } from 'lucide-react'
+import { ArrowUp, ArrowDown, Minus, GitCompare, AlertTriangle } from 'lucide-react'
 import type { ComparativoResponse, PeriodoResumo } from '@/types/financeiro'
 import { formatMoeda, formatMoedaCompacta, formatPercentual, formatarPeriodoCurto, calcularVariacao } from '@/lib/utils'
 import { FGI_FIXO } from '@/lib/constantes'
+import { CORES } from '@/lib/tema'
+import styles from '@/styles/editorial.module.css'
 
 // ─── KPI comparison card ────────────────────────────────────────────────────────
 
 function corVariacao(variacaoPercentual: number, inverterLogica: boolean): string {
-  if (variacaoPercentual === 0) return '#64748b'
+  if (variacaoPercentual === 0) return CORES.ink3
   const melhora = inverterLogica ? variacaoPercentual < 0 : variacaoPercentual > 0
-  return melhora ? '#22c55e' : '#ef4444'
+  return melhora ? CORES.positivo : CORES.critico
 }
 
 function KpiComparativoCard({
@@ -44,30 +46,30 @@ function KpiComparativoCard({
   const Seta = variacaoPercentual > 0 ? ArrowUp : variacaoPercentual < 0 ? ArrowDown : Minus
 
   return (
-    <div className="rounded-xl border p-4 animate-fadeIn" style={{ background: '#1a1d27', borderColor: '#2d3148' }}>
-      <p className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: '#64748b' }}>{titulo}</p>
-      <div className="grid grid-cols-2 gap-3 mb-3">
+    <div className={styles.kpi}>
+      <p className={styles.kl}>{titulo}</p>
+      <div className="grid grid-cols-2 gap-3 mt-3 mb-3">
         <div>
-          <p className="text-xs mb-0.5" style={{ color: '#4b5563' }}>A</p>
-          <p className="text-sm font-semibold tabular-nums" style={{ color: '#94a3b8' }}>{formatar(valorA)}</p>
+          <p className={styles.over} style={{ marginBottom: 3 }}>A</p>
+          <p className={`${styles.num}`} style={{ fontSize: 14, fontWeight: 600, color: CORES.ink2 }}>{formatar(valorA)}</p>
         </div>
         <div>
-          <p className="text-xs mb-0.5" style={{ color: '#4b5563' }}>B</p>
-          <p className="text-sm font-semibold tabular-nums" style={{ color: '#e2e8f0' }}>{formatar(valorB)}</p>
+          <p className={styles.over} style={{ marginBottom: 3 }}>B</p>
+          <p className={`${styles.num}`} style={{ fontSize: 14, fontWeight: 600 }}>{formatar(valorB)}</p>
         </div>
       </div>
-      <div className="flex items-center gap-1.5 pt-2.5 border-t" style={{ borderColor: '#2d3148' }}>
-        <Seta className="h-3.5 w-3.5" style={{ color: cor }} />
-        <span className="text-sm font-bold tabular-nums" style={{ color: cor }}>
+      <div className="flex items-center gap-1.5" style={{ paddingTop: 10, borderTop: `1px solid var(--line)` }}>
+        <Seta className="h-3 w-3" style={{ color: cor }} />
+        <span className={`${styles.num} ${styles.variacao}`} style={{ color: cor }}>
           {formatPercentual(Math.abs(variacaoPercentual))}
         </span>
-        <span className="text-xs" style={{ color: '#64748b' }}>de A para B</span>
+        <span style={{ fontSize: 11, color: CORES.ink3 }}>de A para B</span>
       </div>
     </div>
   )
 }
 
-// ─── Grouped bar chart: entradas by empresa, A vs B ─────────────────────────────
+// ─── Grouped bar chart ──────────────────────────────────────────────────────────
 
 function GraficoEntradasComparativo({
   variacoes,
@@ -78,27 +80,28 @@ function GraficoEntradasComparativo({
   labelA: string
   labelB: string
 }) {
-  const dados = variacoes.map(v => ({ nome: v.nome, A: v.entradas.valorA, B: v.entradas.valorB }))
+  const dados = variacoes.map(v => ({ nome: v.nome.split(' ').pop(), A: v.entradas.valorA, B: v.entradas.valorB }))
 
   return (
-    <div className="rounded-xl border p-5 animate-fadeIn" style={{ background: '#1a1d27', borderColor: '#2d3148' }}>
-      <h3 className="mb-4 text-sm font-semibold uppercase tracking-widest" style={{ color: '#64748b' }}>
-        Entradas por Empresa — {labelA} vs {labelB}
-      </h3>
-      <ResponsiveContainer width="100%" height={300}>
-        <BarChart data={dados} margin={{ top: 4, right: 16, left: 0, bottom: 0 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#2d3148" vertical={false} />
-          <XAxis dataKey="nome" tick={{ fill: '#94a3b8', fontSize: 11 }} axisLine={{ stroke: '#2d3148' }} tickLine={false} />
-          <YAxis tickFormatter={formatMoedaCompacta} tick={{ fill: '#64748b', fontSize: 10 }} axisLine={false} tickLine={false} />
+    <div>
+      <div className={styles.shead} style={{ marginBottom: 20 }}>
+        <div className={`${styles.stitle} ${styles.serif}`}>Entradas por Empresa</div>
+        <div className={styles.over}>{labelA} vs {labelB}</div>
+      </div>
+      <ResponsiveContainer width="100%" height={280}>
+        <BarChart data={dados} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+          <CartesianGrid strokeDasharray="1 4" stroke={CORES.line} vertical={false} />
+          <XAxis dataKey="nome" tick={{ fill: CORES.ink3, fontSize: 11 }} axisLine={{ stroke: CORES.line }} tickLine={false} />
+          <YAxis tickFormatter={formatMoedaCompacta} tick={{ fill: CORES.ink3, fontSize: 10 }} axisLine={false} tickLine={false} />
           <Tooltip
             formatter={(value) => formatMoeda(Number(value))}
-            contentStyle={{ background: '#1a1d27', border: '1px solid #2d3148', borderRadius: 8 }}
-            labelStyle={{ color: '#e2e8f0' }}
-            cursor={{ fill: 'rgba(59,130,246,0.06)' }}
+            contentStyle={{ background: CORES.bg, border: `1px solid ${CORES.line2}` }}
+            labelStyle={{ color: CORES.ink, fontWeight: 600 }}
+            cursor={{ fill: CORES.paper }}
           />
-          <Legend wrapperStyle={{ fontSize: 12, color: '#94a3b8' }} />
-          <Bar dataKey="A" name={labelA} fill="#64748b" radius={[4, 4, 0, 0]} maxBarSize={28} />
-          <Bar dataKey="B" name={labelB} fill="#3b82f6" radius={[4, 4, 0, 0]} maxBarSize={28} />
+          <Legend wrapperStyle={{ fontSize: 12, color: CORES.ink2 }} />
+          <Bar dataKey="A" name={labelA} fill={CORES.line2}  radius={[0, 0, 0, 0]} maxBarSize={28} />
+          <Bar dataKey="B" name={labelB} fill={CORES.marca}  radius={[0, 0, 0, 0]} maxBarSize={28} />
         </BarChart>
       </ResponsiveContainer>
     </div>
@@ -198,16 +201,14 @@ export function ComparativoView() {
   }
 
   if (carregandoHistorico) {
-    return <div className="py-24 text-center text-sm" style={{ color: '#64748b' }}>Carregando histórico…</div>
+    return <div className="py-24 text-center" style={{ fontSize: 13, color: CORES.ink3 }}>Carregando histórico…</div>
   }
 
   if (historico.length < 2) {
     return (
-      <div className="flex flex-col items-center justify-center gap-4 py-24 text-center animate-fadeIn">
-        <div className="flex h-14 w-14 items-center justify-center rounded-full" style={{ background: 'rgba(59,130,246,0.1)' }}>
-          <GitCompare className="h-7 w-7" style={{ color: '#3b82f6' }} />
-        </div>
-        <p className="font-semibold max-w-sm" style={{ color: '#e2e8f0' }}>
+      <div className="flex flex-col items-center justify-center gap-3 py-24 text-center animate-fadeIn">
+        <GitCompare className="h-7 w-7" style={{ color: CORES.ink3 }} />
+        <p style={{ fontWeight: 600, maxWidth: 360, lineHeight: 1.5 }}>
           Envie pelo menos 2 meses diferentes para habilitar o comparativo
         </p>
       </div>
@@ -219,66 +220,57 @@ export function ComparativoView() {
   const comprometimentoFGI = (vendido: number): number => vendido > 0 ? (FGI_FIXO.total / vendido) * 100 : 0
 
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-end gap-4">
-        <div>
-          <label className="mb-1.5 block text-xs font-medium" style={{ color: '#94a3b8' }}>Período A</label>
-          <select
-            value={periodoA}
-            onChange={e => setPeriodoA(e.target.value)}
-            className="rounded-lg border bg-transparent px-3 py-2 text-sm outline-none"
-            style={{ borderColor: '#2d3148', color: '#e2e8f0', background: '#161925' }}
-          >
-            {historico.map(h => (
-              <option key={h.periodo} value={h.periodo}>{formatarPeriodoCurto(h.periodo)}</option>
-            ))}
-          </select>
+    <div className="flex flex-col gap-8">
+      <div>
+        <div className={styles.shead} style={{ marginBottom: 16 }}>
+          <div className={`${styles.stitle} ${styles.serif}`}>Comparativo de Períodos</div>
         </div>
-        <div>
-          <label className="mb-1.5 block text-xs font-medium" style={{ color: '#94a3b8' }}>Período B</label>
-          <select
-            value={periodoB}
-            onChange={e => setPeriodoB(e.target.value)}
-            className="rounded-lg border bg-transparent px-3 py-2 text-sm outline-none"
-            style={{ borderColor: '#2d3148', color: '#e2e8f0', background: '#161925' }}
-          >
-            {historico.map(h => (
-              <option key={h.periodo} value={h.periodo}>{formatarPeriodoCurto(h.periodo)}</option>
-            ))}
-          </select>
+        <div className="flex flex-wrap items-end gap-6">
+          <div className={styles.field}>
+            <label className={styles.fieldLabel}>Período A</label>
+            <select value={periodoA} onChange={e => setPeriodoA(e.target.value)} className={styles.select}>
+              {historico.map(h => (
+                <option key={h.periodo} value={h.periodo}>{formatarPeriodoCurto(h.periodo)}</option>
+              ))}
+            </select>
+          </div>
+          <div className={styles.field}>
+            <label className={styles.fieldLabel}>Período B</label>
+            <select value={periodoB} onChange={e => setPeriodoB(e.target.value)} className={styles.select}>
+              {historico.map(h => (
+                <option key={h.periodo} value={h.periodo}>{formatarPeriodoCurto(h.periodo)}</option>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
 
       {periodoA === periodoB && (
-        <div
-          className="flex items-center gap-2.5 rounded-lg border-l-4 px-4 py-3 text-sm"
-          style={{ background: 'rgba(245,158,11,0.08)', borderLeftColor: '#f59e0b', border: '1px solid rgba(120,80,10,0.4)', borderLeftWidth: 4 }}
-        >
-          <AlertTriangle className="h-4 w-4 shrink-0" style={{ color: '#f59e0b' }} />
-          <span style={{ color: '#fcd34d' }}>Escolha dois períodos diferentes para comparar.</span>
+        <div className={`${styles.notice} ${styles.alertaDanger}`}>
+          <AlertTriangle className="h-3.5 w-3.5" />
+          <span>Escolha dois períodos diferentes para comparar.</span>
         </div>
       )}
 
       {erro && (
-        <div
-          className="flex items-center gap-2.5 rounded-lg border-l-4 px-4 py-3 text-sm"
-          style={{ background: 'rgba(239,68,68,0.08)', borderLeftColor: '#ef4444', border: '1px solid rgba(127,29,29,0.4)', borderLeftWidth: 4 }}
-        >
-          <AlertTriangle className="h-4 w-4 shrink-0" style={{ color: '#ef4444' }} />
-          <span style={{ color: '#fca5a5' }}>{erro}</span>
+        <div className={`${styles.notice} ${styles.alertaDanger}`}>
+          <AlertTriangle className="h-3.5 w-3.5" />
+          <span>{erro}</span>
         </div>
       )}
 
       {carregando && (
-        <div className="py-12 text-center text-sm" style={{ color: '#64748b' }}>Comparando períodos…</div>
+        <div className="py-12 text-center" style={{ fontSize: 13, color: CORES.ink3 }}>Comparando períodos…</div>
       )}
 
       {dados && selecaoValida && !carregando && (
         <>
-          <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-6">
+          <div className={styles.kpis} style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
             <KpiComparativoCard titulo="Saldo do Grupo" {...dados.variacoes.saldoGrupo} />
             <KpiComparativoCard titulo="Faturamento Vendido" {...dados.variacoes.faturamentoVendido} />
             <KpiComparativoCard titulo="Faturamento Faturado" {...dados.variacoes.faturamentoFaturado} />
+          </div>
+          <div className={styles.kpis} style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
             <KpiComparativoCard titulo="Total Entradas" {...dados.variacoes.totalEntradas} />
             <KpiComparativoCard titulo="Total Saídas" {...dados.variacoes.totalSaidas} inverterLogica />
             <KpiComparativoCard
@@ -296,17 +288,14 @@ export function ComparativoView() {
 
           <GraficoEntradasComparativo variacoes={dados.variacoes.empresas} labelA={labelA} labelB={labelB} />
 
-          <div className="rounded-xl border p-5 animate-fadeIn" style={{ background: '#1a1d27', borderColor: '#2d3148' }}>
-            <div className="mb-3 flex items-center gap-2">
-              <Sparkles className="h-4 w-4" style={{ color: '#22c55e' }} />
-              <h3 className="text-sm font-semibold uppercase tracking-widest" style={{ color: '#64748b' }}>
-                Insight Automático
-              </h3>
+          <div>
+            <div className={styles.shead} style={{ marginBottom: 12 }}>
+              <div className={`${styles.stitle} ${styles.serif}`}>Insight Automático</div>
             </div>
             {carregandoInsight && !insight ? (
-              <p className="text-sm" style={{ color: '#64748b' }}>Gerando insight…</p>
+              <p style={{ fontSize: 13, color: CORES.ink3 }}>Gerando insight…</p>
             ) : (
-              <p className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: '#cbd5e1' }}>{insight}</p>
+              <p style={{ fontSize: 14, lineHeight: 1.75, color: CORES.ink2, whiteSpace: 'pre-wrap' }}>{insight}</p>
             )}
           </div>
         </>

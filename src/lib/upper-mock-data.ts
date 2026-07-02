@@ -23,6 +23,9 @@ export interface PedidoUpper {
   situacaoFaturamento: string
   itens: ItemPedidoUpper[]
   id: string
+  // Valor monetário real do documento — preenchido quando vem da API Upper
+  // (total.valorDocumento). Undefined quando vem do mock (usa PRECO_UNITARIO_MOCK).
+  valorDocumento?: number
 }
 
 export interface PessoaUpper {
@@ -171,10 +174,14 @@ export const PESSOAS_MOCK: PessoaUpper[] = [
   { id: 'PES-06', nome: 'Solaris Construções', tipo: 'cliente', cidade: 'Curitiba' },
   { id: 'PES-07', nome: 'Vortex Energia Solar', tipo: 'cliente', cidade: 'Cascavel' },
   { id: 'PES-08', nome: 'Bravo Estruturas Metálicas', tipo: 'cliente', cidade: 'Ponta Grossa' },
-  { id: 'PES-09', nome: 'Metalúrgica Sul Alumínio', tipo: 'fornecedor', cidade: 'Joinville' },
-  { id: 'PES-10', nome: 'Parafusos Brasil Ltda', tipo: 'fornecedor', cidade: 'São Paulo' },
-  { id: 'PES-11', nome: 'Aço Forte Distribuidora', tipo: 'fornecedor', cidade: 'Curitiba' },
-  { id: 'PES-12', nome: 'Inox Premium Fixadores', tipo: 'fornecedor', cidade: 'Blumenau' },
+  { id: 'PES-09', nome: 'Zenith Solar Projetos', tipo: 'cliente', cidade: 'Florianópolis' },
+  { id: 'PES-10', nome: 'Tucano Engenharia Solar', tipo: 'cliente', cidade: 'Campo Grande' },
+  { id: 'PES-11', nome: 'Millenium Energia', tipo: 'cliente', cidade: 'Goiânia' },
+  { id: 'PES-12', nome: 'ER Projetos Solares', tipo: 'cliente', cidade: 'Belo Horizonte' },
+  { id: 'PES-13', nome: 'Metalúrgica Sul Alumínio', tipo: 'fornecedor', cidade: 'Joinville' },
+  { id: 'PES-14', nome: 'Parafusos Brasil Ltda', tipo: 'fornecedor', cidade: 'São Paulo' },
+  { id: 'PES-15', nome: 'Aço Forte Distribuidora', tipo: 'fornecedor', cidade: 'Curitiba' },
+  { id: 'PES-16', nome: 'Inox Premium Fixadores', tipo: 'fornecedor', cidade: 'Blumenau' },
 ]
 
 export const COMPRAS_MOCK: CompraUpper[] = [
@@ -204,3 +211,23 @@ export const SALDO_ESTOQUE_MOCK: SaldoEstoqueUpper[] = [
   { id: 'EST-10', produto: 'Mão Francesa', quantidade: 6, local: 'Galpão 1' },
   { id: 'EST-11', produto: 'Arruela de Vedação', quantidade: 520, local: 'Galpão 3' },
 ]
+
+// Preço unitário fictício por referência de produto — usado EXCLUSIVAMENTE
+// para calcular valores monetários ilustrativos nas seções de demonstração
+// (Performance por Vendedor, Curva ABCD). O schema real do PedidoUpper
+// (confirmado no Swagger) não tem campo de preço por item nem por pedido —
+// só quantidade. Os valores calculados a partir daqui são ILUSTRATIVOS e
+// aparecem apenas em contexto de demonstração já explicitamente sinalizado.
+export const PRECO_UNITARIO_MOCK: Record<string, number> = {
+  'PA-040':  38,    // Perfil de Alumínio 40mm (por metro)
+  'PA-060':  52,    // Perfil de Alumínio 60mm (por metro)
+  'PI-M8':   0.45,  // Parafuso Inox M8 (por peça)
+  'PI-M10':  0.65,  // Parafuso Inox M10 (por peça)
+  'ST-001':  24,    // Suporte Triangular (por peça)
+  'STC-002': 19,    // Suporte para Telha Cerâmica (por peça)
+  'GF-003':  3.20,  // Grampo de Fixação (por peça)
+  'TF-004':  22,    // Trilho de Fixação (por metro)
+  'CMC4':    8.50,  // Conector MC4 (por peça)
+  'MF-005':  14,    // Mão Francesa (por peça)
+  'AV-006':  0.30,  // Arruela de Vedação (por peça)
+}

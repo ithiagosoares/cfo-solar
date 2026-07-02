@@ -3,8 +3,10 @@
 // tokenAcesso ou refreshToken — nem em console.log, nem em mensagens de erro
 // que possam chegar à tela do navegador.
 
+import type { PedidoUpperReal, RespostaPaginadaUpper } from '@/types/upper'
+
 const LOGIN_URL = 'https://web.uppersoftwares.com.br:4480/api/v1/usuario/login'
-const API_BASE_URL = 'http://api.uppersoftwares.com.br:9000/api'
+const API_BASE_URL = 'https://web.uppersoftwares.com.br:4480/api/v1'
 
 interface LoginUpperResponse {
   id: string
@@ -66,7 +68,7 @@ interface OpcoesRequisicaoUpper {
 }
 
 // Autentica do zero a cada chamada (ver comentário em autenticarUpper) e faz
-// a requisição real contra api.uppersoftwares.com.br. Retorna o JSON já
+// a requisição real contra web.uppersoftwares.com.br:4480. Retorna o JSON já
 // desserializado — o formato real de cada endpoint ainda não é conhecido,
 // por isso o retorno é "unknown" e cabe ao chamador inspecionar a estrutura.
 export async function fazerRequisicaoUpper(endpoint: string, opcoes: OpcoesRequisicaoUpper = {}): Promise<unknown> {
@@ -113,15 +115,92 @@ export async function fazerRequisicaoUpper(endpoint: string, opcoes: OpcoesRequi
   }
 }
 
-// Funções específicas por recurso — todas exploratórias nesta primeira
-// versão (estrutura real da resposta ainda não validada). Quando "filtros"
-// não é informado, usa o endpoint simples (GET); quando informado, usa o
-// endpoint de filtros (POST), seguindo o padrão indicado para a API da Upper.
+// Tenta extrair o array de itens do formato de resposta paginada da Upper,
+// que pode usar chaves diferentes dependendo do endpoint.
+function extrairItemsDaResposta(resposta: unknown): unknown[] {
+  if (Array.isArray(resposta)) return resposta
+  if (typeof resposta === 'object' && resposta !== null) {
+    const obj = resposta as Record<string, unknown>
+    for (const key of ['data', 'pedidos', 'itens', 'items', 'result', 'lista', 'records']) {
+      if (Array.isArray(obj[key])) return obj[key] as unknown[]
+    }
+  }
+  return []
+}
 
-export function buscarPedidos(filtros?: Record<string, unknown>): Promise<unknown> {
-  return filtros
-    ? fazerRequisicaoUpper('/pedido/filtros', { method: 'POST', body: filtros })
-    : fazerRequisicaoUpper('/pedido')
+// Busca pedidos dos últimos 30 dias — apenas primeira página (50 itens).
+// Tenta filtrar por data via query params (dataInicio/dataFim); se a API
+// ignorar esses parâmetros, filtra no cliente depois de receber a resposta.
+export async function buscarTodosPedidos(): Promise<PedidoUpperReal[]> {
+  const tokenAcesso = await autenticarUpper()
+
+  const hoje = new Date()
+  const dataInicio = new Date(hoje)
+  dataInicio.setDate(hoje.getDate() - 30)
+  const fmt = (d: Date) => d.toISOString().slice(0, 10)
+
+  const params = new URLSearchParams({
+    pag: '1',
+    qtd: '50',
+    dataInicio: fmt(dataInicio),
+    dataFim: fmt(hoje),
+  })
+  const url = `${API_BASE_URL}/pedido?${params}`
+  console.log('[upper-client] buscarTodosPedidos — URL:', url)
+
+  let resposta: Response
+  try {
+    resposta = await fetch(url, {
+      headers: { Authorization: `Bearer ${tokenAcesso}` },
+      signal: AbortSignal.timeout(15_000),
+    })
+  } catch {
+    throw new Error('Falha de rede ao buscar pedidos')
+  }
+
+  console.log('[upper-client] buscarTodosPedidos — status HTTP:', resposta.status)
+
+  if (!resposta.ok) {
+    let corpoErro: string
+    try { corpoErro = await resposta.text() } catch { corpoErro = '(ilegível)' }
+    console.error(`[upper-client] Erro ${resposta.status} em /pedido:`, corpoErro)
+    throw new Error(`Falha ao buscar pedidos (status ${resposta.status})`)
+  }
+
+  const json: unknown = await resposta.json()
+
+  // Log das chaves do objeto raiz para diagnóstico (sem expor dados sensíveis)
+  if (typeof json === 'object' && json !== null) {
+    const obj = json as RespostaPaginadaUpper
+    console.log('[upper-client] buscarTodosPedidos — chaves da resposta:', Object.keys(obj),
+      '| totalRegistros:', obj.totalRegistros ?? '(não presente)')
+  }
+
+  const itens = extrairItemsDaResposta(json)
+  console.log('[upper-client] buscarTodosPedidos — itens extraídos:', itens.length)
+
+  // Filtra no cliente caso a API não suporte os parâmetros de data
+  const limiteMs = dataInicio.getTime()
+  const filtrados = (itens as PedidoUpperReal[]).filter(p => {
+    const dataStr = p.dataEmissao || p.createdAt
+    return dataStr ? new Date(dataStr).getTime() >= limiteMs : true
+  })
+
+  console.log(`[upper-client] buscarTodosPedidos — após filtro 30 dias: ${filtrados.length} pedidos`)
+
+  return filtrados
+}
+
+// Funções específicas por recurso — usam autenticarUpper() individualmente
+// (ver comentário acima). Quando "filtros" não é informado, usa o endpoint
+// simples (GET); quando informado, usa o endpoint de filtros (POST).
+
+export function buscarPedidos(paginacao?: { pag?: number; qtd?: number }): Promise<unknown> {
+  const params = new URLSearchParams()
+  if (paginacao?.pag != null) params.set('pag', String(paginacao.pag))
+  if (paginacao?.qtd != null) params.set('qtd', String(paginacao.qtd))
+  const qs = params.toString()
+  return fazerRequisicaoUpper(`/pedido${qs ? `?${qs}` : ''}`)
 }
 
 export function buscarPedidoPorId(id: string | number): Promise<unknown> {

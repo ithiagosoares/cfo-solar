@@ -1,132 +1,332 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
-  Sun,
-  BarChart2,
-  Building2,
-  PieChart,
-  Users,
-  FileText,
-  GitCompare,
-  MessageCircle,
-  Upload,
-  ShoppingCart,
-  AlertTriangle,
-  ChevronDown,
-  ChevronRight,
-  ClipboardList,
-  Package,
-  Truck,
-} from 'lucide-react'
+  BarChart, Bar, XAxis, YAxis, CartesianGrid,
+  Tooltip, Cell, ResponsiveContainer, LabelList,
+} from 'recharts'
+import {
+  buscarDadosComerciais,
+  calcularCurvaABCD,
+  type DadosComerciais,
+  type ClienteCurvaABCD,
+} from '@/lib/dados-comerciais'
+import {
+  PESSOAS_MOCK,
+  type PedidoUpper,
+} from '@/lib/upper-mock-data'
+import { formatMoeda, formatData, formatPercentual } from '@/lib/utils'
+import { CORES } from '@/lib/tema'
 import { NavTabs, type ItemNavTab } from '@/components/layout/NavTabs'
-import { KPICard } from '@/components/dashboard/KPICard'
-import { buscarDadosComerciais, type DadosComerciais } from '@/lib/dados-comerciais'
-import type { PedidoUpper } from '@/lib/upper-mock-data'
-import { formatMoeda, formatData } from '@/lib/utils'
+import styles from '@/styles/editorial.module.css'
 
 const LIMITE_ESTOQUE_CRITICO = 10
 const LIMITE_ESTOQUE_ATENCAO = 30
 
-type AbaNav = 'dashboard' | 'empresas' | 'despesas' | 'clientes' | 'comercial' | 'relatorio' | 'comparativo' | 'chat' | 'upload'
-
-const ABAS_NAV: ItemNavTab<AbaNav>[] = [
-  { id: 'dashboard',   label: 'Dashboard',         Icon: BarChart2,    href: '/' },
-  { id: 'empresas',    label: 'Empresas',          Icon: Building2,    href: '/' },
-  { id: 'despesas',    label: 'Despesas',          Icon: PieChart,     href: '/' },
-  { id: 'clientes',    label: 'Clientes',          Icon: Users,        href: '/' },
-  { id: 'comercial',   label: 'Comercial',         Icon: ShoppingCart },
-  { id: 'relatorio',   label: 'Relatório IA',      Icon: FileText,     href: '/' },
-  { id: 'comparativo', label: 'Comparativo',       Icon: GitCompare,   href: '/' },
-  { id: 'chat',        label: 'Chat',              Icon: MessageCircle, href: '/' },
-  { id: 'upload',      label: 'Adicionar Arquivo', Icon: Upload,       href: '/' },
+const ABAS_NAV: ItemNavTab<string>[] = [
+  { id: 'dashboard',   label: 'Dashboard',        href: '/' },
+  { id: 'empresas',    label: 'Empresas',          href: '/?tab=empresas' },
+  { id: 'despesas',    label: 'Despesas',          href: '/?tab=despesas' },
+  { id: 'clientes',    label: 'Clientes',          href: '/?tab=clientes' },
+  { id: 'comercial',   label: 'Comercial' },
+  { id: 'relatorio',   label: 'Relatório IA',      href: '/?tab=relatorio' },
+  { id: 'comparativo', label: 'Comparativo',       href: '/?tab=comparativo' },
+  { id: 'chat',        label: 'Chat',              href: '/?tab=chat' },
+  { id: 'upload',      label: 'Adicionar Arquivo', href: '/?tab=upload' },
 ]
 
-const COR_SITUACAO: Record<string, string> = {
-  PENDENTE: '#f59e0b',
-  FATURADO: '#22c55e',
-  EM_PRODUCAO: '#3b82f6',
+const LABEL_SITUACAO: Record<string, string> = {
+  PENDENTE:    'pendente',
+  FATURADO:    'faturado',
+  EM_PRODUCAO: 'em produção',
 }
 
-function BadgeSituacao({ situacao }: { situacao: string }) {
-  const cor = COR_SITUACAO[situacao] ?? '#64748b'
+const DOT_SITUACAO: Record<string, string> = {
+  PENDENTE:    styles.dPend,
+  FATURADO:    styles.dGreen,
+  EM_PRODUCAO: styles.dBlue,
+}
+
+const COR_CURVA: Record<ClienteCurvaABCD['curva'], string> = {
+  A: CORES.positivo,
+  B: CORES.info,
+  C: CORES.pendente,
+  D: CORES.ink3,
+}
+
+// ─── Filtro de período ────────────────────────────────────────────────────────
+
+type TipoPeriodo = 'hoje' | '7dias' | '30dias' | 'personalizado'
+
+const LABELS_PERIODO: Record<TipoPeriodo, string> = {
+  hoje:          'Hoje',
+  '7dias':       '7 Dias',
+  '30dias':      '30 Dias',
+  personalizado: 'Personalizado',
+}
+
+interface FiltroPeriodo {
+  tipo: TipoPeriodo
+  dataInicio: Date
+  dataFim: Date
+}
+
+function construirFiltro(tipo: TipoPeriodo, customInicio: string, customFim: string): FiltroPeriodo {
+  const agora = new Date()
+  switch (tipo) {
+    case 'hoje': {
+      const inicio = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate())
+      return { tipo, dataInicio: inicio, dataFim: agora }
+    }
+    case '7dias':
+      return { tipo, dataInicio: new Date(agora.getTime() - 7 * 86_400_000), dataFim: agora }
+    case 'personalizado': {
+      const inicio = customInicio
+        ? new Date(customInicio + 'T00:00:00')
+        : new Date(agora.getFullYear(), agora.getMonth(), 1)
+      const fim = customFim ? new Date(customFim + 'T23:59:59') : agora
+      return { tipo, dataInicio: inicio, dataFim: fim }
+    }
+    default: // '30dias'
+      return { tipo: '30dias', dataInicio: new Date(agora.getTime() - 30 * 86_400_000), dataFim: agora }
+  }
+}
+
+function filtrarPorPeriodo(pedidos: PedidoUpper[], filtro: FiltroPeriodo): PedidoUpper[] {
+  const inicio = filtro.dataInicio.getTime()
+  const fim = filtro.dataFim.getTime()
+  return pedidos.filter(p => {
+    const t = new Date(p.dataCadastro).getTime()
+    return t >= inicio && t <= fim
+  })
+}
+
+function descricaoPeriodo(filtro: FiltroPeriodo): string {
+  switch (filtro.tipo) {
+    case 'hoje': return 'de hoje'
+    case '7dias': return 'dos últimos 7 dias'
+    case 'personalizado': {
+      const de = filtro.dataInicio.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+      const ate = filtro.dataFim.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+      return `de ${de} a ${ate}`
+    }
+    default: return 'dos últimos 30 dias'
+  }
+}
+
+// ─── Inline SVGs ──────────────────────────────────────────────────────────────
+
+function IconeInfo() {
   return (
-    <span
-      className="inline-block rounded-full px-2.5 py-0.5 text-xs font-medium"
-      style={{ background: `${cor}20`, color: cor }}
-    >
-      {situacao.replace('_', ' ')}
-    </span>
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="9" />
+      <line x1="12" y1="8" x2="12" y2="12.5" />
+      <circle cx="12" cy="16" r=".4" />
+    </svg>
   )
 }
 
-function SecaoContainer({ titulo, children }: { titulo: string; children: React.ReactNode }) {
+function IconeChevron({ aberto }: { aberto: boolean }) {
   return (
-    <div className="rounded-xl border p-5 animate-fadeIn" style={{ background: '#1a1d27', borderColor: '#2d3148' }}>
-      <h3 className="mb-4 text-sm font-semibold uppercase tracking-widest" style={{ color: '#64748b' }}>
-        {titulo}
-      </h3>
-      {children}
+    <svg className={`${styles.chev} ${aberto ? styles.chevOpen : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="9 6 15 12 9 18" />
+    </svg>
+  )
+}
+
+// ─── Linha de pedido expansível ───────────────────────────────────────────────
+
+function LinhaPedido({ pedido, expandido, onToggle }: { pedido: PedidoUpper; expandido: boolean; onToggle: () => void }) {
+  return (
+    <div>
+      <button onClick={onToggle} className={styles.orow}>
+        <div className={styles.cli}>
+          <IconeChevron aberto={expandido} />
+          {pedido.nomeCliente}
+        </div>
+        <div className={`${styles.cdt} ${styles.num}`}>{formatData(pedido.dataCadastro)}</div>
+        <div className={`${styles.cdt} ${styles.num}`}>{formatData(pedido.dataPrevisaoEntrega)}</div>
+        <div>
+          <span className={styles.stat}>
+            <span className={`${styles.dot} ${DOT_SITUACAO[pedido.situacaoFaturamento] ?? styles.dBlue}`} />
+            {LABEL_SITUACAO[pedido.situacaoFaturamento] ?? pedido.situacaoFaturamento}
+          </span>
+        </div>
+        <div className={`${styles.qty} ${styles.num}`}>{pedido.itens.length}</div>
+      </button>
+      {expandido && pedido.itens.length > 0 && (
+        <div className={styles.exp}>
+          <div className={styles.ehead}>
+            <div>Produto</div>
+            <div>Referência</div>
+            <div className={styles.right}>Qtd</div>
+            <div>Unidade</div>
+          </div>
+          {pedido.itens.map(item => (
+            <div key={item.id} className={styles.erow}>
+              <div className={styles.eprod}>{item.nomeCompletoProduto}</div>
+              <div className={styles.eref}>{item.referenciaProduto}</div>
+              <div className={`${styles.etxt} ${styles.num} ${styles.right}`}>{item.quantidade}</div>
+              <div className={styles.etxt}>{item.uniMedProduto}</div>
+            </div>
+          ))}
+        </div>
+      )}
+      {expandido && pedido.itens.length === 0 && (
+        <div className={styles.exp}>
+          <p style={{ fontSize: 12, color: 'var(--ink3)', padding: '8px 0' }}>
+            Detalhes dos itens disponíveis apenas via endpoint individual (/pedido/:id).
+          </p>
+        </div>
+      )}
     </div>
   )
 }
 
-function LinhaPedido({ pedido, expandido, onToggle }: { pedido: PedidoUpper; expandido: boolean; onToggle: () => void }) {
+// ─── Curva ABCD de Clientes ───────────────────────────────────────────────────
+
+function SecaoCurvaABCD({ pedidos }: { pedidos: PedidoUpper[] }) {
+  const [sortDesc, setSortDesc] = useState(true)
+
+  const curva = useMemo(
+    () => calcularCurvaABCD(pedidos, PESSOAS_MOCK),
+    [pedidos],
+  )
+
+  const ordenado = useMemo(
+    () => sortDesc ? curva : [...curva].sort((a, b) => a.valorTotal - b.valorTotal),
+    [curva, sortDesc],
+  )
+
+  const resumoPorCurva = useMemo(() => {
+    const m: Record<string, { qtd: number; pct: number }> = {
+      A: { qtd: 0, pct: 0 }, B: { qtd: 0, pct: 0 },
+      C: { qtd: 0, pct: 0 }, D: { qtd: 0, pct: 0 },
+    }
+    for (const c of curva) {
+      m[c.curva].qtd++
+      m[c.curva].pct += c.percentualFaturamento
+    }
+    return Object.entries(m).map(([curvaLabel, d]) => ({ curva: curvaLabel, ...d }))
+  }, [curva])
+
+  if (curva.length === 0) {
+    return (
+      <section style={{ marginTop: 52 }}>
+        <div className={styles.shead} style={{ marginBottom: 8 }}>
+          <div className={`${styles.stitle} ${styles.serif}`}>Curva ABCD de Clientes</div>
+        </div>
+        <p style={{ fontSize: 13, color: 'var(--ink3)' }}>Sem dados de clientes para o período selecionado.</p>
+      </section>
+    )
+  }
+
   return (
-    <>
-      <tr
-        onClick={onToggle}
-        className="cursor-pointer transition-colors hover:bg-white/[0.02]"
-        style={{ borderBottom: expandido ? 'none' : '1px solid #1e2130' }}
-      >
-        <td className="py-2.5 pr-6">
-          <div className="flex items-center gap-1.5">
-            {expandido ? (
-              <ChevronDown className="h-3.5 w-3.5 shrink-0" style={{ color: '#64748b' }} />
-            ) : (
-              <ChevronRight className="h-3.5 w-3.5 shrink-0" style={{ color: '#64748b' }} />
-            )}
-            <span className="font-medium" style={{ color: '#e2e8f0' }}>{pedido.nomeCliente}</span>
+    <section style={{ marginTop: 52 }}>
+      <div className={styles.shead} style={{ marginBottom: 8 }}>
+        <div className={`${styles.stitle} ${styles.serif}`}>Curva ABCD de Clientes</div>
+        <div className={styles.over}>{curva.length} clientes</div>
+      </div>
+
+      {/* Gráfico de resumo */}
+      <div style={{ marginBottom: 32 }}>
+        <p className={styles.over} style={{ marginBottom: 12 }}>Distribuição por faixa</p>
+        <ResponsiveContainer width="100%" height={160}>
+          <BarChart data={resumoPorCurva} layout="vertical" margin={{ top: 0, right: 60, left: 0, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="1 4" stroke={CORES.line} horizontal={false} />
+            <XAxis type="number" domain={[0, 100]} tickFormatter={v => `${v}%`} tick={{ fill: CORES.ink3, fontSize: 10 }} axisLine={false} tickLine={false} />
+            <YAxis type="category" dataKey="curva" width={24} tick={{ fill: CORES.ink2, fontSize: 12, fontWeight: 600 }} axisLine={false} tickLine={false} />
+            <Tooltip
+              formatter={(value) => [`${Number(value).toFixed(1)}%`, '% faturamento']}
+              contentStyle={{ background: CORES.bg, border: `1px solid ${CORES.line2}`, fontSize: 12 }}
+              cursor={{ fill: CORES.paper }}
+            />
+            <Bar dataKey="pct" maxBarSize={24} radius={[0, 2, 2, 0]}>
+              {resumoPorCurva.map((entry) => (
+                <Cell key={entry.curva} fill={COR_CURVA[entry.curva as ClienteCurvaABCD['curva']]} />
+              ))}
+              <LabelList
+                dataKey="qtd"
+                position="right"
+                style={{ fontSize: 11, fill: CORES.ink2 }}
+                formatter={(v: unknown) => `${v} cliente${Number(v) !== 1 ? 's' : ''}`}
+              />
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+
+      {/* Tabela detalhada */}
+      <div className={`${styles.thead} ${styles.t5}`}>
+        <div>Cliente</div>
+        <div
+          className={`${styles.right} ${styles.thSortable}`}
+          onClick={() => setSortDesc(s => !s)}
+          title="Ordenar por valor"
+        >
+          Valor Total {sortDesc ? '↓' : '↑'}
+        </div>
+        <div className={styles.right}>% Faturamento</div>
+        <div className={styles.right}>% Acumulado</div>
+        <div className={styles.right}>Curva</div>
+      </div>
+      {ordenado.map((c: ClienteCurvaABCD) => (
+        <div key={c.nome} className={`${styles.trow} ${styles.t5}`}>
+          <div>
+            <p className={styles.fn}>{c.nome}</p>
+            {c.cidade && <p className={`${styles.over} mt-0.5`} style={{ letterSpacing: '.05em' }}>{c.cidade}</p>}
           </div>
-        </td>
-        <td className="py-2.5 pr-6 tabular-nums" style={{ color: '#94a3b8' }}>{formatData(pedido.dataCadastro)}</td>
-        <td className="py-2.5 pr-6 tabular-nums" style={{ color: '#94a3b8' }}>{formatData(pedido.dataPrevisaoEntrega)}</td>
-        <td className="py-2.5 pr-6"><BadgeSituacao situacao={pedido.situacaoFaturamento} /></td>
-        <td className="py-2.5 tabular-nums" style={{ color: '#94a3b8' }}>{pedido.itens.length}</td>
-      </tr>
-      {expandido && (
-        <tr style={{ borderBottom: '1px solid #1e2130' }}>
-          <td colSpan={5} className="pb-3 pl-9 pr-6">
-            <table className="w-full text-xs">
-              <thead>
-                <tr>
-                  {['Produto', 'Referência', 'Quantidade', 'Unidade'].map(h => (
-                    <th key={h} className="pb-1.5 pr-4 text-left font-semibold uppercase tracking-wider" style={{ color: '#4b5563' }}>
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {pedido.itens.map(item => (
-                  <tr key={item.id}>
-                    <td className="py-1 pr-4" style={{ color: '#cbd5e1' }}>{item.nomeCompletoProduto}</td>
-                    <td className="py-1 pr-4" style={{ color: '#64748b' }}>{item.referenciaProduto}</td>
-                    <td className="py-1 pr-4 tabular-nums" style={{ color: '#cbd5e1' }}>{item.quantidade}</td>
-                    <td className="py-1 pr-4" style={{ color: '#64748b' }}>{item.uniMedProduto}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </td>
-        </tr>
-      )}
-    </>
+          <div className={`${styles.right} ${styles.money} ${styles.serif} ${styles.num}`}>
+            {formatMoeda(c.valorTotal)}
+          </div>
+          <div className={`${styles.right} ${styles.num}`} style={{ color: CORES.ink2 }}>
+            {formatPercentual(c.percentualFaturamento)}
+          </div>
+          <div className={`${styles.right} ${styles.num}`} style={{ color: CORES.ink3 }}>
+            {formatPercentual(c.percentualAcumulado)}
+          </div>
+          <div className={styles.right}>
+            <span
+              className={styles.curvaBadge}
+              style={{ borderColor: COR_CURVA[c.curva], color: COR_CURVA[c.curva] }}
+            >
+              {c.curva}
+            </span>
+          </div>
+        </div>
+      ))}
+    </section>
   )
 }
 
-function SecaoPedidos({ pedidos }: { pedidos: PedidoUpper[] }) {
+// ─── Página principal ─────────────────────────────────────────────────────────
+
+type SubAba = 'pessoas' | 'compras' | 'estoque'
+
+export default function ComercialPage() {
+  const [dados, setDados] = useState<DadosComerciais | null>(null)
+  const [erro, setErro] = useState<string | null>(null)
   const [expandidos, setExpandidos] = useState<Set<string>>(new Set())
+  const [subAba, setSubAba] = useState<SubAba>('pessoas')
+  const [tipoPeriodo, setTipoPeriodo] = useState<TipoPeriodo>('30dias')
+  const [customInicio, setCustomInicio] = useState('')
+  const [customFim, setCustomFim] = useState('')
+
+  useEffect(() => {
+    buscarDadosComerciais()
+      .then(setDados)
+      .catch(e => setErro(e instanceof Error ? e.message : 'Erro ao carregar dados comerciais'))
+  }, [])
+
+  const filtro = useMemo(
+    () => construirFiltro(tipoPeriodo, customInicio, customFim),
+    [tipoPeriodo, customInicio, customFim],
+  )
+
+  const pedidosFiltrados = useMemo(
+    () => dados ? filtrarPorPeriodo(dados.pedidos, filtro) : [],
+    [dados, filtro],
+  )
 
   function toggle(id: string) {
     setExpandidos(prev => {
@@ -137,237 +337,259 @@ function SecaoPedidos({ pedidos }: { pedidos: PedidoUpper[] }) {
     })
   }
 
-  const ordenados = [...pedidos].sort((a, b) => new Date(b.dataCadastro).getTime() - new Date(a.dataCadastro).getTime())
-
-  return (
-    <SecaoContainer titulo="Pedidos Recentes">
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr style={{ borderBottom: '1px solid #2d3148' }}>
-              {['Cliente', 'Data Cadastro', 'Previsão Entrega', 'Situação', 'Qtd Itens'].map(h => (
-                <th key={h} className="pb-2 pr-6 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#64748b' }}>
-                  {h}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {ordenados.map(pedido => (
-              <LinhaPedido key={pedido.id} pedido={pedido} expandido={expandidos.has(pedido.id)} onToggle={() => toggle(pedido.id)} />
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </SecaoContainer>
-  )
-}
-
-function SecaoPessoas({ pessoas }: { pessoas: DadosComerciais['pessoas'] }) {
-  return (
-    <SecaoContainer titulo="Clientes e Fornecedores">
-      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-        {pessoas.map(p => (
-          <div key={p.id} className="flex items-center justify-between rounded-lg border px-3.5 py-2.5" style={{ background: '#161925', borderColor: '#2d3148' }}>
-            <div>
-              <p className="text-sm font-medium" style={{ color: '#e2e8f0' }}>{p.nome}</p>
-              <p className="text-xs" style={{ color: '#64748b' }}>{p.cidade}</p>
-            </div>
-            <span
-              className="rounded-full px-2 py-0.5 text-xs font-medium"
-              style={{
-                background: p.tipo === 'cliente' ? 'rgba(59,130,246,0.15)' : 'rgba(168,85,247,0.15)',
-                color: p.tipo === 'cliente' ? '#3b82f6' : '#a855f7',
-              }}
-            >
-              {p.tipo}
-            </span>
-          </div>
-        ))}
-      </div>
-    </SecaoContainer>
-  )
-}
-
-function SecaoCompras({ compras }: { compras: DadosComerciais['compras'] }) {
-  const porFornecedor = new Map<string, { total: number; quantidade: number }>()
-  for (const c of compras) {
-    const existente = porFornecedor.get(c.fornecedor)
-    if (existente) { existente.total += c.valor; existente.quantidade++ }
-    else porFornecedor.set(c.fornecedor, { total: c.valor, quantidade: 1 })
-  }
-  const linhas = Array.from(porFornecedor.entries()).sort((a, b) => b[1].total - a[1].total)
-
-  return (
-    <SecaoContainer titulo="Compras por Fornecedor">
-      <table className="w-full text-sm">
-        <thead>
-          <tr style={{ borderBottom: '1px solid #2d3148' }}>
-            {['Fornecedor', 'Total Comprado', 'Qtd Compras'].map(h => (
-              <th key={h} className="pb-2 pr-6 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#64748b' }}>
-                {h}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {linhas.map(([fornecedor, dados]) => (
-            <tr key={fornecedor} style={{ borderBottom: '1px solid #1e2130' }}>
-              <td className="py-2.5 pr-6 font-medium" style={{ color: '#e2e8f0' }}>{fornecedor}</td>
-              <td className="py-2.5 pr-6 tabular-nums" style={{ color: '#22c55e' }}>{formatMoeda(dados.total)}</td>
-              <td className="py-2.5 tabular-nums" style={{ color: '#94a3b8' }}>{dados.quantidade}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </SecaoContainer>
-  )
-}
-
-function SecaoEstoque({ saldoEstoque }: { saldoEstoque: DadosComerciais['saldoEstoque'] }) {
-  function corQuantidade(quantidade: number): string {
-    if (quantidade < LIMITE_ESTOQUE_CRITICO) return '#ef4444'
-    if (quantidade < LIMITE_ESTOQUE_ATENCAO) return '#f59e0b'
-    return '#e2e8f0'
-  }
-
-  return (
-    <SecaoContainer titulo="Estoque">
-      <table className="w-full text-sm">
-        <thead>
-          <tr style={{ borderBottom: '1px solid #2d3148' }}>
-            {['Produto', 'Local', 'Quantidade'].map(h => (
-              <th key={h} className="pb-2 pr-6 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#64748b' }}>
-                {h}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {saldoEstoque.map(s => (
-            <tr key={s.id} style={{ borderBottom: '1px solid #1e2130' }}>
-              <td className="py-2.5 pr-6 font-medium" style={{ color: '#e2e8f0' }}>{s.produto}</td>
-              <td className="py-2.5 pr-6" style={{ color: '#94a3b8' }}>{s.local}</td>
-              <td className="py-2.5 tabular-nums font-semibold" style={{ color: corQuantidade(s.quantidade) }}>
-                {s.quantidade}
-                {s.quantidade < LIMITE_ESTOQUE_CRITICO && ' — crítico'}
-                {s.quantidade >= LIMITE_ESTOQUE_CRITICO && s.quantidade < LIMITE_ESTOQUE_ATENCAO && ' — atenção'}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </SecaoContainer>
-  )
-}
-
-type SubAba = 'pessoas' | 'compras' | 'estoque'
-
-const SUB_ABAS: { id: SubAba; label: string; Icon: typeof Users }[] = [
-  { id: 'pessoas', label: 'Clientes e Fornecedores', Icon: Users },
-  { id: 'compras',  label: 'Compras por Fornecedor',  Icon: Truck },
-  { id: 'estoque',  label: 'Estoque',                 Icon: Package },
-]
-
-export default function ComercialPage() {
-  const [dados, setDados] = useState<DadosComerciais | null>(null)
-  const [carregando, setCarregando] = useState(true)
-  const [erro, setErro] = useState<string | null>(null)
-  const [subAba, setSubAba] = useState<SubAba>('pessoas')
-
-  useEffect(() => {
-    buscarDadosComerciais()
-      .then(setDados)
-      .catch(e => setErro(e instanceof Error ? e.message : 'Erro ao carregar dados comerciais'))
-      .finally(() => setCarregando(false))
-  }, [])
-
-  const totalPedidos = dados?.pedidos.length ?? 0
-  const aguardandoFaturamento = dados?.pedidos.filter(p => p.situacaoFaturamento === 'PENDENTE').length ?? 0
-  const faturados = dados?.pedidos.filter(p => p.situacaoFaturamento === 'FATURADO').length ?? 0
-  const itensEstoqueBaixo = dados?.saldoEstoque.filter(s => s.quantidade < LIMITE_ESTOQUE_CRITICO).length ?? 0
-
-  return (
-    <div className="min-h-screen" style={{ background: '#0f1117' }}>
-      <header
-        className="sticky top-0 z-30 border-b"
-        style={{ background: 'rgba(15,17,23,0.92)', backdropFilter: 'blur(12px)', borderColor: '#2d3148' }}
-      >
-        <div className="mx-auto flex max-w-screen-2xl items-center gap-4 px-5 py-3">
-          <div className="flex items-center gap-2.5 mr-4">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg" style={{ background: 'rgba(59,130,246,0.15)' }}>
-              <Sun className="h-4 w-4" style={{ color: '#3b82f6' }} />
-            </div>
-            <span className="font-bold text-sm hidden sm:block" style={{ color: '#e2e8f0' }}>CFO Solar</span>
-          </div>
-          <div className="flex items-center gap-2 flex-1 min-w-0">
-            <ClipboardList className="h-3.5 w-3.5 shrink-0" style={{ color: '#64748b' }} />
-            <span className="text-xs" style={{ color: '#64748b' }}>Módulo Comercial — dados Upper Softwares</span>
-          </div>
+  const cabecalho = (
+    <div className={`${styles.hdr} ${styles.htop}`}>
+      <div className={styles.wrap}>
+        <div className={styles.brand}>
+          <div className={`${styles.bname} ${styles.serif}`}>CFO Solar</div>
+          <div className={styles.bsub}>Painel financeiro · Estruturas para energia solar</div>
         </div>
         <NavTabs itens={ABAS_NAV} ativo="comercial" />
-      </header>
+      </div>
+    </div>
+  )
 
-      <main className="mx-auto max-w-screen-2xl px-5 py-6 flex flex-col gap-6">
-        <div
-          className="flex items-center gap-2.5 rounded-lg border-l-4 px-4 py-3 text-sm"
-          style={{ background: 'rgba(245,158,11,0.08)', borderLeftColor: '#f59e0b', border: '1px solid rgba(120,80,10,0.4)', borderLeftWidth: 4 }}
-        >
-          <AlertTriangle className="h-4 w-4 shrink-0" style={{ color: '#f59e0b' }} />
-          <span style={{ color: '#fcd34d' }}>
-            Exibindo dados de demonstração — integração com Upper Softwares pendente de liberação pelo fornecedor.
-          </span>
+  const bannerDemo = (
+    <div className={styles.demo}>
+      <IconeInfo />
+      <span><b>Ambiente de demonstração.</b> Os valores nesta tela são fictícios — a integração com a Upper Softwares está pendente de liberação pelo fornecedor.</span>
+    </div>
+  )
+
+  if (erro) {
+    return (
+      <div className={styles.page}>
+        {cabecalho}
+        <div className={`${styles.wrap} ${styles.sect}`}>
+          {bannerDemo}
+          <p style={{ color: 'var(--critico)' }}>{erro}</p>
         </div>
+      </div>
+    )
+  }
 
-        {carregando && (
-          <p className="text-sm" style={{ color: '#64748b' }}>Carregando dados comerciais…</p>
-        )}
+  if (!dados) {
+    return (
+      <div className={styles.page}>
+        {cabecalho}
+        <div className={`${styles.wrap} ${styles.sect}`}>
+          <p style={{ color: 'var(--ink3)', fontSize: 13 }}>Conectando à Upper Softwares…</p>
+        </div>
+      </div>
+    )
+  }
 
-        {erro && (
-          <div
-            className="flex items-center gap-2.5 rounded-lg border-l-4 px-4 py-3 text-sm"
-            style={{ background: 'rgba(239,68,68,0.08)', borderLeftColor: '#ef4444', borderLeftWidth: 4 }}
-          >
-            <AlertTriangle className="h-4 w-4 shrink-0" style={{ color: '#ef4444' }} />
-            <span style={{ color: '#fca5a5' }}>{erro}</span>
+  const pedidosOrdenados = [...pedidosFiltrados].sort(
+    (a, b) => new Date(b.dataCadastro).getTime() - new Date(a.dataCadastro).getTime(),
+  )
+  const aguardandoFaturamento = pedidosFiltrados.filter(p => p.situacaoFaturamento === 'PENDENTE').length
+  const faturados = pedidosFiltrados.filter(p => p.situacaoFaturamento === 'FATURADO').length
+  const estoqueBaixo = dados.saldoEstoque.filter(s => s.quantidade < LIMITE_ESTOQUE_ATENCAO)
+  const estoqueCritico = dados.saldoEstoque.filter(s => s.quantidade < LIMITE_ESTOQUE_CRITICO)
+
+  const totalAguardando = pedidosFiltrados
+    .filter(p => p.situacaoFaturamento === 'PENDENTE')
+    .reduce((s, p) => s + (p.valorDocumento ?? 0), 0)
+  const totalFaturado = pedidosFiltrados
+    .filter(p => p.situacaoFaturamento === 'FATURADO')
+    .reduce((s, p) => s + (p.valorDocumento ?? 0), 0)
+
+  const comprasPorFornecedor = new Map<string, { total: number; quantidade: number }>()
+  for (const c of dados.compras) {
+    const existente = comprasPorFornecedor.get(c.fornecedor)
+    if (existente) { existente.total += c.valor; existente.quantidade++ }
+    else comprasPorFornecedor.set(c.fornecedor, { total: c.valor, quantidade: 1 })
+  }
+  const linhasCompras = Array.from(comprasPorFornecedor.entries()).sort((a, b) => b[1].total - a[1].total)
+
+  return (
+    <div className={styles.page}>
+      {cabecalho}
+
+      <div className={`${styles.wrap} ${styles.sect}`}>
+
+        {/* Banner condicional: demo quando mock, indicador de sync quando real */}
+        {dados.origemMock ? bannerDemo : (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 20, fontSize: 11.5, color: CORES.ink3 }}>
+            <span style={{ display: 'inline-block', width: 7, height: 7, borderRadius: '50%', background: CORES.positivo, flexShrink: 0 }} />
+            <span>
+              Dados sincronizados com a Upper Softwares em{' '}
+              <span className={styles.num}>{dados.sincronizadoEm ? formatData(dados.sincronizadoEm) : '—'}</span>
+              {' '}· exibindo {pedidosFiltrados.length} pedido{pedidosFiltrados.length !== 1 ? 's' : ''}{' '}
+              {descricaoPeriodo(filtro)}
+            </span>
           </div>
         )}
 
-        {dados && (
-          <>
-            <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-              <KPICard titulo="Total de Pedidos" valor={totalPedidos} formato="numero" Icon={ClipboardList} cor="blue" />
-              <KPICard titulo="Aguardando Faturamento" valor={aguardandoFaturamento} formato="numero" Icon={AlertTriangle} cor="yellow" />
-              <KPICard titulo="Faturados" valor={faturados} formato="numero" Icon={ShoppingCart} cor="green" />
-              <KPICard titulo="Itens com Estoque Baixo" valor={itensEstoqueBaixo} formato="numero" Icon={Package} cor="red" />
+        {/* Filtro de período */}
+        <div className={styles.filtroBar}>
+          {(['hoje', '7dias', '30dias', 'personalizado'] as TipoPeriodo[]).map(t => (
+            <button
+              key={t}
+              onClick={() => setTipoPeriodo(t)}
+              className={`${styles.pfiltro} ${tipoPeriodo === t ? styles.pfiltroOn : ''}`}
+            >
+              {LABELS_PERIODO[t]}
+            </button>
+          ))}
+          {tipoPeriodo === 'personalizado' && (
+            <div className={styles.filtroCustom}>
+              <span className={styles.filtroLbl}>De</span>
+              <input
+                type="date"
+                value={customInicio}
+                onChange={e => setCustomInicio(e.target.value)}
+                className={styles.filtroDate}
+              />
+              <span className={styles.filtroLbl}>Até</span>
+              <input
+                type="date"
+                value={customFim}
+                onChange={e => setCustomFim(e.target.value)}
+                className={styles.filtroDate}
+              />
             </div>
+          )}
+        </div>
 
-            <SecaoPedidos pedidos={dados.pedidos} />
-
-            <div className="flex flex-wrap gap-2">
-              {SUB_ABAS.map(({ id, label, Icon }) => (
-                <button
-                  key={id}
-                  onClick={() => setSubAba(id)}
-                  className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all"
-                  style={{
-                    background: subAba === id ? '#3b82f6' : '#1a1d27',
-                    color: subAba === id ? '#fff' : '#94a3b8',
-                    border: subAba === id ? 'none' : '1px solid #2d3148',
-                  }}
-                >
-                  <Icon className="h-3.5 w-3.5" />
-                  {label}
-                </button>
-              ))}
+        {/* KPIs */}
+        <div className={styles.kpis}>
+          <div className={styles.kpi}>
+            <div className={styles.kl}>Total de Pedidos</div>
+            <div className={`${styles.kv} ${styles.serif} ${styles.num}`}>{pedidosFiltrados.length}</div>
+            <div className={styles.kd}>{dados.pedidos.length} carregados da Upper</div>
+          </div>
+          <div className={styles.kpi}>
+            <div className={styles.kl}>Aguardando Faturamento</div>
+            <div className={`${styles.kv} ${styles.serif} ${styles.num}`}>{aguardandoFaturamento}</div>
+            <div className={styles.kd}>
+              {!dados.origemMock && totalAguardando > 0
+                ? formatMoeda(totalAguardando)
+                : 'Valor em aberto não disponível via API'}
             </div>
+          </div>
+          <div className={styles.kpi}>
+            <div className={styles.kl}>Faturados</div>
+            <div className={`${styles.kv} ${styles.serif} ${styles.num}`}>{faturados}</div>
+            <div className={styles.kd}>
+              {!dados.origemMock && totalFaturado > 0
+                ? formatMoeda(totalFaturado)
+                : 'Valor faturado não disponível via API'}
+            </div>
+          </div>
+          <div className={styles.kpi}>
+            <div className={styles.kl}>Itens c/ Estoque Baixo</div>
+            <div className={`${styles.kv} ${styles.serif} ${styles.num} ${estoqueCritico.length > 0 ? styles.crit : ''}`}>{estoqueBaixo.length}</div>
+            <div className={styles.kd}>{estoqueCritico.length} em nível crítico</div>
+          </div>
+        </div>
 
-            {subAba === 'pessoas' && <SecaoPessoas pessoas={dados.pessoas} />}
-            {subAba === 'compras' && <SecaoCompras compras={dados.compras} />}
-            {subAba === 'estoque' && <SecaoEstoque saldoEstoque={dados.saldoEstoque} />}
-          </>
+        {/* Pedidos Recentes */}
+        <div className={styles.shead}>
+          <div className={`${styles.stitle} ${styles.serif}`}>Pedidos Recentes</div>
+          <div className={styles.over}>{pedidosFiltrados.length} registros</div>
+        </div>
+        {dados.origemMock && (
+          <div className={styles.scap}>Selecione um pedido para visualizar os itens.</div>
         )}
-      </main>
+
+        <div className={styles.ohead}>
+          <div>Cliente</div>
+          <div>Data Emissão</div>
+          <div>Previsão Entrega</div>
+          <div>Situação</div>
+          <div className={styles.right}>Itens</div>
+        </div>
+        {pedidosOrdenados.length === 0 ? (
+          <p style={{ padding: '24px 4px', fontSize: 13, color: 'var(--ink3)' }}>
+            Nenhum pedido encontrado para o período selecionado.
+          </p>
+        ) : (
+          pedidosOrdenados.map(pedido => (
+            <LinhaPedido
+              key={pedido.id}
+              pedido={pedido}
+              expandido={expandidos.has(pedido.id)}
+              onToggle={() => toggle(pedido.id)}
+            />
+          ))
+        )}
+
+        {/* Curva ABCD — ilustrativa (preço por item não disponível na listagem da Upper) */}
+        <SecaoCurvaABCD pedidos={pedidosFiltrados} />
+
+        {/* Sub-seções: Pessoas / Compras / Estoque */}
+        <div className={styles.subnav} style={{ marginTop: 52 }}>
+          <button onClick={() => setSubAba('pessoas')} className={`${styles.stab} ${subAba === 'pessoas' ? styles.stabOn : ''}`}>
+            Clientes e Fornecedores
+          </button>
+          <button onClick={() => setSubAba('compras')} className={`${styles.stab} ${subAba === 'compras' ? styles.stabOn : ''}`}>
+            Compras por Fornecedor
+          </button>
+          <button onClick={() => setSubAba('estoque')} className={`${styles.stab} ${subAba === 'estoque' ? styles.stabOn : ''}`}>
+            Estoque
+          </button>
+        </div>
+
+        {subAba === 'pessoas' && (
+          <div className={styles.pgrid}>
+            {dados.pessoas.map(p => (
+              <div key={p.id} className={styles.prow}>
+                <div>
+                  <div className={styles.pn}>{p.nome}</div>
+                  <div className={styles.pc}>{p.cidade}</div>
+                </div>
+                <span className={styles.stat}>
+                  <span className={`${styles.dot} ${p.tipo === 'fornecedor' ? styles.dForn : styles.dCli}`} />
+                  {p.tipo}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {subAba === 'compras' && (
+          <div>
+            <div className={`${styles.thead} ${styles.tcomp}`}>
+              <div>Fornecedor</div>
+              <div className={styles.right}>Total Comprado</div>
+              <div className={styles.right}>Compras</div>
+            </div>
+            {linhasCompras.map(([fornecedor, d]) => (
+              <div key={fornecedor} className={`${styles.trow} ${styles.tcomp}`}>
+                <div className={styles.fn}>{fornecedor}</div>
+                <div className={`${styles.right} ${styles.money} ${styles.serif} ${styles.num}`}>{formatMoeda(d.total)}</div>
+                <div className={`${styles.right} ${styles.num} ${styles.cdt}`}>{d.quantidade} compras</div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {subAba === 'estoque' && (
+          <div>
+            <div className={`${styles.thead} ${styles.tstk}`}>
+              <div>Produto</div>
+              <div>Local</div>
+              <div className={styles.right}>Qtd</div>
+              <div className={styles.right}>Situação</div>
+            </div>
+            {dados.saldoEstoque.map(s => {
+              const critico = s.quantidade < LIMITE_ESTOQUE_CRITICO
+              const baixo = !critico && s.quantidade < LIMITE_ESTOQUE_ATENCAO
+              return (
+                <div key={s.id} className={`${styles.trow} ${styles.tstk}`}>
+                  <div className={styles.fn}>{s.produto}</div>
+                  <div className={styles.cdt}>{s.local}</div>
+                  <div className={`${styles.right} ${styles.stkq} ${styles.serif} ${styles.num} ${critico ? styles.crit : ''}`}>{s.quantidade}</div>
+                  <div className={`${styles.note} ${critico ? styles.nCrit : baixo ? styles.nLow : ''}`}>
+                    {critico ? 'Crítico' : baixo ? 'Baixo' : '—'}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
     </div>
   )
 }

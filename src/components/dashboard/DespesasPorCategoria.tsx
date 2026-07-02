@@ -14,27 +14,29 @@ import {
 import { AlertTriangle } from 'lucide-react'
 import type { CategoriaDespesa, EmpresaAnalise, GrupoCusto } from '@/types/financeiro'
 import { formatMoeda, formatMoedaCompacta, formatPercentual } from '@/lib/utils'
+import { CORES } from '@/lib/tema'
+import styles from '@/styles/editorial.module.css'
 
 const COR_GRUPO: Record<GrupoCusto, string> = {
-  fixo: '#f59e0b',
-  variavel: '#3b82f6',
-  capex: '#a855f7',
-  servico_da_divida: '#ef4444',
-  pro_labore: '#06b6d4',
-  nao_recorrente: '#eab308',
-  sem_classificacao: '#f97316',
-  outro: '#64748b',
+  fixo:             CORES.pendente,
+  variavel:         CORES.info,
+  capex:            CORES.fornecedor,
+  servico_da_divida: CORES.critico,
+  pro_labore:       '#5f6f78',
+  nao_recorrente:   CORES.baixo,
+  sem_classificacao: '#9a6a22',
+  outro:            CORES.ink3,
 }
 
 const LABEL_GRUPO: Record<GrupoCusto, string> = {
-  fixo: 'Custo fixo',
-  variavel: 'Custo variável',
-  capex: 'CAPEX',
+  fixo:             'Custo fixo',
+  variavel:         'Custo variável',
+  capex:            'CAPEX',
   servico_da_divida: 'Serviço da dívida',
-  pro_labore: 'Pró-labore',
-  nao_recorrente: 'Não recorrente',
+  pro_labore:       'Pró-labore',
+  nao_recorrente:   'Não recorrente',
   sem_classificacao: 'Sem classificação',
-  outro: 'Outros',
+  outro:            'Outros',
 }
 
 interface TooltipPayload {
@@ -46,10 +48,10 @@ function CustomTooltip({ active, payload }: TooltipPayload) {
   if (!active || !payload?.length) return null
   const item = payload[0].payload
   return (
-    <div className="rounded-lg border p-3 shadow-xl text-sm" style={{ background: '#1a1d27', borderColor: '#2d3148' }}>
-      <p className="font-semibold mb-1" style={{ color: '#e2e8f0' }}>{item.categoria}</p>
-      <p style={{ color: COR_GRUPO[item.grupo] }}>{formatMoeda(item.valor)}</p>
-      <p className="text-xs mt-1" style={{ color: '#64748b' }}>
+    <div style={{ background: CORES.bg, border: `1px solid ${CORES.line2}`, padding: '10px 14px', fontSize: 13 }}>
+      <p style={{ fontWeight: 600, marginBottom: 4, color: CORES.ink }}>{item.categoria}</p>
+      <p style={{ color: COR_GRUPO[item.grupo], fontWeight: 600 }}>{formatMoeda(item.valor)}</p>
+      <p style={{ fontSize: 11, color: CORES.ink3, marginTop: 4 }}>
         {formatPercentual(item.percentualDoTotal)} · {LABEL_GRUPO[item.grupo]}
       </p>
     </div>
@@ -58,10 +60,10 @@ function CustomTooltip({ active, payload }: TooltipPayload) {
 
 function LegendaGrupos() {
   return (
-    <div className="flex flex-wrap gap-4 mt-3">
+    <div className="flex flex-wrap gap-4 mt-4">
       {(Object.keys(LABEL_GRUPO) as GrupoCusto[]).map(grupo => (
-        <div key={grupo} className="flex items-center gap-1.5 text-xs" style={{ color: '#94a3b8' }}>
-          <span className="h-2.5 w-2.5 rounded-sm" style={{ background: COR_GRUPO[grupo] }} />
+        <div key={grupo} className="flex items-center gap-1.5" style={{ fontSize: 11, color: CORES.ink2 }}>
+          <span style={{ width: 8, height: 8, borderRadius: 2, background: COR_GRUPO[grupo], display: 'inline-block', flexShrink: 0 }} />
           {LABEL_GRUPO[grupo]}
         </div>
       ))}
@@ -88,12 +90,9 @@ function AvisoSemClassificacao({ quantidade, valor }: { quantidade: number; valo
   // (Supabase) trazem undefined em runtime mesmo com o tipo dizendo "number".
   const valorTexto = Number.isFinite(valor) ? formatMoeda(valor) : 'valor não identificado'
   return (
-    <div
-      className="mb-4 flex items-center gap-2.5 rounded-lg border-l-4 px-4 py-3 text-sm"
-      style={{ background: 'rgba(249,115,22,0.08)', borderLeftColor: '#f97316', borderLeftWidth: 4 }}
-    >
-      <AlertTriangle className="h-4 w-4 shrink-0" style={{ color: '#f97316' }} />
-      <span style={{ color: '#fdba74' }}>
+    <div className={`${styles.notice}`} style={{ borderLeftColor: 'var(--pendente)', marginBottom: 12 }}>
+      <AlertTriangle className="h-3.5 w-3.5" style={{ color: 'var(--pendente)' }} />
+      <span style={{ fontSize: 12.5 }}>
         {quantidade} lançamento{quantidade > 1 ? 's' : ''} sem categoria definida pela colaboradora
         ({valorTexto}) — verifique a planilha original.
       </span>
@@ -105,10 +104,14 @@ function ResumoCustosBarra({
   custosFixos = 0, custosVariaveis = 0, capex = 0, servicoDaDivida = 0, proLabore = 0,
   despesaNaoRecorrente = 0, semClassificacao = 0, quantidadeSemClassificacao = 0, outros = 0,
 }: ResumoCustosBarraProps) {
-  const despesasOperacionais = custosFixos + custosVariaveis
-  const total = despesasOperacionais + outros
+  const total = custosFixos + custosVariaveis + outros
   if (total === 0 && capex === 0 && servicoDaDivida === 0 && proLabore === 0 && despesaNaoRecorrente === 0 && semClassificacao === 0) return null
 
+  const itensOp = [
+    { label: 'Custos Fixos', valor: custosFixos, cor: COR_GRUPO.fixo },
+    { label: 'Custos Variáveis', valor: custosVariaveis, cor: COR_GRUPO.variavel },
+    { label: 'Outros', valor: outros, cor: COR_GRUPO.outro },
+  ]
   const itensFora = [
     { label: 'CAPEX', valor: capex, cor: COR_GRUPO.capex },
     { label: 'Serviço da Dívida', valor: servicoDaDivida, cor: COR_GRUPO.servico_da_divida },
@@ -117,21 +120,17 @@ function ResumoCustosBarra({
   ].filter(item => item.valor > 0)
 
   return (
-    <div className="mb-4 flex flex-col gap-3">
+    <div style={{ marginBottom: 20 }}>
       <AvisoSemClassificacao quantidade={quantidadeSemClassificacao} valor={semClassificacao} />
 
-      <div className="grid grid-cols-3 gap-3">
-        {[
-          { label: 'Custos Fixos', valor: custosFixos, cor: COR_GRUPO.fixo },
-          { label: 'Custos Variáveis', valor: custosVariaveis, cor: COR_GRUPO.variavel },
-          { label: 'Outros', valor: outros, cor: COR_GRUPO.outro },
-        ].map(item => (
-          <div key={item.label} className="rounded-lg border px-3 py-2.5" style={{ background: '#161925', borderColor: '#2d3148' }}>
-            <p className="text-xs" style={{ color: '#64748b' }}>{item.label}</p>
-            <p className="text-sm font-bold mt-0.5 tabular-nums" style={{ color: item.cor }}>
+      <div className="grid grid-cols-3 gap-0" style={{ border: `1px solid var(--line)`, marginBottom: itensFora.length > 0 ? 12 : 0 }}>
+        {itensOp.map((item, i) => (
+          <div key={item.label} style={{ padding: '14px 18px', borderLeft: i > 0 ? `1px solid var(--line)` : 'none' }}>
+            <p className={styles.kl}>{item.label}</p>
+            <p className={`${styles.num} mt-1.5`} style={{ fontSize: 16, fontWeight: 600, color: item.cor }}>
               {formatMoeda(item.valor)}
             </p>
-            <p className="text-xs mt-0.5" style={{ color: '#64748b' }}>
+            <p className={`${styles.num}`} style={{ fontSize: 11, color: 'var(--ink3)', marginTop: 3 }}>
               {formatPercentual(total > 0 ? (item.valor / total) * 100 : 0)}
             </p>
           </div>
@@ -140,14 +139,14 @@ function ResumoCustosBarra({
 
       {itensFora.length > 0 && (
         <div>
-          <p className="text-xs mb-1.5" style={{ color: '#4b5563' }}>
+          <p style={{ fontSize: 11, color: 'var(--ink3)', marginBottom: 8 }}>
             Fora da despesa operacional — não compõem a margem operacional:
           </p>
           <div className="grid gap-3" style={{ gridTemplateColumns: `repeat(${itensFora.length}, minmax(0, 1fr))` }}>
             {itensFora.map(item => (
-              <div key={item.label} className="rounded-lg border-dashed border px-3 py-2.5" style={{ background: '#161925', borderColor: item.cor }}>
-                <p className="text-xs" style={{ color: '#64748b' }}>{item.label}</p>
-                <p className="text-sm font-bold mt-0.5 tabular-nums" style={{ color: item.cor }}>
+              <div key={item.label} style={{ padding: '12px 16px', border: `1px solid var(--line)`, borderLeft: `2px solid ${item.cor}` }}>
+                <p className={styles.kl}>{item.label}</p>
+                <p className={`${styles.num} mt-1`} style={{ fontSize: 15, fontWeight: 600, color: item.cor }}>
                   {formatMoeda(item.valor)}
                 </p>
               </div>
@@ -174,87 +173,62 @@ export function DespesasPorCategoria({ despesasGrupo, resumoCustosGrupo, empresa
   const dadosAtivos = empresaSelecionada ? empresaSelecionada.despesasPorCategoria : despesasGrupo
   const resumoAtivo = empresaSelecionada ? empresaSelecionada.resumoCustos : resumoCustosGrupo
   const top10 = dadosAtivos.slice(0, 10)
-
   const tituloChart = empresaSelecionada ? empresaSelecionada.nome : 'Grupo (todas as empresas)'
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap gap-2">
-        <button
-          onClick={() => setFiltro('grupo')}
-          className="rounded-lg px-3 py-1.5 text-xs font-medium transition-all"
-          style={{
-            background: filtro === 'grupo' ? '#3b82f6' : '#1a1d27',
-            color: filtro === 'grupo' ? '#fff' : '#94a3b8',
-            border: filtro === 'grupo' ? 'none' : '1px solid #2d3148',
-          }}
-        >
+    <div className="flex flex-col gap-5">
+      <div className={styles.subnav} style={{ margin: 0 }}>
+        <button onClick={() => setFiltro('grupo')} className={`${styles.stab} ${filtro === 'grupo' ? styles.stabOn : ''}`}>
           Grupo (todas)
         </button>
         {empresas.map(e => (
-          <button
-            key={e.nome}
-            onClick={() => setFiltro(e.nome)}
-            className="rounded-lg px-3 py-1.5 text-xs font-medium transition-all"
-            style={{
-              background: filtro === e.nome ? '#3b82f6' : '#1a1d27',
-              color: filtro === e.nome ? '#fff' : '#94a3b8',
-              border: filtro === e.nome ? 'none' : '1px solid #2d3148',
-            }}
-          >
-            {e.nome}
+          <button key={e.nome} onClick={() => setFiltro(e.nome)} className={`${styles.stab} ${filtro === e.nome ? styles.stabOn : ''}`}>
+            {e.nome.split(' ').pop()}
           </button>
         ))}
       </div>
 
       {semCategorizacao ? (
-        <div className="rounded-xl border p-8 text-center animate-fadeIn" style={{ background: '#1a1d27', borderColor: '#2d3148' }}>
-          <p className="text-sm font-semibold mb-1" style={{ color: '#e2e8f0' }}>
-            Total de despesas — {empresaSelecionada!.nome}
-          </p>
-          <p className="text-2xl font-bold tabular-nums mb-3" style={{ color: '#ef4444' }}>
+        <div style={{ padding: '24px 0', textAlign: 'center' }}>
+          <p className={styles.kl}>Total de despesas — {empresaSelecionada!.nome}</p>
+          <p className={`${styles.serif} ${styles.num}`} style={{ fontSize: 32, color: 'var(--critico)', marginTop: 10 }}>
             {formatMoeda(empresaSelecionada!.saidas)}
           </p>
-          <p
-            className="inline-block rounded-full px-3 py-1 text-xs"
-            style={{ background: 'rgba(100,116,139,0.15)', color: '#94a3b8' }}
-          >
-            Categorização não disponível para este canal
-          </p>
+          <p className={styles.over} style={{ marginTop: 8 }}>Categorização não disponível para este canal</p>
         </div>
       ) : top10.length === 0 ? (
-        <div className="rounded-xl border p-8 text-center animate-fadeIn" style={{ background: '#1a1d27', borderColor: '#2d3148' }}>
-          <p className="text-sm" style={{ color: '#64748b' }}>Sem despesas categorizadas para exibir.</p>
-        </div>
+        <p style={{ fontSize: 13, color: 'var(--ink3)', padding: '24px 0' }}>Sem despesas categorizadas para exibir.</p>
       ) : (
-        <div className="rounded-xl border p-5 animate-fadeIn" style={{ background: '#1a1d27', borderColor: '#2d3148' }}>
-          <h3 className="mb-1 text-sm font-semibold uppercase tracking-widest" style={{ color: '#64748b' }}>
-            Top {top10.length} Categorias de Despesa
-          </h3>
-          <p className="text-xs mb-4" style={{ color: '#4b5563' }}>{tituloChart}</p>
+        <div>
+          <div className={styles.shead}>
+            <div className={`${styles.stitle} ${styles.serif}`}>Top {top10.length} Categorias de Despesa</div>
+            <div className={styles.over}>{tituloChart}</div>
+          </div>
 
-          <ResumoCustosBarra {...resumoAtivo} />
+          <div style={{ marginTop: 20 }}>
+            <ResumoCustosBarra {...resumoAtivo} />
+          </div>
 
           <ResponsiveContainer width="100%" height={Math.max(280, top10.length * 36)}>
             <BarChart data={top10} layout="vertical" margin={{ top: 4, right: 16, left: 0, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#2d3148" horizontal={false} />
+              <CartesianGrid strokeDasharray="1 4" stroke={CORES.line} horizontal={false} />
               <XAxis
                 type="number"
                 tickFormatter={formatMoedaCompacta}
-                tick={{ fill: '#64748b', fontSize: 10 }}
+                tick={{ fill: CORES.ink3, fontSize: 10 }}
                 axisLine={false}
                 tickLine={false}
               />
               <YAxis
                 type="category"
                 dataKey="categoria"
-                width={150}
-                tick={{ fill: '#94a3b8', fontSize: 11 }}
-                axisLine={{ stroke: '#2d3148' }}
+                width={160}
+                tick={{ fill: CORES.ink2, fontSize: 11 }}
+                axisLine={{ stroke: CORES.line }}
                 tickLine={false}
               />
-              <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(59,130,246,0.06)' }} />
-              <Bar dataKey="valor" radius={[0, 4, 4, 0]} maxBarSize={22}>
+              <Tooltip content={<CustomTooltip />} cursor={{ fill: CORES.paper }} />
+              <Bar dataKey="valor" radius={[0, 2, 2, 0]} maxBarSize={20}>
                 {top10.map((entry, i) => (
                   <Cell key={i} fill={COR_GRUPO[entry.grupo]} />
                 ))}

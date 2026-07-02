@@ -1,0 +1,220 @@
+/* Design system editorial compartilhado — única folha de estilo para a
+   direção visual nascida em Comercial.dc.html (claude.ai/design), usada por
+   toda a aplicação. Variáveis consumidas daqui vêm de globals.css (:root) —
+   mudar uma cor/fonte do app começa lá; mudar um padrão de layout (tabela,
+   kpi, painel) começa aqui. */
+
+.page {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  font-size: 14px;
+  min-height: 100vh;
+}
+
+.serif { font-family: var(--font-serif); }
+.num { font-variant-numeric: tabular-nums lining-nums; letter-spacing: 0; }
+.wrap { max-width: 1120px; margin: 0 auto; padding: 0 40px; }
+.over { font-size: 10.5px; font-weight: 600; letter-spacing: .13em; text-transform: uppercase; color: var(--ink3); }
+.link { color: inherit; text-decoration: none; }
+
+/* ─── Header / navegação ────────────────────────────────────────────────── */
+
+.hdr { border-bottom: 1px solid var(--line); background: var(--background); }
+.htop { position: sticky; top: 0; z-index: 20; background: var(--background); }
+.brand { display: flex; align-items: baseline; gap: 14px; padding: 22px 0 18px; }
+.bname { font-size: 21px; font-weight: 600; letter-spacing: .01em; color: var(--marca); }
+.bsub { font-size: 12px; color: var(--ink3); letter-spacing: .02em; }
+.nav { display: flex; gap: 30px; overflow-x: auto; scrollbar-width: none; }
+.nav::-webkit-scrollbar { display: none; }
+.tab { padding: 0 0 14px; font-size: 13px; color: var(--ink3); white-space: nowrap; cursor: pointer; letter-spacing: .01em; border-bottom: 2px solid transparent; margin-bottom: -1px; background: none; border-left: none; border-right: none; border-top: none; display: inline-block; text-decoration: none; font-family: inherit; }
+.tab:hover { color: var(--marca); }
+.tabOn { color: var(--marca); font-weight: 600; border-bottom-color: var(--marca); }
+
+.sect { padding: 34px 0 60px; }
+
+/* ─── Avisos / banners ──────────────────────────────────────────────────── */
+
+.demo { display: flex; align-items: center; gap: 10px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: 11px 0; margin-bottom: 40px; color: var(--ink2); }
+.demo svg { flex-shrink: 0; color: var(--ink3); }
+.demo b { color: var(--foreground); font-weight: 600; }
+.demo span { font-size: 12.5px; }
+
+/* Aviso de escopo mais estreito (ex: "depende de campo ausente na API") —
+   mesmo padrão do .demo mas com uma borda esquerda fina colorida em vez de
+   hairlines completas, para marcar como secundário/aninhado a uma seção. */
+.notice { display: flex; align-items: flex-start; gap: 9px; border-left: 2px solid var(--pendente); padding: 8px 0 8px 14px; margin: 4px 0 20px; color: var(--ink2); font-size: 12.5px; }
+.notice svg { flex-shrink: 0; margin-top: 1px; color: var(--pendente); }
+
+.alertaDanger { border-left-color: var(--critico); }
+.alertaDanger svg { color: var(--critico); }
+.alertaInfo { border-left-color: var(--info); }
+.alertaInfo svg { color: var(--info); }
+.alertaPositivo { border-left-color: var(--positivo); }
+.alertaPositivo svg { color: var(--positivo); }
+
+/* ─── Painel genérico (substitui os cards arredondados do tema antigo) ──── */
+
+.panel { border: 1px solid var(--line); padding: 24px 28px; }
+.panelTitulo { font-size: 10.5px; font-weight: 600; letter-spacing: .11em; text-transform: uppercase; color: var(--ink3); margin-bottom: 16px; }
+
+/* ─── KPIs ──────────────────────────────────────────────────────────────── */
+
+.kpis { display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1px solid var(--line2); border-bottom: 1px solid var(--line2); margin-bottom: 52px; }
+.kpi { padding: 24px 28px 26px; border-right: 1px solid var(--line); }
+.kpi:last-child { border-right: none; }
+.kl { font-size: 10.5px; font-weight: 600; letter-spacing: .11em; text-transform: uppercase; color: var(--ink3); }
+.kv { font-size: 46px; line-height: 1; font-weight: 400; margin-top: 16px; }
+.kvSmall { font-size: 28px; line-height: 1; font-weight: 400; margin-top: 12px; }
+.kd { font-size: 12px; color: var(--ink2); margin-top: 12px; }
+
+/* Grid de 5 KPIs — fonte compacta para caber na largura disponível */
+.kpiGrid5 .kpi { padding: 18px 20px 20px; }
+.kpiGrid5 .kv { font-size: 28px; line-height: 1.1; }
+
+/* ─── Cabeçalhos de seção ───────────────────────────────────────────────── */
+
+.shead { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 4px; }
+.stitle { font-size: 22px; font-weight: 600; letter-spacing: .01em; }
+.scap { font-size: 12.5px; color: var(--ink3); margin: 2px 0 18px; }
+
+/* ─── Status (ponto + texto) ────────────────────────────────────────────── */
+
+.stat { display: inline-flex; align-items: center; gap: 8px; font-size: 11px; font-weight: 600; letter-spacing: .09em; text-transform: uppercase; color: var(--ink2); }
+.dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; display: inline-block; }
+.dPend { background: var(--pendente); }
+.dGreen { background: var(--positivo); }
+.dBlue { background: var(--info); }
+.dCli { background: var(--info); }
+.dForn { background: var(--fornecedor); }
+.dCrit { background: var(--critico); }
+
+/* ─── Tabela de pedidos (grid de 5 colunas + linha expansível) ──────────── */
+
+.ohead, .orow { display: grid; grid-template-columns: 2.4fr 1.1fr 1.1fr 1.2fr .7fr; align-items: center; gap: 16px; }
+.ohead { padding: 0 4px 11px; border-bottom: 1px solid var(--line2); }
+.ohead > div { font-size: 10.5px; font-weight: 600; letter-spacing: .11em; text-transform: uppercase; color: var(--ink3); }
+.orow { padding: 16px 4px; cursor: pointer; border-bottom: 1px solid var(--line); background: none; width: 100%; text-align: left; border-left: none; border-right: none; border-top: none; font: inherit; color: inherit; }
+.orow:hover { background: #f3f0fb; }
+.cli { display: flex; align-items: center; gap: 12px; font-size: 15px; font-weight: 500; }
+.chev { width: 13px; height: 13px; color: var(--ink3); transition: transform .18s; flex-shrink: 0; }
+.chevOpen { transform: rotate(90deg); color: var(--marca); }
+.cdt { font-size: 13.5px; color: var(--ink2); }
+.qty { font-size: 13.5px; color: var(--ink2); text-align: right; }
+
+.exp { padding: 4px 4px 22px 31px; border-bottom: 1px solid var(--line); background: var(--paper); }
+.ehead, .erow { display: grid; grid-template-columns: 2.6fr 1.2fr .7fr .9fr; gap: 16px; align-items: center; }
+.ehead { padding: 14px 4px 9px; }
+.ehead > div { font-size: 10px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--ink3); }
+.erow { padding: 9px 4px; border-top: 1px solid var(--line); }
+.eprod { font-size: 13.5px; font-weight: 500; }
+.eref { font-size: 12.5px; color: var(--ink2); font-family: var(--font-serif); font-style: italic; }
+.etxt { font-size: 13.5px; color: var(--ink2); }
+
+/* ─── Sub-navegação ─────────────────────────────────────────────────────── */
+
+.subnav { display: flex; gap: 28px; margin: 48px 0 24px; border-bottom: 1px solid var(--line2); flex-wrap: wrap; }
+.stab { padding: 0 0 12px; font-size: 14px; color: var(--ink3); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; background: none; border-left: none; border-right: none; border-top: none; font-family: inherit; }
+.stab:hover { color: var(--marca); }
+.stabOn { color: var(--marca); font-weight: 600; border-bottom-color: var(--marca); }
+
+/* ─── Grid de pessoas ───────────────────────────────────────────────────── */
+
+.pgrid { display: grid; grid-template-columns: repeat(2, 1fr); column-gap: 48px; }
+.prow { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; padding: 16px 0; border-bottom: 1px solid var(--line); }
+.pn { font-size: 15.5px; font-weight: 500; }
+.pc { font-size: 12.5px; color: var(--ink3); margin-top: 3px; }
+
+/* ─── Tabelas genéricas ─────────────────────────────────────────────────── */
+
+.thead, .trow { display: grid; align-items: center; gap: 16px; }
+.tcomp { grid-template-columns: 2.4fr 1.2fr 1fr; }
+.tstk { grid-template-columns: 2.2fr 1.6fr .7fr .9fr; }
+.t3 { grid-template-columns: 2fr 1fr 1fr; }
+.t4 { grid-template-columns: 1.8fr 1fr 1fr 1fr; }
+.t5 { grid-template-columns: 2fr 1fr 1fr 1fr 1fr; }
+.t6 { grid-template-columns: 2fr .8fr .8fr 1fr 1fr .6fr; }
+.thead { padding: 0 4px 11px; border-bottom: 1px solid var(--line2); }
+.thead > div { font-size: 10.5px; font-weight: 600; letter-spacing: .11em; text-transform: uppercase; color: var(--ink3); cursor: default; }
+.thSortable { cursor: pointer !important; user-select: none; }
+.thSortable:hover { color: var(--marca) !important; }
+.trow { padding: 16px 4px; border-bottom: 1px solid var(--line); }
+.trow:hover { background: #faf9ff; }
+.fn { font-size: 15px; font-weight: 500; }
+.money { font-size: 17px; }
+.right { text-align: right; }
+.stkq { font-size: 16px; }
+.crit { color: var(--critico); }
+.note { font-size: 10px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; text-align: right; }
+.nCrit { color: var(--critico); }
+.nLow { color: var(--baixo); }
+
+/* Faixa A/B/C/D da curva ABCD — letra discreta dentro de um quadrado fino. */
+.curvaBadge { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border: 1px solid var(--line2); font-size: 11px; font-weight: 600; }
+.curvaA { border-color: var(--positivo); color: var(--positivo); }
+.curvaB { border-color: var(--info); color: var(--info); }
+.curvaC { border-color: var(--pendente); color: var(--pendente); }
+.curvaD { border-color: var(--ink3); color: var(--ink3); }
+
+/* ─── Botões / formulário ───────────────────────────────────────────────── */
+
+.btn { border: 1px solid var(--line2); background: none; color: var(--ink2); font-family: inherit; font-size: 13px; padding: 8px 16px; cursor: pointer; transition: border-color .15s, color .15s; }
+.btn:hover { border-color: var(--marca); color: var(--marca); }
+.btn:disabled { opacity: .4; cursor: default; }
+.btnOn { background: var(--marca); border-color: var(--marca); color: var(--background); }
+.btnOn:hover { color: var(--background); opacity: .9; }
+.btnPrimary { border: 1px solid var(--marca); background: var(--marca); color: var(--background); font-family: inherit; font-size: 13px; padding: 9px 18px; cursor: pointer; transition: opacity .15s; }
+.btnPrimary:hover { opacity: .85; }
+.btnPrimary:disabled { opacity: .35; cursor: default; }
+
+.toggleGroup { display: inline-flex; border: 1px solid var(--line2); }
+.toggleItem { padding: 6px 16px; font-size: 12.5px; color: var(--ink2); background: none; border: none; cursor: pointer; font-family: inherit; border-right: 1px solid var(--line2); transition: background .12s, color .12s; }
+.toggleItem:last-child { border-right: none; }
+.toggleItem:hover { color: var(--marca); }
+.toggleItemOn { background: var(--marca); color: var(--background); }
+.toggleItemOn:hover { color: var(--background); opacity: .9; }
+
+.field { display: flex; flex-direction: column; gap: 5px; }
+.fieldLabel { font-size: 10.5px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--ink3); }
+.select, .input { border: none; border-bottom: 1px solid var(--line2); background: none; color: var(--foreground); font-family: inherit; font-size: 13.5px; padding: 6px 2px; outline: none; transition: border-color .15s; }
+.select:focus, .input:focus { border-bottom-color: var(--marca); }
+
+/* ─── Barra de progresso fina ───────────────────────────────────────────── */
+
+.progress { height: 2px; width: 100%; background: var(--line); overflow: hidden; }
+.progressFill { height: 100%; background: var(--marca); transition: width .25s; }
+
+/* ─── Chat ──────────────────────────────────────────────────────────────── */
+
+.chatMsg { padding: 14px 0; border-bottom: 1px solid var(--line); font-size: 13.5px; line-height: 1.65; white-space: pre-wrap; }
+.chatRole { font-size: 10px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--ink3); margin-bottom: 6px; }
+.chatUser { color: var(--foreground); font-weight: 500; }
+.chatAssistant { color: var(--ink2); }
+.chatMsgUser { border-left: 2px solid var(--marca); padding-left: 14px; }
+.chatMsgAssistant { padding-left: 0; }
+
+/* ─── Variação (seta + percentual) ──────────────────────────────────────── */
+
+.variacao { font-size: 11px; font-weight: 600; }
+.variacaoUp { color: var(--positivo); }
+.variacaoDown { color: var(--critico); }
+.variacaoFlat { color: var(--ink3); }
+
+/* ─── Filtro de período (Comercial) ─────────────────────────────────────── */
+
+.filtroBar { display: flex; align-items: center; gap: 24px; border-bottom: 1px solid var(--line2); margin-bottom: 32px; flex-wrap: wrap; }
+.pfiltro { padding: 0 0 11px; font-size: 10.5px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--ink3); cursor: pointer; border: none; border-bottom: 2px solid transparent; margin-bottom: -1px; background: none; font-family: inherit; white-space: nowrap; transition: color .12s; }
+.pfiltro:hover { color: var(--marca); }
+.pfiltroOn { color: var(--marca); border-bottom-color: var(--marca); }
+.filtroCustom { display: flex; align-items: center; gap: 10px; padding-bottom: 11px; }
+.filtroLbl { font-size: 10px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--ink3); }
+.filtroDate { border: none; border-bottom: 1px solid var(--line2); background: none; color: var(--foreground); font-family: inherit; font-size: 12px; padding: 0 2px 2px; outline: none; width: 112px; cursor: pointer; }
+.filtroDate:focus { border-bottom-color: var(--marca); }
+
+@media (max-width: 860px) {
+  .kpis { grid-template-columns: repeat(2, 1fr); }
+  .kpi:nth-child(2) { border-right: none; }
+  .pgrid { grid-template-columns: 1fr; }
+  .wrap { padding: 0 20px; }
+}

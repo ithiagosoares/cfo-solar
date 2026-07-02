@@ -2,101 +2,62 @@
 
 import type { ClienteAnalise } from '@/types/financeiro'
 import { formatMoeda, formatPercentual } from '@/lib/utils'
-
-const BADGE_CORES = [
-  'bg-blue-500/15 text-blue-300',
-  'bg-purple-500/15 text-purple-300',
-  'bg-emerald-500/15 text-emerald-300',
-  'bg-amber-500/15 text-amber-300',
-  'bg-rose-500/15 text-rose-300',
-]
-
-function badgeCor(empresa: string): string {
-  let hash = 0
-  for (let i = 0; i < empresa.length; i++) hash = empresa.charCodeAt(i) + hash * 31
-  return BADGE_CORES[Math.abs(hash) % BADGE_CORES.length]
-}
+import styles from '@/styles/editorial.module.css'
 
 export function ClienteTabela({ clientes }: { clientes: ClienteAnalise[] }) {
   if (clientes.length === 0) {
-    return (
-      <div
-        className="rounded-xl border p-6 text-center animate-fadeIn"
-        style={{ background: '#1a1d27', borderColor: '#2d3148' }}
-      >
-        <p className="text-sm" style={{ color: '#64748b' }}>Nenhum cliente identificado</p>
-      </div>
-    )
+    return <p className="py-8 text-center" style={{ fontSize: 13, color: 'var(--ink3)' }}>Nenhum cliente identificado</p>
   }
 
   const totalValor = clientes.reduce((s, c) => s + c.valor, 0)
   const maxValor = clientes[0]?.valor ?? 1
 
   return (
-    <div
-      className="rounded-xl border animate-fadeIn overflow-hidden"
-      style={{ background: '#1a1d27', borderColor: '#2d3148' }}
-    >
-      <div className="border-b px-5 py-4" style={{ borderColor: '#2d3148' }}>
-        <h3 className="text-sm font-semibold uppercase tracking-widest" style={{ color: '#64748b' }}>
-          Carteira de Clientes
-        </h3>
+    <div>
+      <div className={styles.shead}>
+        <div className={`${styles.stitle} ${styles.serif}`}>Carteira de Clientes</div>
+        <div className={styles.over}>{clientes.length} registros</div>
       </div>
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr style={{ borderBottom: '1px solid #2d3148' }}>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#64748b' }}>#</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#64748b' }}>Cliente</th>
-              <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider" style={{ color: '#64748b' }}>Valor</th>
-              <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider" style={{ color: '#64748b' }}>Part.</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#64748b' }}>Empresa</th>
-              <th className="px-4 py-3 w-32 text-xs font-semibold uppercase tracking-wider" style={{ color: '#64748b' }}></th>
-            </tr>
-          </thead>
-          <tbody>
-            {clientes.map((cliente, i) => {
-              const percentual = totalValor > 0 ? (cliente.valor / totalValor) * 100 : 0
-              return (
-                <tr
-                  key={i}
-                  className="transition-colors hover:bg-white/[0.02]"
-                  style={{ borderBottom: i < clientes.length - 1 ? '1px solid #1e2130' : 'none' }}
-                >
-                  <td className="px-4 py-3 font-mono text-xs" style={{ color: '#64748b' }}>
-                    {String(i + 1).padStart(2, '0')}
-                  </td>
-                  <td className="px-4 py-3 font-medium max-w-[200px] truncate" style={{ color: '#e2e8f0' }}>
-                    {cliente.nome}
-                  </td>
-                  <td className="px-4 py-3 text-right font-semibold tabular-nums" style={{ color: '#e2e8f0' }}>
-                    {formatMoeda(cliente.valor)}
-                  </td>
-                  <td className="px-4 py-3 text-right font-medium" style={{ color: percentual > 30 ? '#f59e0b' : '#94a3b8' }}>
-                    {formatPercentual(percentual)}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className={`inline-block rounded px-2 py-0.5 text-xs font-medium ${badgeCor(cliente.empresa)}`}>
-                      {cliente.empresa}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="h-1.5 w-full overflow-hidden rounded-full" style={{ background: '#2d3148' }}>
-                      <div
-                        className="h-full rounded-full transition-all"
-                        style={{
-                          width: `${(cliente.valor / maxValor) * 100}%`,
-                          background: i === 0 ? '#3b82f6' : '#4b5563',
-                        }}
-                      />
-                    </div>
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
+
+      <div className={`${styles.thead} ${styles.t6}`} style={{ marginTop: 18 }}>
+        <div>#</div>
+        <div>Cliente</div>
+        <div className={styles.right}>Valor</div>
+        <div className={styles.right}>Part.</div>
+        <div>Empresa</div>
+        <div></div>
       </div>
+      {clientes.map((cliente, i) => {
+        const percentual = totalValor > 0 ? (cliente.valor / totalValor) * 100 : 0
+        return (
+          <div key={i} className={`${styles.trow} ${styles.t6}`}>
+            <div className={styles.num} style={{ fontSize: 11, color: 'var(--ink3)', fontFamily: 'monospace' }}>
+              {String(i + 1).padStart(2, '0')}
+            </div>
+            <div style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {cliente.nome}
+            </div>
+            <div className={`${styles.right} ${styles.num}`} style={{ fontWeight: 600 }}>
+              {formatMoeda(cliente.valor)}
+            </div>
+            <div className={`${styles.right}`} style={{ fontSize: 13, color: percentual > 30 ? 'var(--pendente)' : 'var(--ink2)' }}>
+              {formatPercentual(percentual)}
+            </div>
+            <div>
+              <span className={styles.stat} style={{ textTransform: 'none', letterSpacing: 0, fontWeight: 400, fontSize: 13 }}>
+                <span className={`${styles.dot} ${styles.dBlue}`} />
+                {cliente.empresa}
+              </span>
+            </div>
+            <div className={styles.progress} style={{ alignSelf: 'center' }}>
+              <div
+                className={styles.progressFill}
+                style={{ width: `${(cliente.valor / maxValor) * 100}%`, background: i === 0 ? 'var(--foreground)' : 'var(--line2)' }}
+              />
+            </div>
+          </div>
+        )
+      })}
     </div>
   )
 }

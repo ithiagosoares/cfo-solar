@@ -1,30 +1,41 @@
 @import "tailwindcss";
 
+/* Tokens editoriais — espelham src/lib/tema.ts. Esta é a fonte central de
+   cor/tipografia do app; mudanças de estilo começam aqui (e em
+   src/styles/editorial.module.css, que consome estas variáveis). */
 :root {
-  --background: #0f1117;
-  --foreground: #e2e8f0;
-  --card: #1a1d27;
-  --card-border: #2d3148;
-  --muted: #64748b;
-  --accent: #3b82f6;
-  --accent-hover: #2563eb;
-  --success: #22c55e;
-  --warning: #f59e0b;
-  --danger: #ef4444;
+  --background: #ffffff;
+  --paper: #fafaf8;
+  --foreground: #1a1a1a;
+  --ink2: #5c5c54;
+  --ink3: #8a8a80;
+  --line: #e5e5e0;
+  --line2: #d8d8d2;
+  --pendente: #b8860b;
+  --positivo: #3f7d4f;
+  --info: #3a5a8c;
+  --fornecedor: #6b4a86;
+  --critico: #9a2d22;
+  --baixo: #8a6a1f;
+  --marca: #1e0e62;      /* azul-roxo da identidade visual */
+  --destaque: #f78b26;   /* laranja de destaque */
+  --font-serif: Georgia, 'Times New Roman', serif;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --color-card: var(--card);
-  --color-card-border: var(--card-border);
-  --color-muted: var(--muted);
-  --color-accent: var(--accent);
-  --color-success: var(--success);
-  --color-warning: var(--warning);
-  --color-danger: var(--danger);
+  --color-paper: var(--paper);
+  --color-ink2: var(--ink2);
+  --color-ink3: var(--ink3);
+  --color-line: var(--line);
+  --color-pendente: var(--pendente);
+  --color-positivo: var(--positivo);
+  --color-info: var(--info);
+  --color-critico: var(--critico);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --font-serif: var(--font-serif);
 }
 
 * {
@@ -34,7 +45,7 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-geist-sans), Arial, sans-serif;
+  font-family: 'Helvetica Neue', Helvetica, var(--font-geist-sans), Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -44,16 +55,16 @@ body {
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--card);
+  background: var(--paper);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--card-border);
+  background: var(--line2);
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--muted);
+  background: var(--ink3);
 }
 
 @keyframes fadeIn {
@@ -71,7 +82,7 @@ body {
 }
 
 .skeleton {
-  background: linear-gradient(90deg, #1a1d27 25%, #252840 50%, #1a1d27 75%);
+  background: linear-gradient(90deg, var(--paper) 25%, var(--line) 50%, var(--paper) 75%);
   background-size: 200% 100%;
   animation: shimmer 1.4s infinite;
   border-radius: 6px;

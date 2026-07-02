@@ -1,25 +1,10 @@
 'use client'
 
-import { AlertTriangle, CheckCircle, ChevronRight, XCircle, Info } from 'lucide-react'
+import { CheckCircle, AlertTriangle, Info, XCircle } from 'lucide-react'
 import type { RelatorioCompleto, NivelAlerta } from '@/types/financeiro'
+import styles from '@/styles/editorial.module.css'
 
 type Analise = RelatorioCompleto['analise']
-
-function Secao({ titulo, children }: { titulo: string; children: React.ReactNode }) {
-  return (
-    <div
-      className="rounded-xl border overflow-hidden animate-fadeIn"
-      style={{ background: '#1a1d27', borderColor: '#2d3148' }}
-    >
-      <div className="border-b px-5 py-3" style={{ borderColor: '#2d3148', background: '#161925' }}>
-        <h3 className="text-sm font-semibold uppercase tracking-widest" style={{ color: '#64748b' }}>
-          {titulo}
-        </h3>
-      </div>
-      <div className="p-5">{children}</div>
-    </div>
-  )
-}
 
 const ICONE_NIVEL: Record<NivelAlerta, typeof AlertTriangle> = {
   danger:  XCircle,
@@ -28,11 +13,11 @@ const ICONE_NIVEL: Record<NivelAlerta, typeof AlertTriangle> = {
   info:    Info,
 }
 
-const COR_NIVEL: Record<NivelAlerta, { cor: string; bg: string; borda: string }> = {
-  danger:  { cor: '#ef4444', bg: 'rgba(239,68,68,0.08)',   borda: 'rgba(127,29,29,0.4)' },
-  warning: { cor: '#f59e0b', bg: 'rgba(245,158,11,0.08)',  borda: 'rgba(120,53,15,0.4)' },
-  success: { cor: '#22c55e', bg: 'rgba(34,197,94,0.08)',   borda: 'rgba(20,83,45,0.4)'  },
-  info:    { cor: '#3b82f6', bg: 'rgba(59,130,246,0.08)',  borda: 'rgba(30,58,95,0.4)'  },
+const COR_NIVEL: Record<NivelAlerta, string> = {
+  danger:  'var(--critico)',
+  warning: 'var(--pendente)',
+  success: 'var(--positivo)',
+  info:    'var(--info)',
 }
 
 export function RelatorioView({ analise }: { analise: Analise }) {
@@ -41,96 +26,83 @@ export function RelatorioView({ analise }: { analise: Analise }) {
   const recsOrdenadas = [...analise.recomendacoes].sort((a, b) => a.prioridade - b.prioridade)
 
   return (
-    <div className="flex flex-col gap-5 animate-fadeIn">
-      {/* Resumo Executivo */}
-      <Secao titulo="Resumo Executivo">
-        <p className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: '#cbd5e1' }}>
+    <div className="flex flex-col gap-8 animate-fadeIn">
+      <section>
+        <div className={styles.shead} style={{ marginBottom: 12 }}>
+          <div className={`${styles.stitle} ${styles.serif}`}>Resumo Executivo</div>
+        </div>
+        <p style={{ fontSize: 14, lineHeight: 1.75, color: 'var(--ink2)', whiteSpace: 'pre-wrap' }}>
           {analise.resumoExecutivo}
         </p>
-      </Secao>
+      </section>
 
-      {/* Alertas Críticos */}
       {alertasDanger.length > 0 && (
-        <Secao titulo="Alertas Críticos — Ação Imediata">
-          <ul className="flex flex-col gap-2">
+        <section>
+          <div className={styles.shead} style={{ marginBottom: 12 }}>
+            <div className={`${styles.stitle} ${styles.serif}`}>Alertas — Ação Imediata</div>
+          </div>
+          <div className="flex flex-col gap-2">
             {alertasDanger.map((alerta, i) => (
-              <li
-                key={i}
-                className="flex items-start gap-3 rounded-lg border-l-4 px-4 py-3"
-                style={{
-                  background: 'rgba(239,68,68,0.08)',
-                  borderLeftColor: '#ef4444',
-                  border: '1px solid rgba(127,29,29,0.4)',
-                  borderLeftWidth: 4,
-                }}
-              >
-                <XCircle className="mt-0.5 h-4 w-4 shrink-0" style={{ color: '#ef4444' }} />
+              <div key={i} className={styles.notice} style={{ borderLeftColor: 'var(--critico)' }}>
+                <XCircle className="h-3.5 w-3.5 shrink-0" style={{ color: 'var(--critico)' }} />
                 <div>
-                  <p className="text-sm font-semibold" style={{ color: '#fca5a5' }}>{alerta.titulo}</p>
-                  <p className="mt-0.5 text-xs leading-relaxed" style={{ color: '#94a3b8' }}>{alerta.descricao}</p>
+                  <p style={{ fontWeight: 600, fontSize: 13, marginBottom: 3 }}>{alerta.titulo}</p>
+                  <p style={{ fontSize: 12, color: 'var(--ink2)', lineHeight: 1.55 }}>{alerta.descricao}</p>
                 </div>
-              </li>
+              </div>
             ))}
-          </ul>
-        </Secao>
+          </div>
+        </section>
       )}
 
-      {/* Outros alertas */}
       {outrosAlertas.length > 0 && (
-        <Secao titulo="Alertas e Observações">
-          <ul className="flex flex-col gap-2">
+        <section>
+          <div className={styles.shead} style={{ marginBottom: 12 }}>
+            <div className={`${styles.stitle} ${styles.serif}`}>Alertas e Observações</div>
+          </div>
+          <div className="flex flex-col gap-2">
             {outrosAlertas.map((alerta, i) => {
-              const cfg = COR_NIVEL[alerta.nivel] ?? COR_NIVEL.info
+              const cor = COR_NIVEL[alerta.nivel] ?? 'var(--info)'
               const Icon = ICONE_NIVEL[alerta.nivel] ?? Info
               return (
-                <li
-                  key={i}
-                  className="flex items-start gap-3 rounded-lg border-l-4 px-4 py-3"
-                  style={{
-                    background: cfg.bg,
-                    borderLeftColor: cfg.cor,
-                    border: `1px solid ${cfg.borda}`,
-                    borderLeftWidth: 4,
-                  }}
-                >
-                  <Icon className="mt-0.5 h-4 w-4 shrink-0" style={{ color: cfg.cor }} />
+                <div key={i} className={styles.notice} style={{ borderLeftColor: cor }}>
+                  <Icon className="h-3.5 w-3.5 shrink-0" style={{ color: cor }} />
                   <div>
-                    <p className="text-sm font-semibold" style={{ color: '#e2e8f0' }}>{alerta.titulo}</p>
-                    <p className="mt-0.5 text-xs leading-relaxed" style={{ color: '#94a3b8' }}>{alerta.descricao}</p>
+                    <p style={{ fontWeight: 600, fontSize: 13, marginBottom: 3 }}>{alerta.titulo}</p>
+                    <p style={{ fontSize: 12, color: 'var(--ink2)', lineHeight: 1.55 }}>{alerta.descricao}</p>
                   </div>
-                </li>
+                </div>
               )
             })}
-          </ul>
-        </Secao>
+          </div>
+        </section>
       )}
 
-      {/* Recomendações */}
-      <Secao titulo="Recomendações — Ordenadas por Prioridade">
+      <section>
+        <div className={styles.shead} style={{ marginBottom: 12 }}>
+          <div className={`${styles.stitle} ${styles.serif}`}>Recomendações</div>
+          <div className={styles.over}>por prioridade</div>
+        </div>
         {recsOrdenadas.length === 0 ? (
-          <p className="text-sm" style={{ color: '#64748b' }}>Nenhuma recomendação registrada.</p>
+          <p style={{ fontSize: 13, color: 'var(--ink3)' }}>Nenhuma recomendação registrada.</p>
         ) : (
-          <ul className="flex flex-col gap-3">
+          <div className="flex flex-col gap-0">
             {recsOrdenadas.map((rec, i) => (
-              <li key={i} className="flex items-start gap-3">
-                <span
-                  className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold"
-                  style={{ background: 'rgba(59,130,246,0.15)', color: '#3b82f6' }}
-                >
-                  {rec.prioridade}
-                </span>
-                <div className="flex items-start gap-2 pt-0.5">
-                  <ChevronRight className="mt-0.5 h-3.5 w-3.5 shrink-0" style={{ color: '#3b82f6' }} />
-                  <p className="text-sm leading-relaxed" style={{ color: '#cbd5e1' }}>{rec.acao}</p>
+              <div key={i} className={styles.prow}>
+                <div className="flex items-start gap-4">
+                  <span className={`${styles.num}`} style={{ fontSize: 11, color: 'var(--ink3)', minWidth: 20, paddingTop: 3 }}>
+                    {String(rec.prioridade).padStart(2, '0')}
+                  </span>
+                  <p style={{ fontSize: 14, lineHeight: 1.65, color: 'var(--ink2)' }}>{rec.acao}</p>
                 </div>
-              </li>
+              </div>
             ))}
-          </ul>
+          </div>
         )}
-      </Secao>
+      </section>
 
-      <div className="flex items-center gap-2 text-xs py-2" style={{ color: '#4b5563' }}>
-        <CheckCircle className="h-3.5 w-3.5" style={{ color: '#22c55e' }} />
+      <div className="flex items-center gap-2" style={{ fontSize: 11, color: 'var(--ink3)', paddingTop: 8 }}>
+        <CheckCircle className="h-3 w-3" style={{ color: 'var(--positivo)' }} />
         Análise gerada por Claude (claude-sonnet-4-6) com base nos dados do arquivo carregado.
       </div>
     </div>

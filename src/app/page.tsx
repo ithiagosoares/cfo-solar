@@ -4,28 +4,18 @@ import { useState, useRef, useCallback, useEffect } from 'react'
 import {
   Upload,
   BarChart2,
-  Users,
   FileText,
-  Building2,
-  TrendingUp,
   Target,
-  DollarSign,
   AlertTriangle,
   Download,
-  Sun,
   ChevronRight,
   Briefcase,
-  CheckCircle,
   FileSpreadsheet,
-  PieChart,
-  MessageCircle,
   History,
   Calendar,
-  GitCompare,
-  ShoppingCart,
 } from 'lucide-react'
 import { gerarPDF } from '@/lib/pdf-generator'
-import { NavTabs } from '@/components/layout/NavTabs'
+import { NavTabs, type ItemNavTab } from '@/components/layout/NavTabs'
 import { KPICard } from '@/components/dashboard/KPICard'
 import { FluxoGrafico } from '@/components/dashboard/FluxoGrafico'
 import { AlertasPanel } from '@/components/dashboard/AlertasPanel'
@@ -38,44 +28,35 @@ import { ComparativoView } from '@/components/comparativo/ComparativoView'
 import type { RelatorioCompleto, MensagemChat, PeriodoResumo } from '@/types/financeiro'
 import { formatMoeda, formatPercentual, formatMargem, calcularVariacao, formatarPeriodoCurto } from '@/lib/utils'
 import { FGI_FIXO, META_MENSAL } from '@/lib/constantes'
+import styles from '@/styles/editorial.module.css'
 
 type Aba = 'dashboard' | 'empresas' | 'despesas' | 'clientes' | 'comercial' | 'relatorio' | 'comparativo' | 'chat' | 'upload'
 
-const ABAS: { id: Aba; label: string; Icon: typeof BarChart2; href?: string }[] = [
-  { id: 'dashboard',    label: 'Dashboard',         Icon: BarChart2 },
-  { id: 'empresas',     label: 'Empresas',          Icon: Building2 },
-  { id: 'despesas',     label: 'Despesas',          Icon: PieChart  },
-  { id: 'clientes',     label: 'Clientes',          Icon: Users     },
-  { id: 'comercial',    label: 'Comercial',         Icon: ShoppingCart, href: '/comercial' },
-  { id: 'relatorio',    label: 'Relatório IA',      Icon: FileText  },
-  { id: 'comparativo',  label: 'Comparativo',       Icon: GitCompare },
-  { id: 'chat',         label: 'Chat',              Icon: MessageCircle },
-  { id: 'upload',       label: 'Adicionar Arquivo', Icon: Upload    },
+const ABAS: ItemNavTab<Aba>[] = [
+  { id: 'dashboard',    label: 'Dashboard' },
+  { id: 'empresas',     label: 'Empresas' },
+  { id: 'despesas',     label: 'Despesas' },
+  { id: 'clientes',     label: 'Clientes' },
+  { id: 'comercial',    label: 'Comercial', href: '/comercial' },
+  { id: 'relatorio',    label: 'Relatório IA' },
+  { id: 'comparativo',  label: 'Comparativo' },
+  { id: 'chat',         label: 'Chat' },
+  { id: 'upload',       label: 'Adicionar Arquivo' },
 ]
 
 // ─── Full-screen loading state (initial Supabase check + analyzing) ────────────────
 
 function TelaCarregando({ titulo, subtitulo }: { titulo: string; subtitulo: string }) {
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center gap-6" style={{ background: '#0f1117' }}>
-      <div className="flex items-center gap-3 mb-4">
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl" style={{ background: 'rgba(59,130,246,0.15)' }}>
-          <Sun className="h-5 w-5" style={{ color: '#3b82f6' }} />
-        </div>
-        <span className="font-bold" style={{ color: '#e2e8f0' }}>CFO Solar</span>
-      </div>
+    <div className={styles.page} style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 24 }}>
+      <span className={styles.serif} style={{ fontSize: 21, fontWeight: 600 }}>CFO Solar</span>
       <div
-        className="h-14 w-14 rounded-full border-4 border-t-transparent animate-spin"
-        style={{
-          borderTopColor: '#3b82f6',
-          borderRightColor: '#2d3148',
-          borderBottomColor: '#2d3148',
-          borderLeftColor: '#2d3148',
-        }}
+        className="h-10 w-10 rounded-full border-2 border-t-transparent animate-spin"
+        style={{ borderTopColor: 'var(--foreground)', borderRightColor: 'var(--line2)', borderBottomColor: 'var(--line2)', borderLeftColor: 'var(--line2)' }}
       />
       <div className="text-center">
-        <p className="text-lg font-semibold" style={{ color: '#e2e8f0' }}>{titulo}</p>
-        <p className="mt-1 text-sm" style={{ color: '#64748b' }}>{subtitulo}</p>
+        <p style={{ fontSize: 15, fontWeight: 600 }}>{titulo}</p>
+        <p className="mt-1" style={{ fontSize: 13, color: 'var(--ink3)' }}>{subtitulo}</p>
       </div>
     </div>
   )
@@ -110,32 +91,23 @@ function UploadPanel({
 
   return (
     <div className="flex flex-col items-center px-4 py-4">
-      <div className="mb-6 text-center">
-        <h2 className="text-lg font-semibold" style={{ color: '#e2e8f0' }}>Adicionar novo relatório</h2>
-        <p className="text-sm mt-0.5" style={{ color: '#64748b' }}>
+      <div className="mb-8 text-center">
+        <h2 className={styles.serif} style={{ fontSize: 19, fontWeight: 600 }}>Adicionar novo relatório</h2>
+        <p className="mt-1" style={{ fontSize: 13, color: 'var(--ink2)' }}>
           Envie a planilha mensal para gerar uma nova análise com IA e salvar no histórico.
         </p>
       </div>
 
       {arquivo ? (
-        /* File selected — show preview + analyze button */
-        <div
-          className="w-full max-w-lg rounded-2xl border p-10 text-center"
-          style={{ background: '#1a1d27', borderColor: '#2d3148' }}
-        >
-          <div
-            className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-xl"
-            style={{ background: 'rgba(34,197,94,0.12)' }}
-          >
-            <FileSpreadsheet className="h-7 w-7" style={{ color: '#22c55e' }} />
-          </div>
-          <p className="font-semibold" style={{ color: '#e2e8f0' }}>{arquivo.name}</p>
-          <p className="text-xs mt-1 mb-5" style={{ color: '#64748b' }}>
+        <div className={styles.panel} style={{ width: '100%', maxWidth: 480, textAlign: 'center' }}>
+          <FileSpreadsheet className="mx-auto mb-3 h-7 w-7" style={{ color: 'var(--ink3)' }} />
+          <p style={{ fontWeight: 600 }}>{arquivo.name}</p>
+          <p className="mt-1 mb-5" style={{ fontSize: 12, color: 'var(--ink3)' }}>
             {(arquivo.size / 1024).toFixed(0)} KB · pronto para análise
           </p>
 
-          <div className="mb-5 text-left">
-            <label className="mb-1.5 flex items-center gap-1.5 text-xs font-medium" style={{ color: '#94a3b8' }}>
+          <div className={styles.field} style={{ marginBottom: 20, textAlign: 'left' }}>
+            <label className={styles.fieldLabel} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <Calendar className="h-3.5 w-3.5" />
               Período da planilha
             </label>
@@ -143,50 +115,36 @@ function UploadPanel({
               type="month"
               value={periodo}
               onChange={e => onPeriodoChange(e.target.value)}
-              className="w-full rounded-lg border bg-transparent px-3 py-2 text-sm outline-none"
-              style={{ borderColor: '#2d3148', color: '#e2e8f0' }}
+              className={styles.input}
             />
           </div>
 
-          <button
-            onClick={onAnalisar}
-            className="w-full rounded-xl py-3 text-sm font-bold transition-all"
-            style={{ background: '#3b82f6', color: '#fff' }}
-          >
+          <button onClick={onAnalisar} className={styles.btnPrimary} style={{ width: '100%' }}>
             Analisar com IA
           </button>
-          <button
-            onClick={() => ref.current?.click()}
-            className="mt-3 w-full rounded-xl border py-2.5 text-xs font-medium transition-all"
-            style={{ borderColor: '#2d3148', color: '#64748b' }}
-          >
+          <button onClick={() => ref.current?.click()} className={styles.btn} style={{ width: '100%', marginTop: 10 }}>
             Trocar arquivo
           </button>
         </div>
       ) : (
-        /* Empty drop zone */
         <div
           onDragOver={e => { e.preventDefault(); setIsDragging(true) }}
           onDragLeave={() => setIsDragging(false)}
           onDrop={handleDrop}
           onClick={() => ref.current?.click()}
-          className="cursor-pointer rounded-2xl border-2 border-dashed p-14 text-center transition-all duration-200 w-full max-w-lg"
+          className="cursor-pointer text-center transition-all duration-200"
           style={{
-            borderColor: isDragging ? '#3b82f6' : '#2d3148',
-            background: isDragging ? 'rgba(59,130,246,0.06)' : '#1a1d27',
+            width: '100%', maxWidth: 480, padding: '56px 24px',
+            border: `1px dashed ${isDragging ? 'var(--foreground)' : 'var(--line2)'}`,
+            background: isDragging ? 'var(--paper)' : 'none',
           }}
         >
-          <div
-            className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-xl"
-            style={{ background: 'rgba(59,130,246,0.1)' }}
-          >
-            <Upload className="h-6 w-6" style={{ color: '#3b82f6' }} />
-          </div>
-          <p className="text-base font-semibold mb-1" style={{ color: '#e2e8f0' }}>
+          <Upload className="mx-auto mb-3 h-6 w-6" style={{ color: 'var(--ink3)' }} />
+          <p style={{ fontSize: 15, fontWeight: 600, marginBottom: 4 }}>
             Arraste o arquivo Excel aqui
           </p>
-          <p className="text-sm mb-4" style={{ color: '#64748b' }}>ou clique para selecionar</p>
-          <p className="text-xs leading-relaxed" style={{ color: '#4b5563' }}>
+          <p className="mb-4" style={{ fontSize: 13, color: 'var(--ink2)' }}>ou clique para selecionar</p>
+          <p style={{ fontSize: 11.5, lineHeight: 1.6, color: 'var(--ink3)' }}>
             Suporta .xlsx e .xls com as abas:<br />
             MATRIZ MAIO · FILIAL MAIO · LEVEL · NI HAO · ALUMARKET · FECHAMENTO
           </p>
@@ -202,28 +160,21 @@ function UploadPanel({
       />
 
       {erro && (
-        <div
-          className="mt-4 rounded-lg border-l-4 px-4 py-3 w-full max-w-lg text-sm"
-          style={{ background: 'rgba(239,68,68,0.08)', borderLeftColor: '#ef4444', border: '1px solid rgba(127,29,29,0.4)', borderLeftWidth: 4 }}
-        >
-          <span style={{ color: '#fca5a5' }}>{erro}</span>
+        <div className={`${styles.notice} ${styles.alertaDanger}`} style={{ maxWidth: 480, width: '100%', marginTop: 20 }}>
+          <span>{erro}</span>
         </div>
       )}
 
-      <div className="mt-10 grid grid-cols-3 gap-4 w-full max-w-lg">
+      <div className="mt-12 grid grid-cols-3 gap-0" style={{ width: '100%', maxWidth: 480, border: '1px solid var(--line)' }}>
         {[
-          { icon: BarChart2,    label: 'KPIs Consolidados', desc: '5 empresas em tempo real' },
-          { icon: Target,       label: 'Meta R$ 2M',        desc: 'Acompanhamento automático' },
-          { icon: FileText,     label: 'Análise por IA',    desc: 'Claude lê a planilha direto' },
-        ].map(({ icon: Icon, label, desc }) => (
-          <div
-            key={label}
-            className="rounded-xl border p-4 text-center"
-            style={{ background: '#1a1d27', borderColor: '#2d3148' }}
-          >
-            <Icon className="h-5 w-5 mx-auto mb-2" style={{ color: '#3b82f6' }} />
-            <p className="text-xs font-semibold" style={{ color: '#e2e8f0' }}>{label}</p>
-            <p className="text-xs mt-0.5" style={{ color: '#64748b' }}>{desc}</p>
+          { icon: BarChart2, label: 'KPIs Consolidados', desc: '5 empresas em tempo real' },
+          { icon: Target,    label: 'Meta R$ 2M',        desc: 'Acompanhamento automático' },
+          { icon: FileText,  label: 'Análise por IA',    desc: 'Claude lê a planilha direto' },
+        ].map(({ icon: Icon, label, desc }, i) => (
+          <div key={label} className="text-center" style={{ padding: '18px 12px', borderLeft: i > 0 ? '1px solid var(--line)' : 'none' }}>
+            <Icon className="mx-auto mb-2 h-4 w-4" style={{ color: 'var(--ink3)' }} />
+            <p style={{ fontSize: 12, fontWeight: 600 }}>{label}</p>
+            <p className="mt-0.5" style={{ fontSize: 11, color: 'var(--ink3)' }}>{desc}</p>
           </div>
         ))}
       </div>
@@ -236,20 +187,14 @@ function UploadPanel({
 function EstadoVazio({ onIrParaUpload }: { onIrParaUpload: () => void }) {
   return (
     <div className="flex flex-col items-center justify-center gap-4 py-24 text-center animate-fadeIn">
-      <div className="flex h-14 w-14 items-center justify-center rounded-full" style={{ background: 'rgba(59,130,246,0.1)' }}>
-        <FileSpreadsheet className="h-7 w-7" style={{ color: '#3b82f6' }} />
-      </div>
+      <FileSpreadsheet className="h-8 w-8" style={{ color: 'var(--ink3)' }} />
       <div>
-        <p className="font-semibold" style={{ color: '#e2e8f0' }}>Nenhum relatório carregado ainda</p>
-        <p className="mt-1 text-sm" style={{ color: '#64748b' }}>
+        <p style={{ fontWeight: 600 }}>Nenhum relatório carregado ainda</p>
+        <p className="mt-1" style={{ fontSize: 13, color: 'var(--ink2)' }}>
           Envie uma planilha na aba &quot;Adicionar Arquivo&quot; para começar.
         </p>
       </div>
-      <button
-        onClick={onIrParaUpload}
-        className="rounded-lg px-4 py-2 text-xs font-semibold transition-all"
-        style={{ background: '#3b82f6', color: '#fff' }}
-      >
+      <button onClick={onIrParaUpload} className={styles.btnPrimary}>
         Ir para Adicionar Arquivo
       </button>
     </div>
@@ -261,8 +206,8 @@ function EstadoVazio({ onIrParaUpload }: { onIrParaUpload: () => void }) {
 function ProgressBar({ valor, max, cor }: { valor: number; max: number; cor: string }) {
   const pct = Math.min((valor / max) * 100, 100)
   return (
-    <div className="h-2 w-full overflow-hidden rounded-full" style={{ background: '#2d3148' }}>
-      <div className="h-full rounded-full transition-all duration-700" style={{ width: `${pct}%`, background: cor }} />
+    <div className={styles.progress}>
+      <div className={styles.progressFill} style={{ width: `${pct}%`, background: cor }} />
     </div>
   )
 }
@@ -279,37 +224,31 @@ function DashboardView({ relatorio, mesAnterior }: { relatorio: RelatorioComplet
     ? (FGI_FIXO.total / faturamento.vendido) * 100
     : 0
   const progressoMeta = Math.min((faturamento.vendido / META_MENSAL) * 100, 100)
-  // "Entradas no Banco" já inclui antecipação de recebíveis (dinheiro real no banco,
-  // mas adiantado com desconto, não venda nova) — esse indicador preserva a
-  // visibilidade do risco sem voltar a excluir a antecipação do saldo real.
   const dependenciaAntecipacao = consolidado.totalEntradas > 0
     ? (antecipacoes.total / consolidado.totalEntradas) * 100
     : 0
+  const corMeta = progressoMeta >= 100 ? 'var(--positivo)' : progressoMeta >= 50 ? 'var(--destaque)' : 'var(--critico)'
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-8">
       {/* dados antigos persistidos antes deste campo existir trazem undefined em
           runtime mesmo com o tipo dizendo boolean — só avisa quando o backend
           confirmou explicitamente que não achou a aba de fechamento. */}
       {faturamento.disponivel === false && (
-        <div
-          className="flex items-center gap-2.5 rounded-lg border-l-4 px-4 py-3 text-sm"
-          style={{ background: 'rgba(245,158,11,0.08)', borderLeftColor: '#f59e0b', border: '1px solid rgba(120,80,10,0.4)', borderLeftWidth: 4 }}
-        >
-          <AlertTriangle className="h-4 w-4 shrink-0" style={{ color: '#f59e0b' }} />
-          <span style={{ color: '#fcd34d' }}>
+        <div className={`${styles.notice} ${styles.alertaDanger}`}>
+          <AlertTriangle className="h-3.5 w-3.5" />
+          <span>
             Não foi possível localizar dados de Faturamento Vendido/Faturado nesta planilha —
             verifique se existe uma aba de fechamento.
           </span>
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-5">
+      <div className={`${styles.kpis} ${styles.kpiGrid5}`} style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}>
         <KPICard
           titulo="Saldo do Grupo"
           valor={consolidado.saldoGrupo}
           formato="moeda"
-          Icon={DollarSign}
           cor={consolidado.saldoGrupo >= 0 ? 'green' : 'red'}
           variacao={mesAnterior ? calcularVariacao(consolidado.saldoGrupo, mesAnterior.saldoGrupo) : undefined}
           descricao={antecipacoes.total > 0 ? `Dependência de Antecipação: ${formatPercentual(dependenciaAntecipacao)} do saldo bancário` : undefined}
@@ -318,16 +257,12 @@ function DashboardView({ relatorio, mesAnterior }: { relatorio: RelatorioComplet
           titulo="Faturamento Vendido"
           valor={faturamento.vendido}
           formato="moeda"
-          Icon={TrendingUp}
-          cor="blue"
           variacao={mesAnterior ? calcularVariacao(faturamento.vendido, mesAnterior.faturamentoVendido) : undefined}
         />
         <KPICard
           titulo="Faturamento Faturado"
           valor={faturamento.faturado}
           formato="moeda"
-          Icon={CheckCircle}
-          cor="blue"
           variacao={mesAnterior ? calcularVariacao(faturamento.faturado, mesAnterior.faturamentoFaturado) : undefined}
           descricao={`${formatPercentual(faturamento.vendido > 0 ? (faturamento.faturado / faturamento.vendido) * 100 : 0)} do vendido`}
         />
@@ -335,7 +270,6 @@ function DashboardView({ relatorio, mesAnterior }: { relatorio: RelatorioComplet
           titulo="Comprometimento FGI"
           valor={comprometimentoFGI}
           formato="percentual"
-          Icon={AlertTriangle}
           cor={comprometimentoFGI <= 20 ? 'green' : comprometimentoFGI <= 30 ? 'yellow' : 'red'}
           descricao="R$ 46.000/mês fixo"
         />
@@ -343,54 +277,37 @@ function DashboardView({ relatorio, mesAnterior }: { relatorio: RelatorioComplet
           titulo="Meta R$ 2M"
           valor={progressoMeta}
           formato="percentual"
-          Icon={Target}
           cor={progressoMeta >= 80 ? 'green' : progressoMeta >= 50 ? 'yellow' : 'red'}
           descricao={`${formatMoeda(faturamento.vendido)} de ${formatMoeda(META_MENSAL)}`}
         />
       </div>
 
       {/* Entradas vs Saídas + FGI breakdown */}
-      <div
-        className="rounded-xl border px-5 py-4 animate-fadeIn"
-        style={{ background: '#1a1d27', borderColor: '#2d3148' }}
-      >
-        <div className="grid grid-cols-2 gap-6 mb-4">
+      <div className={styles.panel}>
+        <div className="grid grid-cols-2 gap-6 mb-5">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-widest mb-1" style={{ color: '#64748b' }}>
-              Entradas no Banco
-            </p>
-            <p className="text-xl font-bold tabular-nums" style={{ color: '#22c55e' }}>
+            <p className={styles.kl}>Entradas no Banco</p>
+            <p className={`${styles.serif} ${styles.num}`} style={{ fontSize: 26, marginTop: 6, color: 'var(--positivo)' }}>
               {formatMoeda(consolidado.totalEntradas)}
             </p>
           </div>
           <div>
-            <p className="text-xs font-semibold uppercase tracking-widest mb-1" style={{ color: '#64748b' }}>
-              Saídas do Banco
-            </p>
-            <p className="text-xl font-bold tabular-nums" style={{ color: '#ef4444' }}>
+            <p className={styles.kl}>Saídas do Banco</p>
+            <p className={`${styles.serif} ${styles.num}`} style={{ fontSize: 26, marginTop: 6, color: 'var(--critico)' }}>
               {formatMoeda(consolidado.totalSaidas)}
             </p>
           </div>
         </div>
 
         <div className="flex items-center justify-between mb-2">
-          <p className="text-xs font-semibold uppercase tracking-widest" style={{ color: '#64748b' }}>
-            Progresso da Meta Mensal
-          </p>
-          <span
-            className="text-lg font-bold tabular-nums"
-            style={{ color: progressoMeta >= 80 ? '#22c55e' : progressoMeta >= 50 ? '#f59e0b' : '#ef4444' }}
-          >
+          <p className={styles.kl}>Progresso da Meta Mensal</p>
+          <span className={`${styles.serif} ${styles.num}`} style={{ fontSize: 17, fontWeight: 600, color: corMeta }}>
             {formatPercentual(progressoMeta)}
           </span>
         </div>
-        <ProgressBar
-          valor={faturamento.vendido}
-          max={META_MENSAL}
-          cor={progressoMeta >= 80 ? '#22c55e' : progressoMeta >= 50 ? '#f59e0b' : '#ef4444'}
-        />
+        <ProgressBar valor={faturamento.vendido} max={META_MENSAL} cor={corMeta} />
 
-        <div className="mt-4 pt-4 border-t grid grid-cols-4 gap-3" style={{ borderColor: '#2d3148' }}>
+        <div className="mt-5 pt-5 grid grid-cols-4 gap-3" style={{ borderTop: '1px solid var(--line)' }}>
           {[
             { label: 'Gimenes',     valor: FGI_FIXO.gimenes },
             { label: 'Barramares',  valor: FGI_FIXO.barramares },
@@ -398,23 +315,17 @@ function DashboardView({ relatorio, mesAnterior }: { relatorio: RelatorioComplet
             { label: 'Total FGI',   valor: FGI_FIXO.total, destaque: true },
           ].map(item => (
             <div key={item.label} className="text-center">
-              <p className="text-xs" style={{ color: '#64748b' }}>{item.label}</p>
-              <p
-                className="text-sm font-bold mt-0.5 tabular-nums"
-                style={{ color: item.destaque ? '#3b82f6' : '#94a3b8' }}
-              >
+              <p style={{ fontSize: 11, color: 'var(--ink3)' }}>{item.label}</p>
+              <p className={`${styles.num} mt-0.5`} style={{ fontSize: 13, fontWeight: 600, color: item.destaque ? 'var(--foreground)' : 'var(--ink2)' }}>
                 {formatMoeda(item.valor)}
               </p>
             </div>
           ))}
         </div>
 
-        <div className="mt-3 pt-3 border-t flex items-center justify-between" style={{ borderColor: '#2d3148' }}>
-          <p className="text-xs" style={{ color: '#64748b' }}>Margem líquida de caixa</p>
-          <span
-            className="text-sm font-bold"
-            style={{ color: margemLiquida >= 0 ? '#22c55e' : '#ef4444' }}
-          >
+        <div className="mt-4 pt-4 flex items-center justify-between" style={{ borderTop: '1px solid var(--line)' }}>
+          <p style={{ fontSize: 12, color: 'var(--ink3)' }}>Margem líquida de caixa</p>
+          <span style={{ fontSize: 13, fontWeight: 600, color: margemLiquida >= 0 ? 'var(--positivo)' : 'var(--critico)' }}>
             {formatPercentual(margemLiquida)}
           </span>
         </div>
@@ -437,9 +348,9 @@ function EmpresasView({ relatorio }: { relatorio: RelatorioCompleto }) {
 
   return (
     <div>
-      <div className="mb-5">
-        <h2 className="text-lg font-semibold" style={{ color: '#e2e8f0' }}>Empresas do Grupo</h2>
-        <p className="text-sm mt-0.5" style={{ color: '#64748b' }}>
+      <div className="mb-6">
+        <h2 className={styles.serif} style={{ fontSize: 19, fontWeight: 600 }}>Empresas do Grupo</h2>
+        <p className="mt-0.5" style={{ fontSize: 13, color: 'var(--ink2)' }}>
           Performance financeira individual — {periodo}
         </p>
       </div>
@@ -449,57 +360,48 @@ function EmpresasView({ relatorio }: { relatorio: RelatorioCompleto }) {
         ))}
       </div>
 
-      <div
-        className="mt-6 rounded-xl border p-5 animate-fadeIn overflow-x-auto"
-        style={{ background: '#1a1d27', borderColor: '#2d3148' }}
-      >
-        <h3 className="text-sm font-semibold uppercase tracking-widest mb-4" style={{ color: '#64748b' }}>
-          Visão Consolidada
-        </h3>
-        <table className="w-full text-sm">
-          <thead>
-            <tr style={{ borderBottom: '1px solid #2d3148' }}>
-              {['Empresa', 'Entradas', 'Saídas', 'Saldo', 'Margem Operacional'].map(h => (
-                <th key={h} className="pb-2 pr-6 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#64748b' }}>
-                  {h}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {empresas.map(e => {
-              const margem = e.entradas > 0 ? ((e.entradas - e.despesasOperacionais) / e.entradas) * 100 : 0
-              return (
-                <tr key={e.nome} style={{ borderBottom: '1px solid #1e2130' }}>
-                  <td className="py-2.5 pr-6 font-medium" style={{ color: '#e2e8f0' }}>{e.nome}</td>
-                  <td className="py-2.5 pr-6 tabular-nums" style={{ color: '#22c55e' }}>{formatMoeda(e.entradas)}</td>
-                  <td className="py-2.5 pr-6 tabular-nums" style={{ color: '#ef4444' }}>{formatMoeda(e.saidas)}</td>
-                  <td className="py-2.5 pr-6 tabular-nums font-semibold" style={{ color: e.saldo >= 0 ? '#22c55e' : '#ef4444' }}>
-                    {formatMoeda(e.saldo)}
-                  </td>
-                  <td className="py-2.5" style={{ color: margem >= 15 ? '#22c55e' : margem >= 5 ? '#f59e0b' : '#ef4444' }}>
-                    {formatMargem(margem)}
-                  </td>
-                </tr>
-              )
-            })}
-            <tr style={{ borderTop: '2px solid #2d3148' }}>
-              <td className="pt-3 pr-6 font-bold" style={{ color: '#3b82f6' }}>CONSOLIDADO</td>
-              <td className="pt-3 pr-6 tabular-nums font-bold" style={{ color: '#22c55e' }}>
-                {formatMoeda(consolidado.totalEntradas)}
-              </td>
-              <td className="pt-3 pr-6 tabular-nums font-bold" style={{ color: '#ef4444' }}>
-                {formatMoeda(consolidado.totalSaidas)}
-              </td>
-              <td className="pt-3 pr-6 tabular-nums font-bold" style={{ color: consolidado.saldoGrupo >= 0 ? '#22c55e' : '#ef4444' }}>
-                {formatMoeda(consolidado.saldoGrupo)}
-              </td>
-              <td className="pt-3 font-semibold" style={{ color: '#94a3b8' }}>
-                {formatMoeda(faturamento.vendido)} vendido
-              </td>
-            </tr>
-          </tbody>
-        </table>
+      <div className="mt-8 overflow-x-auto">
+        <div className={styles.shead}>
+          <div className={`${styles.stitle} ${styles.serif}`}>Visão Consolidada</div>
+        </div>
+        <div className={`${styles.thead} ${styles.t5}`} style={{ marginTop: 18 }}>
+          <div>Empresa</div>
+          <div className={styles.right}>Entradas</div>
+          <div className={styles.right}>Saídas</div>
+          <div className={styles.right}>Saldo</div>
+          <div className={styles.right}>Margem Op.</div>
+        </div>
+        {empresas.map(e => {
+          const margem = e.entradas > 0 ? ((e.entradas - e.despesasOperacionais) / e.entradas) * 100 : 0
+          return (
+            <div key={e.nome} className={`${styles.trow} ${styles.t5}`}>
+              <div className={styles.fn}>{e.nome}</div>
+              <div className={`${styles.right} ${styles.num}`} style={{ color: 'var(--positivo)' }}>{formatMoeda(e.entradas)}</div>
+              <div className={`${styles.right} ${styles.num}`} style={{ color: 'var(--critico)' }}>{formatMoeda(e.saidas)}</div>
+              <div className={`${styles.right} ${styles.num}`} style={{ fontWeight: 600, color: e.saldo >= 0 ? 'var(--positivo)' : 'var(--critico)' }}>
+                {formatMoeda(e.saldo)}
+              </div>
+              <div className={styles.right} style={{ color: margem >= 15 ? 'var(--positivo)' : margem >= 5 ? 'var(--pendente)' : 'var(--critico)' }}>
+                {formatMargem(margem)}
+              </div>
+            </div>
+          )
+        })}
+        <div className={`${styles.trow} ${styles.t5}`} style={{ borderTop: '2px solid var(--line2)', borderBottom: 'none' }}>
+          <div className={styles.fn} style={{ fontWeight: 700 }}>CONSOLIDADO</div>
+          <div className={`${styles.right} ${styles.num}`} style={{ fontWeight: 700, color: 'var(--positivo)' }}>
+            {formatMoeda(consolidado.totalEntradas)}
+          </div>
+          <div className={`${styles.right} ${styles.num}`} style={{ fontWeight: 700, color: 'var(--critico)' }}>
+            {formatMoeda(consolidado.totalSaidas)}
+          </div>
+          <div className={`${styles.right} ${styles.num}`} style={{ fontWeight: 700, color: consolidado.saldoGrupo >= 0 ? 'var(--positivo)' : 'var(--critico)' }}>
+            {formatMoeda(consolidado.saldoGrupo)}
+          </div>
+          <div className={styles.right} style={{ fontWeight: 600, color: 'var(--ink2)' }}>
+            {formatMoeda(faturamento.vendido)} vendido
+          </div>
+        </div>
       </div>
     </div>
   )
@@ -512,7 +414,14 @@ export default function Home() {
   const [arquivo, setArquivo] = useState<File | null>(null)
   const [analisando, setAnalisando] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
-  const [abaAtiva, setAbaAtiva] = useState<Aba>('dashboard')
+  const [abaAtiva, setAbaAtiva] = useState<Aba>(() => {
+    // Lê o parâmetro ?tab= da URL para que links diretos (ex: /?tab=relatorio)
+    // abram a aba correta sem precisar de um segundo clique.
+    if (typeof window === 'undefined') return 'dashboard'
+    const tab = new URLSearchParams(window.location.search).get('tab') as Aba | null
+    const validas: Aba[] = ['dashboard', 'empresas', 'despesas', 'clientes', 'relatorio', 'comparativo', 'chat', 'upload']
+    return (tab && validas.includes(tab)) ? tab : 'dashboard'
+  })
   const [nomeArquivo, setNomeArquivo] = useState('')
   const [mensagensChat, setMensagensChat] = useState<MensagemChat[]>([])
   const [periodoUpload, setPeriodoUpload] = useState(() => new Date().toISOString().slice(0, 7))
@@ -629,79 +538,63 @@ export default function Home() {
   }
 
   return (
-    <div className="min-h-screen" style={{ background: '#0f1117' }}>
-      {/* Header */}
-      <header
-        className="sticky top-0 z-30 border-b"
-        style={{ background: 'rgba(15,17,23,0.92)', backdropFilter: 'blur(12px)', borderColor: '#2d3148' }}
-      >
-        <div className="mx-auto flex max-w-screen-2xl items-center gap-4 px-5 py-3">
-          <div className="flex items-center gap-2.5 mr-4">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg" style={{ background: 'rgba(59,130,246,0.15)' }}>
-              <Sun className="h-4 w-4" style={{ color: '#3b82f6' }} />
+    <div className={styles.page}>
+      <div className={`${styles.hdr} ${styles.htop}`}>
+        <div className={styles.wrap}>
+          <div className={styles.brand} style={{ justifyContent: 'space-between', width: '100%' }}>
+            <div className="flex items-baseline gap-3.5">
+              <span className={`${styles.bname} ${styles.serif}`}>CFO Solar</span>
+              <span className="flex items-center gap-1.5" style={{ fontSize: 12, color: 'var(--ink3)' }}>
+                <Briefcase className="h-3 w-3" />
+                {relatorio ? nomeArquivo : 'Nenhum relatório carregado'}
+                {relatorio && (
+                  <>
+                    <ChevronRight className="h-3 w-3" />
+                    <span style={{ color: 'var(--ink2)', fontWeight: 500 }} className="capitalize">{relatorio.periodo}</span>
+                  </>
+                )}
+              </span>
             </div>
-            <span className="font-bold text-sm hidden sm:block" style={{ color: '#e2e8f0' }}>CFO Solar</span>
+
+            <div className="flex items-center gap-3">
+              {relatorio && historico.length > 0 && (
+                <div className="relative flex items-center">
+                  <History className="pointer-events-none absolute left-0 h-3.5 w-3.5" style={{ color: 'var(--ink3)' }} />
+                  <select
+                    value={relatorio.periodoChave}
+                    onChange={e => handleSelecionarPeriodo(e.target.value)}
+                    disabled={trocandoPeriodo}
+                    className={styles.select}
+                    style={{ paddingLeft: 20 }}
+                  >
+                    {!historico.some(h => h.periodo === relatorio.periodoChave) && (
+                      <option value={relatorio.periodoChave}>{relatorio.periodo}</option>
+                    )}
+                    {historico.map(h => (
+                      <option key={h.periodo} value={h.periodo}>{formatarPeriodoCurto(h.periodo)}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              <button onClick={handleExportPDF} disabled={!relatorio} className={styles.btn} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <Download className="h-3.5 w-3.5" />
+                <span className="hidden sm:block">PDF</span>
+              </button>
+            </div>
           </div>
 
-          <div className="flex items-center gap-2 flex-1 min-w-0">
-            <Briefcase className="h-3.5 w-3.5 shrink-0" style={{ color: '#64748b' }} />
-            <span className="text-xs truncate max-w-[200px]" style={{ color: '#64748b' }}>
-              {relatorio ? nomeArquivo : 'Nenhum relatório carregado'}
-            </span>
-            {relatorio && (
-              <>
-                <ChevronRight className="h-3 w-3 shrink-0" style={{ color: '#4b5563' }} />
-                <span className="text-xs font-medium capitalize" style={{ color: '#94a3b8' }}>{relatorio.periodo}</span>
-              </>
-            )}
-          </div>
+          {erro && (
+            <div className={`${styles.notice} ${styles.alertaDanger}`} style={{ marginBottom: 12 }}>
+              <span>{erro}</span>
+            </div>
+          )}
 
-          <div className="flex items-center gap-2">
-            {relatorio && historico.length > 0 && (
-              <div className="relative flex items-center">
-                <History className="pointer-events-none absolute left-2.5 h-3.5 w-3.5" style={{ color: '#64748b' }} />
-                <select
-                  value={relatorio.periodoChave}
-                  onChange={e => handleSelecionarPeriodo(e.target.value)}
-                  disabled={trocandoPeriodo}
-                  className="appearance-none rounded-lg border bg-transparent py-1.5 pl-8 pr-3 text-xs font-medium outline-none disabled:opacity-60"
-                  style={{ borderColor: '#2d3148', color: '#94a3b8', background: '#161925' }}
-                >
-                  {!historico.some(h => h.periodo === relatorio.periodoChave) && (
-                    <option value={relatorio.periodoChave}>{relatorio.periodo}</option>
-                  )}
-                  {historico.map(h => (
-                    <option key={h.periodo} value={h.periodo}>{formatarPeriodoCurto(h.periodo)}</option>
-                  ))}
-                </select>
-              </div>
-            )}
-
-            <button
-              onClick={handleExportPDF}
-              disabled={!relatorio}
-              className="flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-40"
-              style={{ borderColor: '#2d3148', color: '#94a3b8' }}
-            >
-              <Download className="h-3.5 w-3.5" />
-              <span className="hidden sm:block">PDF</span>
-            </button>
-          </div>
+          <NavTabs itens={ABAS} ativo={abaAtiva} onSelecionar={setAbaAtiva} />
         </div>
+      </div>
 
-        {erro && (
-          <div
-            className="border-b px-5 py-2 text-xs"
-            style={{ background: 'rgba(239,68,68,0.08)', borderColor: 'rgba(127,29,29,0.5)', color: '#fca5a5' }}
-          >
-            {erro}
-          </div>
-        )}
-
-        <NavTabs itens={ABAS} ativo={abaAtiva} onSelecionar={setAbaAtiva} />
-      </header>
-
-      <main className="mx-auto max-w-screen-2xl px-5 py-6">
+      <main className={styles.wrap} style={{ paddingTop: 34, paddingBottom: 60 }}>
         {abaAtiva === 'upload' && (
           <UploadPanel
             arquivo={arquivo}

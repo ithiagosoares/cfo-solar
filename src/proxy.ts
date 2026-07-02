@@ -26,7 +26,12 @@ export async function proxy(request: NextRequest) {
           cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value))
           response = NextResponse.next({ request })
           cookiesToSet.forEach(({ name, value, options }) =>
-            response.cookies.set(name, value, options),
+            response.cookies.set(name, value, {
+              ...options,
+              secure: process.env.NODE_ENV === 'production',
+              sameSite: 'lax',
+              httpOnly: true,
+            }),
           )
         },
       },
@@ -82,6 +87,6 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon\\.ico|logo\\.png|.*\\.png$|.*\\.jpg$|.*\\.svg$|.*\\.ico$).*)',
+    '/((?!_next/static|_next/image|favicon\\.ico|logo\\.png|icon\\.png|.*\\.png$|.*\\.jpg$|.*\\.svg$|.*\\.ico$|login|auth|acesso-negado).*)',
   ],
 }

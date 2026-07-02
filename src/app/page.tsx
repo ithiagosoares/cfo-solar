@@ -16,6 +16,7 @@ import {
 } from 'lucide-react'
 import { gerarPDF } from '@/lib/pdf-generator'
 import { NavTabs, type ItemNavTab } from '@/components/layout/NavTabs'
+import { UserMenu, type UsuarioInfo } from '@/components/layout/UserMenu'
 import { KPICard } from '@/components/dashboard/KPICard'
 import { FluxoGrafico } from '@/components/dashboard/FluxoGrafico'
 import { AlertasPanel } from '@/components/dashboard/AlertasPanel'
@@ -421,6 +422,21 @@ export default function Home() {
   const [historico, setHistorico] = useState<PeriodoResumo[]>([])
   const [trocandoPeriodo, setTrocandoPeriodo] = useState(false)
   const [carregandoInicial, setCarregandoInicial] = useState(true)
+  const [usuario, setUsuario] = useState<UsuarioInfo | null>(null)
+
+  useEffect(() => {
+    fetch('/api/me')
+      .then(r => r.json())
+      .then((d: UsuarioInfo) => setUsuario(d))
+      .catch(() => {})
+  }, [])
+
+  // Esconde a aba de upload para viewers
+  useEffect(() => {
+    if (usuario?.role === 'viewer' && abaAtiva === 'upload') {
+      setAbaAtiva('dashboard')
+    }
+  }, [usuario, abaAtiva])
 
   // On first load, show whatever is most recent in Supabase instead of forcing an
   // upload — the upload flow only kicks in if there's truly nothing saved yet.
@@ -468,6 +484,8 @@ export default function Home() {
       .then(json => { if (Array.isArray(json.relatorios)) setHistorico(json.relatorios) })
       .catch(() => {})
   }, [relatorio?.periodoChave])
+
+  const abasVisiveis = usuario?.role === 'viewer' ? ABAS.filter(a => a.id !== 'upload') : ABAS
 
   const indiceAtual = relatorio ? historico.findIndex(h => h.periodo === relatorio.periodoChave) : -1
   const mesAnterior = indiceAtual !== -1 && indiceAtual + 1 < historico.length ? historico[indiceAtual + 1] : null
@@ -580,6 +598,8 @@ export default function Home() {
                 <Download className="h-3.5 w-3.5" />
                 <span className="hidden sm:block">PDF</span>
               </button>
+
+              {usuario && <UserMenu usuario={usuario} />}
             </div>
           </div>
 
@@ -589,7 +609,7 @@ export default function Home() {
             </div>
           )}
 
-          <NavTabs itens={ABAS} ativo={abaAtiva} onSelecionar={setAbaAtiva} />
+          <NavTabs itens={abasVisiveis} ativo={abaAtiva} onSelecionar={setAbaAtiva} />
         </div>
       </div>
 

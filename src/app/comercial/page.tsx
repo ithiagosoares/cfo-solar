@@ -18,6 +18,7 @@ import {
 import { formatMoeda, formatData, formatPercentual } from '@/lib/utils'
 import { CORES } from '@/lib/tema'
 import { NavTabs, type ItemNavTab } from '@/components/layout/NavTabs'
+import { UserMenu, type UsuarioInfo } from '@/components/layout/UserMenu'
 import styles from '@/styles/editorial.module.css'
 
 const LIMITE_ESTOQUE_CRITICO = 10
@@ -306,6 +307,14 @@ type SubAba = 'pessoas' | 'compras' | 'estoque'
 export default function ComercialPage() {
   const [dados, setDados] = useState<DadosComerciais | null>(null)
   const [erro, setErro] = useState<string | null>(null)
+  const [usuario, setUsuario] = useState<UsuarioInfo | null>(null)
+
+  useEffect(() => {
+    fetch('/api/me')
+      .then(r => r.json())
+      .then((d: UsuarioInfo) => setUsuario(d))
+      .catch(() => {})
+  }, [])
   const [expandidos, setExpandidos] = useState<Set<string>>(new Set())
   const [subAba, setSubAba] = useState<SubAba>('pessoas')
   const [tipoPeriodo, setTipoPeriodo] = useState<TipoPeriodo>('30dias')
@@ -337,14 +346,21 @@ export default function ComercialPage() {
     })
   }
 
+  const abasNavVisiveis = usuario?.role === 'viewer'
+    ? ABAS_NAV.filter(a => a.id !== 'upload')
+    : ABAS_NAV
+
   const cabecalho = (
     <div className={`${styles.hdr} ${styles.htop}`}>
       <div className={styles.wrap}>
-        <div className={styles.brand} style={{ alignItems: 'center' }}>
-          <img src="/logo.png" alt="CFO.IA" style={{ height: 52, width: 'auto', margin: '-9px 0' }} />
-          <div className={styles.bsub}>Painel financeiro · Estruturas para energia solar</div>
+        <div className={styles.brand} style={{ alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+          <div className="flex items-center gap-3">
+            <img src="/logo.png" alt="CFO.IA" style={{ height: 52, width: 'auto', margin: '-9px 0' }} />
+            <div className={styles.bsub}>Painel financeiro · Estruturas para energia solar</div>
+          </div>
+          {usuario && <UserMenu usuario={usuario} />}
         </div>
-        <NavTabs itens={ABAS_NAV} ativo="comercial" />
+        <NavTabs itens={abasNavVisiveis} ativo="comercial" />
       </div>
     </div>
   )

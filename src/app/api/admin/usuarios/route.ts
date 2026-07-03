@@ -62,7 +62,14 @@ export async function DELETE(request: NextRequest) {
   const email = searchParams.get('email')
   if (!email) return NextResponse.json({ error: 'email é obrigatório' }, { status: 400 })
 
-  if (email.toLowerCase() === admin.email?.toLowerCase()) {
+  const OWNER_EMAIL = 'thiago25.mss@gmail.com'
+  const emailNorm = email.toLowerCase()
+
+  if (emailNorm === OWNER_EMAIL) {
+    return NextResponse.json({ error: 'Este usuário não pode ser removido' }, { status: 403 })
+  }
+
+  if (emailNorm === admin.email?.toLowerCase()) {
     return NextResponse.json({ error: 'Você não pode remover sua própria conta' }, { status: 400 })
   }
 

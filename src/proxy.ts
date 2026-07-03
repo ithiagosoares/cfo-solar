@@ -6,7 +6,14 @@ import type { NextRequest } from 'next/server'
 const ROTAS_PUBLICAS = ['/login', '/auth/callback', '/acesso-negado']
 
 export async function proxy(request: NextRequest) {
-  const { pathname } = request.nextUrl
+  const { pathname, searchParams } = request.nextUrl
+
+  // Rede de segurança: Google às vezes redireciona o code para / em vez de /auth/callback
+  if (pathname === '/' && searchParams.has('code')) {
+    const callbackUrl = new URL('/auth/callback', request.url)
+    searchParams.forEach((value, key) => callbackUrl.searchParams.set(key, value))
+    return NextResponse.redirect(callbackUrl)
+  }
 
   if (ROTAS_PUBLICAS.some(r => pathname === r || pathname.startsWith(r + '/'))) {
     return NextResponse.next()

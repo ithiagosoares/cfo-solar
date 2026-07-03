@@ -12,10 +12,11 @@ export default function LoginPage() {
     setCarregando(true)
     setErro(null)
     const supabase = createSupabaseBrowserClient()
+    console.log('[login] redirectTo:', 'https://nihaobr.com.br/auth/callback')
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
+        redirectTo: 'https://nihaobr.com.br/auth/callback',
       },
     })
     if (error) {

@@ -73,33 +73,46 @@ interface FiltroPeriodo {
 }
 
 function construirFiltro(tipo: TipoPeriodo, customInicio: string, customFim: string): FiltroPeriodo {
-  const agora = new Date()
+  const fim = new Date()
+  fim.setHours(23, 59, 59, 999)
   switch (tipo) {
     case 'hoje': {
-      const inicio = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate())
-      return { tipo, dataInicio: inicio, dataFim: agora }
+      const inicio = new Date(fim)
+      inicio.setHours(0, 0, 0, 0)
+      return { tipo, dataInicio: inicio, dataFim: fim }
     }
-    case '7dias':
-      return { tipo, dataInicio: new Date(agora.getTime() - 7 * 86_400_000), dataFim: agora }
+    case '7dias': {
+      const inicio = new Date(fim)
+      inicio.setDate(fim.getDate() - 7)
+      inicio.setHours(0, 0, 0, 0)
+      return { tipo, dataInicio: inicio, dataFim: fim }
+    }
     case 'personalizado': {
       const inicio = customInicio
         ? new Date(customInicio + 'T00:00:00')
-        : new Date(agora.getFullYear(), agora.getMonth(), 1)
-      const fim = customFim ? new Date(customFim + 'T23:59:59') : agora
-      return { tipo, dataInicio: inicio, dataFim: fim }
+        : new Date(fim.getFullYear(), fim.getMonth(), 1)
+      const fimCustom = customFim ? new Date(customFim + 'T23:59:59') : fim
+      return { tipo, dataInicio: inicio, dataFim: fimCustom }
     }
-    default: // '30dias'
-      return { tipo: '30dias', dataInicio: new Date(agora.getTime() - 30 * 86_400_000), dataFim: agora }
+    default: { // '30dias'
+      const inicio = new Date(fim)
+      inicio.setDate(fim.getDate() - 30)
+      inicio.setHours(0, 0, 0, 0)
+      return { tipo: '30dias', dataInicio: inicio, dataFim: fim }
+    }
   }
 }
 
 function filtrarPorPeriodo(pedidos: PedidoUpper[], filtro: FiltroPeriodo): PedidoUpper[] {
   const inicio = filtro.dataInicio.getTime()
   const fim = filtro.dataFim.getTime()
-  return pedidos.filter(p => {
+  const filtrados = pedidos.filter(p => {
     const t = new Date(p.dataCadastro).getTime()
     return t >= inicio && t <= fim
   })
+  const dias = filtro.tipo === 'hoje' ? 1 : filtro.tipo === '7dias' ? 7 : filtro.tipo === '30dias' ? 30 : null
+  console.log('[comercial] pedidos da Upper:', pedidos.length, '| após filtro de', dias ?? 'personalizado', 'dias:', filtrados.length)
+  return filtrados
 }
 
 function descricaoPeriodo(filtro: FiltroPeriodo): string {

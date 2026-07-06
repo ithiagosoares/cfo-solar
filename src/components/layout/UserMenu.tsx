@@ -39,6 +39,15 @@ export function UserMenu({ usuario }: UserMenuProps) {
       <span style={{ fontSize: 12, color: 'var(--ink3)', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
         {nomeExibicao}
       </span>
+      {usuario.role === 'admin' && (
+        <a
+          href="/admin/usuarios"
+          className={styles.btn}
+          style={{ fontSize: 12, padding: '5px 12px', textDecoration: 'none' }}
+        >
+          Usuários
+        </a>
+      )}
       <button
         onClick={handleSair}
         className={styles.btn}

@@ -182,7 +182,7 @@ export async function buscarTodosPedidos(): Promise<PedidoUpperReal[]> {
   // Filtra no cliente caso a API não suporte os parâmetros de data
   const limiteMs = dataInicio.getTime()
   const filtrados = (itens as PedidoUpperReal[]).filter(p => {
-    const dataStr = p.dataEmissao || p.createdAt
+    const dataStr = p.dataEmissao || p.ide?.dhEmi
     return dataStr ? new Date(dataStr).getTime() >= limiteMs : true
   })
 

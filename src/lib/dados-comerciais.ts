@@ -34,8 +34,8 @@ function mapearPedidoReal(p: PedidoUpperReal): PedidoUpper {
     id: p.id,
     idCliente: 0, // não disponível na estrutura real do /pedido
     nomeCliente: p.destinatario.xNome || p.destinatario.xFant || '(sem identificação)',
-    dataCadastro: p.dataEmissao || p.ide?.dhEmi || '',
-    dataPrevisaoEntrega: p.dataEmissao || p.ide?.dhEmi || '', // não disponível na listagem
+    dataCadastro: p.dataEmissao,
+    dataPrevisaoEntrega: p.dataEmissao, // não disponível na listagem
     situacaoFaturamento: mapearSituacaoFaturamento(p.situacaoFaturamento),
     itens: [], // sempre vazio na listagem geral — só disponível em /pedido/:id
     valorDocumento: p.total?.valorDocumento,

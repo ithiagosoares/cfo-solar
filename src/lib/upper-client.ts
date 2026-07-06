@@ -179,14 +179,37 @@ export async function buscarTodosPedidos(): Promise<PedidoUpperReal[]> {
   const itens = extrairItemsDaResposta(json)
   console.log('[upper-client] buscarTodosPedidos — itens extraídos:', itens.length)
 
-  // Filtra no cliente caso a API não suporte os parâmetros de data
+  // createdAt é sempre "0001-01-01T00:00:00" (.NET null date) — usar só dataEmissao
   const limiteMs = dataInicio.getTime()
   const filtrados = (itens as PedidoUpperReal[]).filter(p => {
-    const dataStr = p.dataEmissao || p.ide?.dhEmi
-    return dataStr ? new Date(dataStr).getTime() >= limiteMs : true
+    if (!p.dataEmissao) return false
+    return new Date(p.dataEmissao).getTime() >= limiteMs
   })
 
   console.log(`[upper-client] buscarTodosPedidos — após filtro 30 dias: ${filtrados.length} pedidos`)
+
+  // Investigação de vendedor: tenta resolver usuarioId → nome via /pessoa/:id
+  const comUsuario = filtrados.find(p => p.usuarioId)
+  if (comUsuario?.usuarioId) {
+    console.log('[upper-client] investigando vendedor — usuarioId:', comUsuario.usuarioId)
+    try {
+      const resPessoa = await fetch(`${API_BASE_URL}/pessoa/${comUsuario.usuarioId}`, {
+        headers: { Authorization: `Bearer ${tokenAcesso}` },
+        signal: AbortSignal.timeout(5_000),
+      })
+      if (resPessoa.ok) {
+        const pessoa = await resPessoa.json() as Record<string, unknown>
+        console.log('[upper-client] /pessoa/:usuarioId retornou — campos:', Object.keys(pessoa),
+          '| nome:', pessoa.nome ?? pessoa.xNome ?? pessoa.nomeCompleto ?? '(campo não identificado)')
+      } else {
+        console.log('[upper-client] /pessoa/:usuarioId status:', resPessoa.status, '— endpoint pode não existir para este tipo de id')
+      }
+    } catch {
+      console.log('[upper-client] /pessoa/:usuarioId falhou — usuarioId provavelmente não é id de Pessoa')
+    }
+  } else {
+    console.log('[upper-client] nenhum pedido com usuarioId preenchido nos últimos 30 dias')
+  }
 
   return filtrados
 }

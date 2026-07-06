@@ -128,65 +128,88 @@ function extrairItemsDaResposta(resposta: unknown): unknown[] {
   return []
 }
 
-// Busca pedidos dos últimos 30 dias — apenas primeira página (50 itens).
-// Tenta filtrar por data via query params (dataInicio/dataFim); se a API
-// ignorar esses parâmetros, filtra no cliente depois de receber a resposta.
+// Busca todos os pedidos dentro dos últimos 30 dias, paginando automaticamente.
+// A API retorna do mais recente ao mais antigo — para quando o último item da
+// página for anterior ao início do período ou quando não houver mais páginas.
 export async function buscarTodosPedidos(): Promise<PedidoUpperReal[]> {
   const tokenAcesso = await autenticarUpper()
 
   const hoje = new Date()
-  const dataInicio = new Date(hoje)
-  dataInicio.setDate(hoje.getDate() - 30)
+  hoje.setHours(23, 59, 59, 999)
+  const dataInicio = new Date()
+  dataInicio.setDate(dataInicio.getDate() - 30)
+  dataInicio.setHours(0, 0, 0, 0)
   const fmt = (d: Date) => d.toISOString().slice(0, 10)
 
-  const params = new URLSearchParams({
-    pag: '1',
-    qtd: '50',
-    dataInicio: fmt(dataInicio),
-    dataFim: fmt(hoje),
-  })
-  const url = `${API_BASE_URL}/pedido?${params}`
-  console.log('[upper-client] buscarTodosPedidos — URL:', url)
+  const LIMITE_PAGINAS = 20
+  const ITENS_POR_PAGINA = 50
+  let pagina = 1
+  const todosPedidos: PedidoUpperReal[] = []
 
-  let resposta: Response
-  try {
-    resposta = await fetch(url, {
-      headers: { Authorization: `Bearer ${tokenAcesso}` },
-      signal: AbortSignal.timeout(15_000),
+  while (pagina <= LIMITE_PAGINAS) {
+    const params = new URLSearchParams({
+      pag: String(pagina),
+      qtd: String(ITENS_POR_PAGINA),
+      dataInicio: fmt(dataInicio),
+      dataFim: fmt(hoje),
     })
-  } catch {
-    throw new Error('Falha de rede ao buscar pedidos')
+    const url = `${API_BASE_URL}/pedido?${params}`
+    console.log(`[upper-client] buscando página ${pagina} — URL:`, url)
+
+    let resposta: Response
+    try {
+      resposta = await fetch(url, {
+        headers: { Authorization: `Bearer ${tokenAcesso}` },
+        signal: AbortSignal.timeout(15_000),
+      })
+    } catch {
+      throw new Error(`Falha de rede ao buscar pedidos (página ${pagina})`)
+    }
+
+    console.log(`[upper-client] página ${pagina} — status HTTP:`, resposta.status)
+
+    if (!resposta.ok) {
+      let corpoErro: string
+      try { corpoErro = await resposta.text() } catch { corpoErro = '(ilegível)' }
+      console.error(`[upper-client] Erro ${resposta.status} em /pedido (página ${pagina}):`, corpoErro)
+      throw new Error(`Falha ao buscar pedidos (status ${resposta.status})`)
+    }
+
+    const json: unknown = await resposta.json()
+
+    if (pagina === 1 && typeof json === 'object' && json !== null) {
+      const obj = json as RespostaPaginadaUpper
+      console.log('[upper-client] chaves da resposta:', Object.keys(obj),
+        '| totalRegistros:', obj.totalRegistros ?? '(não presente)')
+    }
+
+    const itens = extrairItemsDaResposta(json) as PedidoUpperReal[]
+    console.log(`[upper-client] página ${pagina} — itens recebidos: ${itens.length}`)
+
+    todosPedidos.push(...itens)
+
+    // Sem mais páginas
+    if (itens.length < ITENS_POR_PAGINA) break
+
+    // API retorna do mais recente ao mais antigo — se o último item da página
+    // já é anterior ao início do período, não há mais pedidos relevantes
+    const ultimoItem = itens[itens.length - 1]
+    if (ultimoItem?.dataEmissao) {
+      const dataUltimo = new Date(ultimoItem.dataEmissao)
+      if (dataUltimo.getTime() < dataInicio.getTime()) break
+    }
+
+    pagina++
   }
-
-  console.log('[upper-client] buscarTodosPedidos — status HTTP:', resposta.status)
-
-  if (!resposta.ok) {
-    let corpoErro: string
-    try { corpoErro = await resposta.text() } catch { corpoErro = '(ilegível)' }
-    console.error(`[upper-client] Erro ${resposta.status} em /pedido:`, corpoErro)
-    throw new Error(`Falha ao buscar pedidos (status ${resposta.status})`)
-  }
-
-  const json: unknown = await resposta.json()
-
-  // Log das chaves do objeto raiz para diagnóstico (sem expor dados sensíveis)
-  if (typeof json === 'object' && json !== null) {
-    const obj = json as RespostaPaginadaUpper
-    console.log('[upper-client] buscarTodosPedidos — chaves da resposta:', Object.keys(obj),
-      '| totalRegistros:', obj.totalRegistros ?? '(não presente)')
-  }
-
-  const itens = extrairItemsDaResposta(json)
-  console.log('[upper-client] buscarTodosPedidos — itens extraídos:', itens.length)
 
   // createdAt é sempre "0001-01-01T00:00:00" (.NET null date) — usar só dataEmissao
-  const limiteMs = dataInicio.getTime()
-  const filtrados = (itens as PedidoUpperReal[]).filter(p => {
+  const filtrados = todosPedidos.filter(p => {
     if (!p.dataEmissao) return false
-    return new Date(p.dataEmissao).getTime() >= limiteMs
+    const t = new Date(p.dataEmissao).getTime()
+    return t >= dataInicio.getTime() && t <= hoje.getTime()
   })
 
-  console.log(`[upper-client] buscarTodosPedidos — após filtro 30 dias: ${filtrados.length} pedidos`)
+  console.log(`[upper-client] páginas buscadas: ${pagina} | total bruto: ${todosPedidos.length} | após filtro: ${filtrados.length}`)
 
   // Investigação de vendedor: tenta resolver usuarioId → nome via /pessoa/:id
   const comUsuario = filtrados.find(p => p.usuarioId)

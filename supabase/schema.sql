@@ -19,3 +19,93 @@ create index idx_relatorios_periodo on relatorios_mensais(periodo);
 -- to service_role for tables created via the SQL editor.
 grant select, insert, update, delete on relatorios_mensais to service_role;
 grant usage, select on all sequences in schema public to service_role;
+
+-- ─── lancamentos_overrides — adicionado 2026-07-13 ────────────────────────
+
+create table lancamentos_overrides (
+  id uuid primary key default gen_random_uuid(),
+  periodo text not null,              -- ex: '2026-06'
+  empresa text,
+  data_lancamento date not null,
+  descricao_original text not null,
+  valor numeric not null,
+  categoria_original text,
+  categoria_corrigida text not null,
+  natureza_corrigida text,            -- capex | opex | financeiro | pessoal
+  motivo text,
+  criado_por text,
+  created_at timestamptz default now()
+);
+
+create index idx_overrides_periodo on lancamentos_overrides(periodo);
+
+grant select, insert, update, delete on lancamentos_overrides to service_role;
+
+-- ─── Seed inicial — rodar manualmente no SQL Editor do Supabase ───────────
+-- data_lancamento usa 2026-06-30 como placeholder (data exata não afeta matching)
+
+/*
+insert into lancamentos_overrides
+  (periodo, empresa, data_lancamento, descricao_original, valor, categoria_original, categoria_corrigida, natureza_corrigida, motivo, criado_por)
+values
+  ('2026-06', 'AluMarket', '2026-06-30', '(verificar no extrato)', 1041.67,
+   'pro_labore', 'despesa_comercial_veiculo_estrategico', 'opex',
+   'Despesa de veículo comercial — reclassificada de pró-labore', 'seed'),
+
+  ('2026-06', null, '2026-06-30', '(verificar no extrato)', 3505.50,
+   null, 'Serra Cortesa', 'capex',
+   'Parcela de máquina Serra Cortesa', 'seed'),
+
+  ('2026-06', null, '2026-06-30', '(verificar no extrato)', 3208.37,
+   null, 'Carregador do eletroposto', 'capex',
+   'Parcela do carregador do eletroposto', 'seed'),
+
+  ('2026-06', null, '2026-06-30', '(verificar no extrato)', 4458.29,
+   'pro_labore', 'mobilidade_corporativa_byd_fernando', 'opex',
+   'BYD Fernando — mobilidade corporativa reclassificada de pró-labore', 'seed'),
+
+  ('2026-06', null, '2026-06-30', '(verificar no extrato)', 4108.82,
+   'pro_labore', 'mobilidade_corporativa_tcross_matheus', 'opex',
+   'T-Cross Matheus — mobilidade corporativa reclassificada de pró-labore', 'seed');
+*/
+
+-- ─── investimentos_capex — adicionado 2026-07-13 ───────────────────────────
+
+create table investimentos_capex (
+  id uuid primary key default gen_random_uuid(),
+  nome text not null,
+  empresa text,
+  tipo_parcela text not null check (tipo_parcela in ('mensal_recorrente', 'parcelado', 'sem_parcelamento')),
+  valor_parcela numeric,
+  parcela_atual int,
+  total_parcelas int,
+  termino_previsto date,
+  status text not null default 'em_andamento' check (status in ('em_andamento', 'concluido', 'cancelado')),
+  observacoes text,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+create index idx_investimentos_status on investimentos_capex(status);
+
+grant select, insert, update, delete on investimentos_capex to service_role;
+
+-- ─── Seed inicial — rodar manualmente no SQL Editor do Supabase ───────────
+-- (ou copiar para um script de seed separado)
+
+/*
+insert into investimentos_capex (nome, tipo_parcela, valor_parcela, termino_previsto, status) values
+  ('Empilhadeira Elétrica', 'mensal_recorrente', 10000, '2027-01-31', 'em_andamento');
+
+insert into investimentos_capex (nome, tipo_parcela, parcela_atual, total_parcelas, termino_previsto, status) values
+  ('Serra Cortesa', 'parcelado', 5, 6, '2026-07-31', 'em_andamento');
+
+insert into investimentos_capex (nome, tipo_parcela, parcela_atual, total_parcelas, termino_previsto, status) values
+  ('Carregador do Eletroposto', 'parcelado', 10, 12, '2027-04-30', 'em_andamento');
+
+insert into investimentos_capex (nome, tipo_parcela, status) values
+  ('Ferramentas', 'sem_parcelamento', 'em_andamento');
+
+insert into investimentos_capex (nome, tipo_parcela, status, observacoes) values
+  ('Prensa', 'sem_parcelamento', 'em_andamento', 'Aguardando detalhamento de valor e prazo');
+*/

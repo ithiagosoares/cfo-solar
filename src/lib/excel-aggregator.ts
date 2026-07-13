@@ -82,6 +82,20 @@ export interface LancamentoBruto {
 // closed enum, since the dictionary's fallback path can produce arbitrary slugs.
 export interface LancamentoClassificado extends LancamentoBruto {
   categoria: string
+  // Present only when a lancamentos_overrides entry was matched. Overrides the
+  // GRUPO_POR_CATEGORIA lookup so custom categoria labels (e.g. "Serra Cortesa")
+  // still roll up into the correct ResumoCustos bucket.
+  grupoCorrigido?: GrupoCusto
+}
+
+// Minimal shape consumed by agregarExcel() to apply a manual override.
+// Full DB object lives in lancamentos-overrides-repository.ts.
+export interface OverrideLancamento {
+  empresa: string | null
+  valor: number
+  categoriaOriginal: string | null  // null = match regardless of computed category
+  categoriaCorrigida: string
+  grupoCorrigido?: GrupoCusto       // derived from natureza_corrigida by the caller
 }
 
 const MAPA_EMPRESAS: Record<string, string> = {
@@ -465,7 +479,7 @@ function agregarEmpresa(nome: string, lancamentos: LancamentoClassificado[], cat
 
     // direção === 'saida' — every remaining categoria is a real cash outflow.
     saidas += valor
-    const grupo = GRUPO_POR_CATEGORIA[l.categoria] ?? 'outro'
+    const grupo = l.grupoCorrigido ?? GRUPO_POR_CATEGORIA[l.categoria] ?? 'outro'
     itensCusto.push({ valor, grupo, descricao: l.descricao })
 
     if (categorizacaoDisponivel) {
@@ -492,7 +506,7 @@ function agregarEmpresa(nome: string, lancamentos: LancamentoClassificado[], cat
   }
 }
 
-export function agregarExcel(buffer: ArrayBuffer, periodoInformado?: string): DadosAgregados {
+export function agregarExcel(buffer: ArrayBuffer, periodoInformado?: string, overrides?: OverrideLancamento[]): DadosAgregados {
   const workbook = XLSX.read(buffer, { type: 'array', cellDates: false })
 
   const lancamentosPorEmpresa = new Map<string, LancamentoBruto[]>()
@@ -556,12 +570,27 @@ export function agregarExcel(buffer: ArrayBuffer, periodoInformado?: string): Da
   // sem_classificacao_manual, so that warning stays a meaningful signal scoped to
   // what actually needs the colaboradora's attention: untagged saídas.
   const todosLancamentos = Array.from(lancamentosPorEmpresa.values()).flat()
+  const overridesAtivos = overrides ?? []
   const classificados: LancamentoClassificado[] = todosLancamentos.map(l => {
-    const categoria = mapearCategoria(l.classificacaoManual, l.descricao)
-    return {
-      ...l,
-      categoria: categoria === SEM_CLASSIFICACAO_MANUAL && l.direcao === 'entrada' ? 'receita_operacional' : categoria,
+    const categoriaBruta = mapearCategoria(l.classificacaoManual, l.descricao)
+    const categoriaBase = categoriaBruta === SEM_CLASSIFICACAO_MANUAL && l.direcao === 'entrada'
+      ? 'receita_operacional'
+      : categoriaBruta
+
+    if (overridesAtivos.length) {
+      const override = overridesAtivos.find(o => {
+        const valorBate = Math.abs(l.valor - o.valor) < 0.005
+        const empresaBate = !o.empresa || o.empresa === l.empresa
+        const categoriaBate = !o.categoriaOriginal || o.categoriaOriginal === categoriaBase
+        return valorBate && empresaBate && categoriaBate
+      })
+      if (override) {
+        console.log(`[excel-aggregator] override: ${l.empresa} R$${l.valor} "${categoriaBase}" → "${override.categoriaCorrigida}"`)
+        return { ...l, categoria: override.categoriaCorrigida, grupoCorrigido: override.grupoCorrigido }
+      }
     }
+
+    return { ...l, categoria: categoriaBase }
   })
 
   const classificadosPorEmpresa = new Map<string, LancamentoClassificado[]>()

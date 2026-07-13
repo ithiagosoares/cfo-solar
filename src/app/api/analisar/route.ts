@@ -1,12 +1,24 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { agregarExcel, periodoAnterior, formatarPeriodoLabel } from '@/lib/excel-aggregator'
+import type { OverrideLancamento, GrupoCusto } from '@/lib/excel-aggregator'
 import { salvarRelatorio, buscarRelatorioPorPeriodo } from '@/lib/relatorios-repository'
+import { listarOverrides } from '@/lib/lancamentos-overrides-repository'
 import { PERFIL_FINANCEIRO } from '@/lib/perfil-financeiro'
 import { REGRAS_CONTABEIS } from '@/lib/regras-contabeis'
 import { MODELO_COMERCIAL } from '@/lib/modelo-comercial'
 import type { RelatorioCompleto } from '@/types/financeiro'
 
 export const maxDuration = 180
+
+// Maps natureza_corrigida (from lancamentos_overrides) to the GrupoCusto bucket
+// used in ResumoCustos, so overrides with custom categoria labels still roll up
+// correctly (e.g. "Serra Cortesa" with natureza "capex" → bucket 'capex').
+const NATUREZA_PARA_GRUPO: Partial<Record<string, GrupoCusto>> = {
+  capex:       'capex',
+  opex:        'variavel',
+  financeiro:  'servico_da_divida',
+  pessoal:     'pro_labore',
+}
 
 const SISTEMA = `Você é um analista financeiro especializado no Grupo Solar System (energia solar, 5 empresas).
 
@@ -56,10 +68,52 @@ CONTEXTO DO NEGÓCIO:
 - O módulo comercial descrito no MODELO COMERCIAL ainda não está integrado ao sistema — não há dados
   reais de orçamentos, pedidos, vendedores ou conversão disponíveis hoje. NÃO invente nomes de
   vendedores, números de conversão, orçamentos ou pedidos; só use o MODELO COMERCIAL como contexto
-  qualitativo de como o negócio funciona, não como fonte de números.`
+  qualitativo de como o negócio funciona, não como fonte de números.
+
+DIMENSÕES DE ANÁLISE ESPERADAS:
+A análise deve ir além de somar entradas e saídas. Integre as dimensões abaixo ao longo do
+resumoExecutivo, alertas e recomendações — não como seções separadas, mas como camadas analíticas
+que enriquecem a leitura dos números quando os dados as suportarem:
+
+1. FLUXO DE CAIXA: Avalie o comportamento do caixa no período — se houve pressão de liquidez
+   (saídas operacionais + financeiras superiores às entradas orgânicas), se o saldo final indica
+   folga ou aperto, e se o padrão é sustentável.
+
+2. CAPITAL DE GIRO: Estime a real necessidade de capital de giro. Antecipação de recebíveis mascara
+   a necessidade — quando "antecipacoes.total" é relevante, o caixa está "puxado para frente" e a
+   empresa precisaria de capital adicional sem esse recurso. Deixe isso explícito.
+
+3. EVOLUÇÃO MÊS A MÊS: Quando disponível o bloco "COMPARATIVO COM O MÊS ANTERIOR", comente a
+   tendência de faturamento, saldo e estrutura de custos. O grupo está crescendo, estável ou em
+   retração? A variação é operacional ou financeira?
+
+4. INVESTIMENTOS CAPEX: Identifique lançamentos classificados como categoria "capex" nos dados.
+   Comente o nível de investimento em relação ao caixa disponível — CAPEX alto num mês de caixa
+   apertado é sinal de pressão de liquidez adicional que o gestor precisa enxergar.
+
+5. ESTRUTURA DE CUSTOS (OPEX × CAPEX × FINANCEIRO): Separe claramente no resumoExecutivo os três
+   destinos do caixa de saída: OPEX (despesa_fixa + despesa_variavel + pro_labore = custo
+   operacional recorrente), CAPEX (investimentos), e FINANCEIRO (servico_da_divida +
+   antecipacao_recebiveis = custo de capital e dívida). Isso mostra ao gestor onde cada real foi.
+
+6. DEPENDÊNCIA BANCÁRIA E DE CRÉDITO: Atenção especial a Watts e AluMarket — empresas do grupo
+   sem receita operacional própria que dependem de capital intercompany. Quando
+   "antecipacoes.total / consolidado.totalEntradas" superar 30%, alerte sobre dependência
+   estrutural de antecipação (caixa artificialmente inflado). Identifique também se o nível de
+   serviço da dívida está consumindo parcela expressiva do caixa gerado.
+
+7. OPORTUNIDADES DE MELHORIA: Baseado na estrutura de custos observada, aponte onde há potencial
+   de otimização — ex: custo financeiro de antecipação alto (aponta para melhora de prazo de
+   recebimento), CAPEX concentrado (possível renegociação de parcelas), despesa variável
+   desproporcional em uma empresa específica, empresa com margem negativa recorrente.
+
+8. INDICADORES BANCÁRIOS: Quando os dados permitirem, inclua métricas relevantes para eventual
+   negociação com banco: (a) custo financeiro total do período (servico_da_divida +
+   desconto de antecipação, se disponível); (b) cobertura de dívida — quanto do caixa operacional
+   cobre as obrigações financeiras; (c) dependência de antecipação como percentual do caixa.`
 
 const ESTRUTURA_SAIDA = `{
-  "resumoExecutivo": "2-3 parágrafos objetivos sobre a situação financeira do grupo, citando os números fornecidos",
+  "resumoExecutivo": "3-4 parágrafos cobrindo: (1) desempenho de caixa e receita operacional do período, com comparativo mês anterior quando disponível; (2) estrutura de custos separando OPEX, CAPEX e custos financeiros com os valores reais; (3) capital de giro e nível de dependência de antecipação de recebíveis; (4) situação das empresas sem receita própria (Watts, AluMarket) e principais riscos ou oportunidades identificados",
   "alertas": [
     { "nivel": "danger", "titulo": "Título do alerta", "descricao": "Descrição com números reais dos dados fornecidos" }
   ],
@@ -105,11 +159,30 @@ export async function POST(request: Request) {
 
     const buffer = await arquivo.arrayBuffer()
 
+    // Busca overrides cadastrados para este período — não bloqueante: uma falha
+    // aqui não impede a análise, só desativa as correções pontuais deste mês.
+    let overrides: OverrideLancamento[] = []
+    try {
+      const overridesDb = await listarOverrides(periodoChave)
+      overrides = overridesDb.map(o => ({
+        empresa: o.empresa,
+        valor: o.valor,
+        categoriaOriginal: o.categoriaOriginal,
+        categoriaCorrigida: o.categoriaCorrigida,
+        grupoCorrigido: o.naturezaCorrigida ? NATUREZA_PARA_GRUPO[o.naturezaCorrigida] : undefined,
+      }))
+      if (overrides.length) {
+        console.log(`[/api/analisar] ${overrides.length} override(s) carregados para ${periodoChave}`)
+      }
+    } catch (e) {
+      console.error('[/api/analisar] falha ao buscar overrides (não bloqueante)', e)
+    }
+
     // Extraction and classification are both deterministic — mapearCategoria()
     // translates the colaboradora's manual classification into formal categories
     // via a dictionary lookup, then the summation runs in plain JS. No AI involved
     // until the interpretive step below (resumoExecutivo/alertas/recomendações).
-    const dados = agregarExcel(buffer, periodoChave)
+    const dados = agregarExcel(buffer, periodoChave, overrides.length ? overrides : undefined)
 
     // Best-effort lookup of the prior calendar month so Claude can produce an
     // automatic comparison — absence of a previous report should never block analysis.
@@ -169,8 +242,8 @@ ${ESTRUTURA_SAIDA}
 
 REGRAS PARA O JSON:
 - "nivel" nos alertas deve ser exatamente um de: "danger", "warning", "info", "success"
-- Gere 4-6 alertas cobrindo: FGI, meta, saldo do grupo, concentração de clientes, margem, empresas com saldo negativo
-- Gere 5-7 recomendações práticas ordenadas por prioridade (1 = mais urgente)
+- Gere 5-8 alertas cobrindo: FGI e serviço da dívida, meta de faturamento, saldo do grupo, dependência de antecipação de recebíveis, CAPEX sobre o caixa, empresas sem receita própria (Watts/AluMarket), margem operacional, concentração de clientes — use apenas os que os dados suportarem
+- Gere 5-7 recomendações práticas ordenadas por prioridade (1 = mais urgente), incluindo pelo menos uma sobre estrutura de custos ou eficiência financeira quando os dados indicarem oportunidade
 - Seja específico — cite os valores reais abaixo, não invente números novos`,
               // Sem cache_control aqui de propósito — a API aceita no máximo 4
               // blocos com cache_control por request, e os 4 blocos do system

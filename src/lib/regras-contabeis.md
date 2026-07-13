@@ -2,7 +2,7 @@
 
 ## Prioridade máxima
 
-Estas 10 regras têm **prioridade máxima** sobre qualquer classificação manual presente
+Estas 14 regras têm **prioridade máxima** sobre qualquer classificação manual presente
 na planilha. A coluna de classificação manual (preenchida por uma colaboradora) é
 **apenas contexto de apoio** — ela ajuda a entender a intenção do lançamento, mas
 **não é a decisão final**. A colaboradora às vezes categoriza incorretamente (ex: marca
@@ -23,7 +23,7 @@ AluMarket, Level2, Ni Hao, Barramares, Gimenes) forem identificados, devem ser
 adicionados aqui. Na ausência de um CNPJ conhecido na tabela, use os nomes das empresas
 e o contexto da descrição/classificação manual para aplicar a regra 2.
 
-## As 10 regras
+## As 14 regras
 
 ### 1. Antecipação de duplicatas → `antecipacao_recebiveis`
 
@@ -109,6 +109,66 @@ Toda análise deve manter o foco em:
 - Concentração de clientes (risco de dependência de poucos clientes grandes)
 - Risco operacional
 - Capacidade de atingir R$2.000.000/mês em vendido até dezembro/2026
+
+### 11. Watts — 6ª empresa do grupo, não operacional → nunca `receita_operacional`
+
+Watts é a sexta empresa do grupo, ainda sem operação própria e sem receita. Sua função
+é movimentar cartão de crédito e limite de conta para cobrir obrigações financeiras de
+outras empresas do grupo (Solar System, AluMarket etc.).
+
+Transferências originadas da Watts **nunca devem ser classificadas como
+`receita_operacional`**, mesmo que cheguem sem nenhuma classificação manual. Essas
+entradas são movimentação de crédito/limite bancário dentro do grupo, não faturamento.
+
+### 12. Exceção à convenção "entrada sem tag = `receita_operacional`"
+
+A convenção padrão — entrada sem classificação manual → `receita_operacional` — **não
+se aplica a Watts nem a AluMarket**. Essas duas empresas podem transferir recursos
+usando apenas limite bancário ou cartão de crédito, e essas entradas não representam
+faturamento mesmo quando chegam sem tag.
+
+Ao analisar lançamentos de entrada de Watts ou AluMarket sem classificação manual,
+usar contexto (contraparte, descrição, padrão recorrente) para determinar se é
+`intercompany`, `antecipacao_recebiveis` ou outra categoria adequada — nunca assumir
+`receita_operacional` automaticamente.
+
+### 13. Natureza do lançamento: CAPEX, OPEX e FINANCEIRO
+
+Além da categoria (ex: `capex`, `despesa_fixa`, `servico_da_divida`), todo lançamento
+deve ser entendido segundo sua **natureza econômica**, que não deve ser misturada na
+análise:
+
+- **CAPEX** (investimento, não custo operacional recorrente): Serra Cortesa, Prensa,
+  Empilhadeira Elétrica, Ferramentas, Caminhão, Carregador de Eletroposto, Máquinas
+  Industriais e qualquer compra de ativo permanente.
+- **OPEX** (custo operacional recorrente): Energia, Fretes, Água, Internet, Softwares,
+  Contabilidade, Material de Limpeza, Combustível, Comissões, Salários e demais despesas
+  recorrentes do dia a dia.
+- **FINANCEIRO** (deve ser sempre segregado de OPEX e CAPEX): antecipação de
+  duplicatas, IOF, juros, tarifas bancárias, cartão de crédito, parcelas de FGI.
+
+A classificação manual da colaboradora por vezes mistura essas naturezas (ex: marca
+compra de máquina como despesa operacional). Aplicar esta distinção para corrigir.
+
+### 14. Dimensões da análise de fluxo de caixa
+
+A interpretação do fluxo de caixa não deve se limitar a somar entradas e saídas. Toda
+análise deve identificar e comunicar:
+
+- **Comportamento do fluxo de caixa**: padrão de entradas e saídas ao longo do período.
+- **Necessidade real de capital de giro**: quanto caixa o grupo precisa gerar ou captar
+  para honrar suas obrigações no ciclo operacional.
+- **Evolução do caixa**: variação de saldo entre meses, tendência de melhora ou piora.
+- **Investimentos em andamento (CAPEX)**: valor e natureza dos ativos adquiridos,
+  impacto no caixa de curto prazo vs. benefício estrutural esperado.
+- **Estrutura de custos (OPEX × CAPEX × Financeiro)**: proporções e variações entre
+  naturezas de despesa ao longo do tempo.
+- **Dependência de crédito/limite bancário**: grau em que o grupo depende de antecipação
+  de recebíveis, cartão ou limite de conta para manter o caixa positivo.
+- **Oportunidades de melhoria**: redução de custos, melhor timing de recebimento,
+  renegociação de dívidas, otimização do ciclo financeiro.
+- **Indicadores relevantes para negociação bancária**: capital de giro, índice de
+  liquidez, comprometimento de receita com dívida, capacidade de pagamento.
 
 ## Categorias finais possíveis
 

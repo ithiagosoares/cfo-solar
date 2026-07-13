@@ -111,6 +111,64 @@ function buscarCorrespondencia(textoNormalizado: string): string | null {
  * already names the counterparty (e.g. "LIQUIDO DE DESCONTO" entradas, which the
  * colaboradora never tags manually).
  */
+// ─── NATUREZA CONTÁBIL ────────────────────────────────────────────────────────
+// Segunda dimensão de classificação: agrupa categorias formais em naturezas
+// econômicas para segmentação de relatórios (CAPEX × OPEX × Financeiro × Pessoal).
+//
+// Limitação conhecida: despesa_fixa cobre tanto OPEX (energia, aluguel, software)
+// quanto pessoal (salário, INSS, FGTS, VT) — os dois chegam com a mesma chave
+// formal porque o MAPEAMENTO não os distingue. Apenas pro_labore tem categoria
+// própria. Termos pessoal que não entram no MAPEAMENTO (PJ, ADTO, etc.) chegam
+// como slugs e são cobertos por PESSOAL_SLUGS abaixo.
+
+export type NaturezaContabil = 'capex' | 'opex' | 'financeiro' | 'pessoal' | 'receita' | 'nao_classificado'
+
+const NATUREZA_POR_CATEGORIA: Record<string, NaturezaContabil> = {
+  // receita
+  receita_operacional:      'receita',
+
+  // capex
+  capex:                    'capex',
+
+  // opex (inclui despesa_fixa com itens de pessoal — limitação conhecida acima)
+  despesa_fixa:             'opex',
+  despesa_variavel:         'opex',
+  despesa_nao_recorrente:   'opex',
+
+  // pessoal (somente pro_labore tem categoria formal dedicada)
+  pro_labore:               'pessoal',
+
+  // financeiro
+  antecipacao_recebiveis:   'financeiro', // op. de desconto — não é receita real
+  servico_da_divida:        'financeiro', // parcelas FGI
+
+  // neutro / consolidação
+  intercompany:             'nao_classificado',
+  sem_classificacao_manual: 'nao_classificado',
+  outro:                    'nao_classificado',
+}
+
+// Termos pessoal que não estão no MAPEAMENTO e chegam aqui como slug da
+// classificação manual (ex: "PJ" → "pj", "ADTO SALARIO" → "adto_salario").
+const PESSOAL_SLUGS = new Set<string>([
+  'pj',
+  'adto', 'adiantamento', 'adto_salario',
+  'fgts_consignado',
+  'exame_demissional', 'exame_admissional',
+  'relogio_ponto',
+])
+
+/**
+ * Retorna a natureza contábil de uma categoria formal (saída de mapearCategoria).
+ * Categorias não mapeadas retornam 'nao_classificado' — nunca lança exceção.
+ */
+export function classificarNatureza(categoria: string): NaturezaContabil {
+  if (PESSOAL_SLUGS.has(categoria)) return 'pessoal'
+  return NATUREZA_POR_CATEGORIA[categoria] ?? 'nao_classificado'
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 export function mapearCategoria(classificacaoManual: string, descricao: string): string {
   const manualNorm = normalizar(classificacaoManual)
   const descricaoNorm = normalizar(descricao)

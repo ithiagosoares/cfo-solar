@@ -7,9 +7,6 @@ import {
   FileText,
   Target,
   AlertTriangle,
-  Download,
-  ChevronRight,
-  Briefcase,
   FileSpreadsheet,
   History,
   Calendar,
@@ -440,7 +437,7 @@ export default function Home() {
   const [area, setArea] = useState<Area>('financeiro')
   const [abaAtiva, setAbaAtiva] = useState<AbaFin>('dashboard')
   const [abaComAtiva, setAbaComAtiva] = useState<AbaCom>('dashboard')
-  const [nomeArquivo, setNomeArquivo] = useState('')
+
   const [mensagensChat, setMensagensChat] = useState<MensagemChat[]>([])
   const [periodoUpload, setPeriodoUpload] = useState(() => new Date().toISOString().slice(0, 7))
   const [historico, setHistorico] = useState<PeriodoResumo[]>([])
@@ -486,7 +483,6 @@ export default function Home() {
         if (cancelado) return
         if (resDetalhe.ok) {
           setRelatorio(detalhe as RelatorioCompleto)
-          setNomeArquivo(`Histórico — ${detalhe.periodo}`)
           if (tabDestino) setAbaAtiva(tabDestino)
         } else {
           setAbaAtiva('upload')
@@ -518,7 +514,6 @@ export default function Home() {
 
   const handleFileSelect = useCallback((file: File) => {
     setArquivo(file)
-    setNomeArquivo(file.name)
     setErro(null)
   }, [])
 
@@ -553,7 +548,6 @@ export default function Home() {
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? 'Erro ao carregar período')
       setRelatorio(json as RelatorioCompleto)
-      setNomeArquivo(`Histórico — ${json.periodo}`)
       setMensagensChat([])
       setAbaAtiva('dashboard')
     } catch (e) {
@@ -584,71 +578,17 @@ export default function Home() {
     <div className={styles.page}>
       <div className={`${styles.hdr} ${styles.htop}`}>
         <div className={styles.wrap}>
-          {/* Barra principal: logo + seletor de área + controles */}
-          <div className={styles.brand} style={{ justifyContent: 'space-between', width: '100%' }}>
-            <div className="flex items-center gap-3.5">
-              <img src="/logo.png" alt="CFO.IA" style={{ height: 52, width: 'auto', margin: '-9px 0' }} />
-              {area === 'financeiro' && (
-                <span className="flex items-center gap-1.5" style={{ fontSize: 12, color: 'var(--ink3)' }}>
-                  <Briefcase className="h-3 w-3" />
-                  {relatorio ? nomeArquivo : 'Nenhum relatório carregado'}
-                  {relatorio && (
-                    <>
-                      <ChevronRight className="h-3 w-3" />
-                      <span style={{ color: 'var(--ink2)', fontWeight: 500 }} className="capitalize">{relatorio.periodo}</span>
-                    </>
-                  )}
-                </span>
-              )}
-            </div>
-
-            <div className="flex items-center gap-3">
-              {/* Seletor de área */}
-              <div className={styles.areaSwitch}>
-                <button
-                  className={`${styles.swBtn} ${area === 'financeiro' ? styles.swBtnOn : ''}`}
-                  onClick={() => setArea('financeiro')}
-                >
-                  <span className={`${styles.swDot} ${styles.dotFin}`} />
-                  Financeiro
-                </button>
-                <button
-                  className={`${styles.swBtn} ${area === 'comercial' ? styles.swBtnOn : ''}`}
-                  onClick={() => setArea('comercial')}
-                >
-                  <span className={`${styles.swDot} ${styles.dotCom}`} />
-                  Comercial
-                </button>
-              </div>
-
-              {/* Controles específicos da área Financeiro */}
-              {area === 'financeiro' && relatorio && historico.length > 0 && (
-                <div className="relative flex items-center">
-                  <History className="pointer-events-none absolute left-0 h-3.5 w-3.5" style={{ color: 'var(--ink3)' }} />
-                  <select
-                    value={relatorio.periodoChave}
-                    onChange={e => handleSelecionarPeriodo(e.target.value)}
-                    disabled={trocandoPeriodo}
-                    className={styles.select}
-                    style={{ paddingLeft: 20 }}
-                  >
-                    {!historico.some(h => h.periodo === relatorio.periodoChave) && (
-                      <option value={relatorio.periodoChave}>{relatorio.periodo}</option>
-                    )}
-                    {historico.map(h => (
-                      <option key={h.periodo} value={h.periodo}>{formatarPeriodoCurto(h.periodo)}</option>
-                    ))}
-                  </select>
-                </div>
-              )}
-              {area === 'financeiro' && (
-                <button onClick={handleExportPDF} disabled={!relatorio} className={styles.btn} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <Download className="h-3.5 w-3.5" />
-                  <span className="hidden sm:block">PDF</span>
-                </button>
-              )}
-              {usuario && <UserMenu usuario={usuario} />}
-            </div>
+          {/* Barra do topo: apenas logo + avatar */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 0 16px' }}>
+            <img src="/logo.png" alt="CFO.IA" style={{ height: 48, width: 'auto' }} />
+            {usuario && (
+              <UserMenu
+                usuario={usuario}
+                onImportarArquivo={() => { setArea('financeiro'); setAbaAtiva('upload') }}
+                onExportPDF={handleExportPDF}
+                podeExportarPDF={!!relatorio}
+              />
+            )}
           </div>
 
           {erro && (
@@ -657,24 +597,62 @@ export default function Home() {
             </div>
           )}
 
-          {/* Label de área + tabs */}
-          <div
-            className={`${styles.areaLabel} ${area === 'financeiro' ? styles.areaLabelFin : styles.areaLabelCom}`}
-          >
-            {area === 'financeiro' ? 'Área Financeiro' : 'Área Comercial'}
-          </div>
+          {/* Barra de navegação: abas + seletor de mês + switch */}
+          <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 16 }}>
+            {/* Abas da área ativa */}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              {area === 'financeiro' && (
+                <NavTabs itens={abasFinVisiveis} ativo={abaAtiva} onSelecionar={setAbaAtiva} />
+              )}
+              {area === 'comercial' && (
+                <NavTabs
+                  itens={ABAS_COM}
+                  ativo={abaComAtiva}
+                  onSelecionar={setAbaComAtiva}
+                  activeTabCls={styles.tabOnCom}
+                />
+              )}
+            </div>
 
-          {area === 'financeiro' && (
-            <NavTabs itens={abasFinVisiveis} ativo={abaAtiva} onSelecionar={setAbaAtiva} />
-          )}
-          {area === 'comercial' && (
-            <NavTabs
-              itens={ABAS_COM}
-              ativo={abaComAtiva}
-              onSelecionar={setAbaComAtiva}
-              activeTabCls={styles.tabOnCom}
-            />
-          )}
+            {/* Seletor de mês (só Financeiro com dados) */}
+            {area === 'financeiro' && relatorio && historico.length > 0 && (
+              <div className="relative flex items-center" style={{ marginBottom: 14, flexShrink: 0 }}>
+                <History className="pointer-events-none absolute left-0 h-3.5 w-3.5" style={{ color: 'var(--ink3)' }} />
+                <select
+                  value={relatorio.periodoChave}
+                  onChange={e => handleSelecionarPeriodo(e.target.value)}
+                  disabled={trocandoPeriodo}
+                  className={styles.select}
+                  style={{ paddingLeft: 20 }}
+                >
+                  {!historico.some(h => h.periodo === relatorio.periodoChave) && (
+                    <option value={relatorio.periodoChave}>{relatorio.periodo}</option>
+                  )}
+                  {historico.map(h => (
+                    <option key={h.periodo} value={h.periodo}>{formatarPeriodoCurto(h.periodo)}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* Switch Financeiro / Comercial */}
+            <div className={styles.areaSwitch} style={{ marginBottom: 14, flexShrink: 0 }}>
+              <button
+                className={`${styles.swBtn} ${area === 'financeiro' ? styles.swBtnOn : ''}`}
+                onClick={() => setArea('financeiro')}
+              >
+                <span className={`${styles.swDot} ${styles.dotFin}`} />
+                Financeiro
+              </button>
+              <button
+                className={`${styles.swBtn} ${area === 'comercial' ? styles.swBtnOn : ''}`}
+                onClick={() => setArea('comercial')}
+              >
+                <span className={`${styles.swDot} ${styles.dotCom}`} />
+                Comercial
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 

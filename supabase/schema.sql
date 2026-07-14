@@ -69,6 +69,52 @@ values
    'T-Cross Matheus — mobilidade corporativa reclassificada de pró-labore', 'seed');
 */
 
+-- ─── vendedores — adicionado 2026-07-14 ──────────────────────────────────────
+
+create table vendedores (
+  id uuid primary key default gen_random_uuid(),
+  nome text not null unique,
+  ativo boolean not null default true,
+  created_at timestamptz default now()
+);
+
+create index idx_vendedores_ativo on vendedores(ativo);
+
+grant select, insert, update, delete on vendedores to service_role;
+
+-- ─── Seed inicial — rodar manualmente no SQL Editor do Supabase ───────────
+
+/*
+insert into vendedores (nome) values
+  ('Ingrid'),
+  ('Matheus'),
+  ('Débora'),
+  ('Pedro'),
+  ('Genival Peixoto'),
+  ('Arthur');
+*/
+
+-- ─── comercial_pedidos — adicionado 2026-07-14 ────────────────────────────
+
+create table comercial_pedidos (
+  id uuid primary key default gen_random_uuid(),
+  vendedor_id uuid references vendedores(id),
+  empresa text,
+  filial text,
+  cliente text not null,
+  valor_orcado numeric not null,
+  data_orcamento date,
+  status text not null default 'orcado' check (status in ('orcado', 'vendido')),
+  valor_vendido numeric,
+  data_venda date,
+  created_at timestamptz default now()
+);
+
+create index idx_pedidos_vendedor on comercial_pedidos(vendedor_id);
+create index idx_pedidos_status on comercial_pedidos(status);
+
+grant select, insert, update, delete on comercial_pedidos to service_role;
+
 -- ─── investimentos_capex — adicionado 2026-07-13 ───────────────────────────
 
 create table investimentos_capex (

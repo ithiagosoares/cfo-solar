@@ -121,15 +121,26 @@ export function UserMenu({ usuario, onImportarArquivo, onExportPDF, podeExportar
             )}
 
             {usuario.role === 'admin' && (
-              <a
-                href="/admin/usuarios"
-                className={styles.menuItem}
-                onClick={() => setOpen(false)}
-                style={{ textDecoration: 'none' }}
-              >
-                <Users className="h-3.5 w-3.5" />
-                Usuários do sistema
-              </a>
+              <>
+                <a
+                  href="/admin/usuarios"
+                  className={styles.menuItem}
+                  onClick={() => setOpen(false)}
+                  style={{ textDecoration: 'none' }}
+                >
+                  <Users className="h-3.5 w-3.5" />
+                  Usuários do sistema
+                </a>
+                <a
+                  href="/admin/vendedores"
+                  className={styles.menuItem}
+                  onClick={() => setOpen(false)}
+                  style={{ textDecoration: 'none' }}
+                >
+                  <Users className="h-3.5 w-3.5" />
+                  Vendedores
+                </a>
+              </>
             )}
 
             <button

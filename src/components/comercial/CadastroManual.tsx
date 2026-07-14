@@ -1,12 +1,14 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import styles from '@/styles/editorial.module.css'
 import { formatMoeda } from '@/lib/utils'
+import { ComboboxBusca, type OpcaoCombobox } from '@/components/ui/ComboboxBusca'
 
 type StatusPedido = 'orcado' | 'vendido'
 
 interface Pedido {
+  vendedorId: string | null
   vendedor: string
   empresa: string
   filial: string
@@ -18,7 +20,6 @@ interface Pedido {
   dataVenda: string | null
 }
 
-const VENDEDORES_OPT = ['Carla Nunes', 'Ana Ferreira', 'Bruno Castilho', 'Elaine Sousa', 'Diego Martins']
 const EMPRESAS_OPT = [
   'CFO Solar Estruturas Ltda',
   'CFO Solar Distribuição Norte',
@@ -29,15 +30,16 @@ const EMPRESAS_OPT = [
 const CLIENTES_OPT = ['Neo Solar Distribuidora', 'EcoVolt Energia', 'Sol Nascente Engenharia', 'Helios Montagens', 'Fotovolt Sul']
 
 const PEDIDOS_INICIAIS: Pedido[] = [
-  { vendedor: 'Carla Nunes', empresa: 'CFO Solar Estruturas Ltda', filial: 'São Paulo', cliente: 'Neo Solar Distribuidora', valorOrcado: 128000, dataOrcamento: '2026-07-10', status: 'orcado', valorVendido: null, dataVenda: null },
-  { vendedor: 'Ana Ferreira', empresa: 'CFO Solar Distribuição Norte', filial: 'São Paulo', cliente: 'EcoVolt Energia', valorOrcado: 64500, dataOrcamento: '2026-07-11', status: 'vendido', valorVendido: 61200, dataVenda: '2026-07-12' },
-  { vendedor: 'Elaine Sousa', empresa: 'CFO Solar Participações', filial: 'Paraná', cliente: 'Fotovolt Sul', valorOrcado: 33800, dataOrcamento: '2026-07-12', status: 'orcado', valorVendido: null, dataVenda: null },
-  { vendedor: 'Diego Martins', empresa: 'CFO Solar Comercial Sul', filial: 'Paraná', cliente: 'Sol Nascente Engenharia', valorOrcado: 47200, dataOrcamento: '2026-07-09', status: 'vendido', valorVendido: 47200, dataVenda: '2026-07-13' },
-  { vendedor: 'Bruno Castilho', empresa: 'CFO Solar Trading Ltda', filial: 'São Paulo', cliente: 'Helios Montagens', valorOrcado: 29500, dataOrcamento: '2026-07-13', status: 'orcado', valorVendido: null, dataVenda: null },
+  { vendedorId: null, vendedor: 'Ingrid', empresa: 'CFO Solar Estruturas Ltda', filial: 'São Paulo', cliente: 'Neo Solar Distribuidora', valorOrcado: 128000, dataOrcamento: '2026-07-10', status: 'orcado', valorVendido: null, dataVenda: null },
+  { vendedorId: null, vendedor: 'Matheus', empresa: 'CFO Solar Distribuição Norte', filial: 'São Paulo', cliente: 'EcoVolt Energia', valorOrcado: 64500, dataOrcamento: '2026-07-11', status: 'vendido', valorVendido: 61200, dataVenda: '2026-07-12' },
+  { vendedorId: null, vendedor: 'Débora', empresa: 'CFO Solar Participações', filial: 'Paraná', cliente: 'Fotovolt Sul', valorOrcado: 33800, dataOrcamento: '2026-07-12', status: 'orcado', valorVendido: null, dataVenda: null },
+  { vendedorId: null, vendedor: 'Pedro', empresa: 'CFO Solar Comercial Sul', filial: 'Paraná', cliente: 'Sol Nascente Engenharia', valorOrcado: 47200, dataOrcamento: '2026-07-09', status: 'vendido', valorVendido: 47200, dataVenda: '2026-07-13' },
+  { vendedorId: null, vendedor: 'Genival Peixoto', empresa: 'CFO Solar Trading Ltda', filial: 'São Paulo', cliente: 'Helios Montagens', valorOrcado: 29500, dataOrcamento: '2026-07-13', status: 'orcado', valorVendido: null, dataVenda: null },
 ]
 
 type FormState = {
-  vendedor: string
+  vendedorId: string | null
+  vendedorNome: string
   empresa: string
   filial: string
   cliente: string
@@ -46,6 +48,19 @@ type FormState = {
   status: StatusPedido
   valorVendido: string
   dataVenda: string
+}
+
+const FORM_INICIAL: FormState = {
+  vendedorId: null,
+  vendedorNome: '',
+  empresa: EMPRESAS_OPT[0],
+  filial: 'São Paulo',
+  cliente: '',
+  valorOrcado: '',
+  dataOrcamento: '',
+  status: 'orcado',
+  valorVendido: '',
+  dataVenda: '',
 }
 
 function fmtDate(d: string | null): string {
@@ -59,26 +74,44 @@ export function CadastroManual() {
   const [editIdx, setEditIdx] = useState<number | null>(null)
   const [editValor, setEditValor] = useState('')
   const [editData, setEditData] = useState('')
-  const [form, setForm] = useState<FormState>({
-    vendedor: VENDEDORES_OPT[0],
-    empresa: EMPRESAS_OPT[0],
-    filial: 'São Paulo',
-    cliente: '',
-    valorOrcado: '',
-    dataOrcamento: '',
-    status: 'orcado',
-    valorVendido: '',
-    dataVenda: '',
-  })
+  const [form, setForm] = useState<FormState>(FORM_INICIAL)
+  const [vendedoresOpt, setVendedoresOpt] = useState<OpcaoCombobox[]>([])
+  const [carregandoVend, setCarregandoVend] = useState(true)
+
+  useEffect(() => {
+    fetch('/api/comercial/vendedores')
+      .then(r => r.json() as Promise<{ ok: boolean; vendedores?: { id: string; nome: string }[] }>)
+      .then(json => {
+        if (json.ok && json.vendedores) {
+          setVendedoresOpt(json.vendedores.map(v => ({ id: v.id, label: v.nome })))
+        }
+      })
+      .catch(() => { /* silencioso — lista fica vazia */ })
+      .finally(() => setCarregandoVend(false))
+  }, [])
+
+  async function criarVendedor(nome: string): Promise<OpcaoCombobox> {
+    const res = await fetch('/api/comercial/vendedores', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nome }),
+    })
+    const json = await res.json() as { ok: boolean; vendedor?: { id: string; nome: string }; error?: string }
+    if (!json.ok || !json.vendedor) throw new Error(json.error ?? 'Erro ao criar vendedor')
+    const nova: OpcaoCombobox = { id: json.vendedor.id, label: json.vendedor.nome }
+    setVendedoresOpt(prev => [...prev, nova].sort((a, b) => a.label.localeCompare(b.label)))
+    return nova
+  }
 
   function updateForm(patch: Partial<FormState>) {
     setForm(f => ({ ...f, ...patch }))
   }
 
   function submitForm() {
-    if (!form.cliente || !form.valorOrcado) return
+    if (!form.vendedorNome || !form.cliente || !form.valorOrcado) return
     const novo: Pedido = {
-      vendedor: form.vendedor,
+      vendedorId: form.vendedorId,
+      vendedor: form.vendedorNome,
       empresa: form.empresa,
       filial: form.filial,
       cliente: form.cliente,
@@ -89,7 +122,7 @@ export function CadastroManual() {
       dataVenda: form.status === 'vendido' ? (form.dataVenda || null) : null,
     }
     setPedidos(p => [novo, ...p])
-    setForm({ vendedor: VENDEDORES_OPT[0], empresa: EMPRESAS_OPT[0], filial: 'São Paulo', cliente: '', valorOrcado: '', dataOrcamento: '', status: 'orcado', valorVendido: '', dataVenda: '' })
+    setForm(FORM_INICIAL)
   }
 
   function confirmSale(i: number) {
@@ -115,9 +148,15 @@ export function CadastroManual() {
         <div style={{ maxWidth: 460, display: 'flex', flexDirection: 'column', gap: 18, marginTop: 28 }}>
           <div className={styles.field}>
             <label className={styles.fieldLabel}>Vendedor</label>
-            <select className={styles.select} value={form.vendedor} onChange={e => updateForm({ vendedor: e.target.value })}>
-              {VENDEDORES_OPT.map(v => <option key={v} value={v}>{v}</option>)}
-            </select>
+            <ComboboxBusca
+              opcoes={vendedoresOpt}
+              valorId={form.vendedorId}
+              valorLabel={form.vendedorNome}
+              onChange={opcao => updateForm({ vendedorId: opcao?.id ?? null, vendedorNome: opcao?.label ?? '' })}
+              onCriarNovo={criarVendedor}
+              placeholder="Nome do vendedor"
+              carregando={carregandoVend}
+            />
           </div>
 
           <div className={styles.field}>

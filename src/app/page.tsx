@@ -24,25 +24,44 @@ import { ClienteTabela } from '@/components/dashboard/ClienteTabela'
 import { EmpresaCard } from '@/components/dashboard/EmpresaCard'
 import { DespesasPorCategoria } from '@/components/dashboard/DespesasPorCategoria'
 import { RelatorioView } from '@/components/relatorio/RelatorioView'
+import { MetricaComFormula } from '@/components/relatorio/MetricaComFormula'
 import { ChatPanel } from '@/components/chat/ChatPanel'
 import { ComparativoView } from '@/components/comparativo/ComparativoView'
+import { ComercialDashboard } from '@/components/comercial/ComercialDashboard'
+import { CadastroManual } from '@/components/comercial/CadastroManual'
 import type { RelatorioCompleto, MensagemChat, PeriodoResumo } from '@/types/financeiro'
 import { formatMoeda, formatPercentual, formatMargem, calcularVariacao, formatarPeriodoCurto } from '@/lib/utils'
 import { FGI_FIXO, META_MENSAL } from '@/lib/constantes'
 import styles from '@/styles/editorial.module.css'
 
-type Aba = 'dashboard' | 'empresas' | 'despesas' | 'clientes' | 'comercial' | 'relatorio' | 'comparativo' | 'chat' | 'upload'
+type Area = 'financeiro' | 'comercial'
+type AbaFin = 'dashboard' | 'empresas' | 'despesas' | 'clientes' | 'relatorio' | 'comparativo' | 'chat' | 'upload'
+type AbaCom = 'dashboard' | 'cadastro' | 'upload-ia' | 'revisao'
 
-const ABAS: ItemNavTab<Aba>[] = [
-  { id: 'dashboard',    label: 'Dashboard' },
-  { id: 'empresas',     label: 'Empresas' },
-  { id: 'despesas',     label: 'Despesas' },
-  { id: 'clientes',     label: 'Clientes' },
-  { id: 'comercial',    label: 'Comercial', href: '/comercial' },
-  { id: 'relatorio',    label: 'Relatório IA' },
-  { id: 'comparativo',  label: 'Comparativo' },
-  { id: 'chat',         label: 'Chat' },
-  { id: 'upload',       label: 'Adicionar Arquivo' },
+const ABAS_FIN: ItemNavTab<AbaFin>[] = [
+  { id: 'dashboard',   label: 'Dashboard' },
+  { id: 'empresas',    label: 'Empresas' },
+  { id: 'despesas',    label: 'Despesas' },
+  { id: 'clientes',    label: 'Clientes' },
+  { id: 'relatorio',   label: 'Relatório IA' },
+  { id: 'comparativo', label: 'Comparativo' },
+  { id: 'chat',        label: 'Chat' },
+  { id: 'upload',      label: 'Adicionar Arquivo' },
+]
+
+const ABAS_COM: ItemNavTab<AbaCom>[] = [
+  { id: 'dashboard', label: 'Dashboard' },
+  { id: 'cadastro',  label: 'Cadastro Manual' },
+  { id: 'upload-ia', label: 'Upload de Relatório (IA)' },
+  { id: 'revisao',   label: 'Revisão de Dados' },
+]
+
+// Dados mock para Revisão — a conectar com pipeline de extração IA
+const REVISAO_ITEMS = [
+  { cliente: 'Neo Solar Distribuidora', produto: 'Perfil de Alumínio 40mm', qtd: '120', conf: '96%' },
+  { cliente: 'EcoVolt Energia',         produto: 'Conector MC4 Par',         qtd: '80',  conf: '91%' },
+  { cliente: 'Fotovolt Sul',            produto: 'Cabo Solar 6mm² Vermelho',  qtd: '500', conf: '78%' },
+  { cliente: 'Helios Montagens',        produto: 'Trilho de Fixação 2.10m',   qtd: '40',  conf: '99%' },
 ]
 
 // ─── Full-screen loading state (initial Supabase check + analyzing) ────────────────
@@ -324,11 +343,14 @@ function DashboardView({ relatorio, mesAnterior }: { relatorio: RelatorioComplet
           ))}
         </div>
 
-        <div className="mt-4 pt-4 flex items-center justify-between" style={{ borderTop: '1px solid var(--line)' }}>
-          <p style={{ fontSize: 12, color: 'var(--ink3)' }}>Margem líquida de caixa</p>
-          <span style={{ fontSize: 13, fontWeight: 600, color: margemLiquida >= 0 ? 'var(--positivo)' : 'var(--critico)' }}>
-            {formatPercentual(margemLiquida)}
-          </span>
+        <div className="mt-4 pt-4" style={{ borderTop: '1px solid var(--line)' }}>
+          <MetricaComFormula
+            variant="compact"
+            label="Margem líquida de caixa"
+            valor={formatPercentual(margemLiquida)}
+            formula={`(${formatMoeda(consolidado.totalEntradas)} − ${formatMoeda(consolidado.totalSaidas)}) ÷ ${formatMoeda(consolidado.totalEntradas)} = ${formatPercentual(margemLiquida)}`}
+            cor={margemLiquida >= 0 ? 'success' : 'danger'}
+          />
         </div>
       </div>
 
@@ -415,7 +437,9 @@ export default function Home() {
   const [arquivo, setArquivo] = useState<File | null>(null)
   const [analisando, setAnalisando] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
-  const [abaAtiva, setAbaAtiva] = useState<Aba>('dashboard')
+  const [area, setArea] = useState<Area>('financeiro')
+  const [abaAtiva, setAbaAtiva] = useState<AbaFin>('dashboard')
+  const [abaComAtiva, setAbaComAtiva] = useState<AbaCom>('dashboard')
   const [nomeArquivo, setNomeArquivo] = useState('')
   const [mensagensChat, setMensagensChat] = useState<MensagemChat[]>([])
   const [periodoUpload, setPeriodoUpload] = useState(() => new Date().toISOString().slice(0, 7))
@@ -444,8 +468,8 @@ export default function Home() {
     let cancelado = false
     async function carregarMaisRecente() {
       // Lê ?tab= aqui dentro do useEffect — window está disponível (somos cliente)
-      const urlTab = new URLSearchParams(window.location.search).get('tab') as Aba | null
-      const TABS_VALIDAS: Aba[] = ['dashboard', 'empresas', 'despesas', 'clientes', 'relatorio', 'comparativo', 'chat', 'upload']
+      const urlTab = new URLSearchParams(window.location.search).get('tab') as AbaFin | null
+      const TABS_VALIDAS: AbaFin[] = ['dashboard', 'empresas', 'despesas', 'clientes', 'relatorio', 'comparativo', 'chat', 'upload']
       const tabDestino = (urlTab && TABS_VALIDAS.includes(urlTab)) ? urlTab : null
 
       try {
@@ -485,7 +509,9 @@ export default function Home() {
       .catch(() => {})
   }, [relatorio?.periodoChave])
 
-  const abasVisiveis = usuario?.role === 'viewer' ? ABAS.filter(a => a.id !== 'upload') : ABAS
+  const abasFinVisiveis = usuario?.role === 'viewer'
+    ? ABAS_FIN.filter((a: ItemNavTab<AbaFin>) => a.id !== 'upload')
+    : ABAS_FIN
 
   const indiceAtual = relatorio ? historico.findIndex(h => h.periodo === relatorio.periodoChave) : -1
   const mesAnterior = indiceAtual !== -1 && indiceAtual + 1 < historico.length ? historico[indiceAtual + 1] : null
@@ -558,23 +584,45 @@ export default function Home() {
     <div className={styles.page}>
       <div className={`${styles.hdr} ${styles.htop}`}>
         <div className={styles.wrap}>
+          {/* Barra principal: logo + seletor de área + controles */}
           <div className={styles.brand} style={{ justifyContent: 'space-between', width: '100%' }}>
             <div className="flex items-center gap-3.5">
               <img src="/logo.png" alt="CFO.IA" style={{ height: 52, width: 'auto', margin: '-9px 0' }} />
-              <span className="flex items-center gap-1.5" style={{ fontSize: 12, color: 'var(--ink3)' }}>
-                <Briefcase className="h-3 w-3" />
-                {relatorio ? nomeArquivo : 'Nenhum relatório carregado'}
-                {relatorio && (
-                  <>
-                    <ChevronRight className="h-3 w-3" />
-                    <span style={{ color: 'var(--ink2)', fontWeight: 500 }} className="capitalize">{relatorio.periodo}</span>
-                  </>
-                )}
-              </span>
+              {area === 'financeiro' && (
+                <span className="flex items-center gap-1.5" style={{ fontSize: 12, color: 'var(--ink3)' }}>
+                  <Briefcase className="h-3 w-3" />
+                  {relatorio ? nomeArquivo : 'Nenhum relatório carregado'}
+                  {relatorio && (
+                    <>
+                      <ChevronRight className="h-3 w-3" />
+                      <span style={{ color: 'var(--ink2)', fontWeight: 500 }} className="capitalize">{relatorio.periodo}</span>
+                    </>
+                  )}
+                </span>
+              )}
             </div>
 
             <div className="flex items-center gap-3">
-              {relatorio && historico.length > 0 && (
+              {/* Seletor de área */}
+              <div className={styles.areaSwitch}>
+                <button
+                  className={`${styles.swBtn} ${area === 'financeiro' ? styles.swBtnOn : ''}`}
+                  onClick={() => setArea('financeiro')}
+                >
+                  <span className={`${styles.swDot} ${styles.dotFin}`} />
+                  Financeiro
+                </button>
+                <button
+                  className={`${styles.swBtn} ${area === 'comercial' ? styles.swBtnOn : ''}`}
+                  onClick={() => setArea('comercial')}
+                >
+                  <span className={`${styles.swDot} ${styles.dotCom}`} />
+                  Comercial
+                </button>
+              </div>
+
+              {/* Controles específicos da área Financeiro */}
+              {area === 'financeiro' && relatorio && historico.length > 0 && (
                 <div className="relative flex items-center">
                   <History className="pointer-events-none absolute left-0 h-3.5 w-3.5" style={{ color: 'var(--ink3)' }} />
                   <select
@@ -593,12 +641,12 @@ export default function Home() {
                   </select>
                 </div>
               )}
-
-              <button onClick={handleExportPDF} disabled={!relatorio} className={styles.btn} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <Download className="h-3.5 w-3.5" />
-                <span className="hidden sm:block">PDF</span>
-              </button>
-
+              {area === 'financeiro' && (
+                <button onClick={handleExportPDF} disabled={!relatorio} className={styles.btn} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <Download className="h-3.5 w-3.5" />
+                  <span className="hidden sm:block">PDF</span>
+                </button>
+              )}
               {usuario && <UserMenu usuario={usuario} />}
             </div>
           </div>
@@ -609,49 +657,114 @@ export default function Home() {
             </div>
           )}
 
-          <NavTabs itens={abasVisiveis} ativo={abaAtiva} onSelecionar={setAbaAtiva} />
+          {/* Label de área + tabs */}
+          <div
+            className={`${styles.areaLabel} ${area === 'financeiro' ? styles.areaLabelFin : styles.areaLabelCom}`}
+          >
+            {area === 'financeiro' ? 'Área Financeiro' : 'Área Comercial'}
+          </div>
+
+          {area === 'financeiro' && (
+            <NavTabs itens={abasFinVisiveis} ativo={abaAtiva} onSelecionar={setAbaAtiva} />
+          )}
+          {area === 'comercial' && (
+            <NavTabs
+              itens={ABAS_COM}
+              ativo={abaComAtiva}
+              onSelecionar={setAbaComAtiva}
+              activeTabCls={styles.tabOnCom}
+            />
+          )}
         </div>
       </div>
 
       <main className={styles.wrap} style={{ paddingTop: 34, paddingBottom: 60 }}>
-        {abaAtiva === 'upload' && (
-          <UploadPanel
-            arquivo={arquivo}
-            erro={erro}
-            periodo={periodoUpload}
-            onPeriodoChange={setPeriodoUpload}
-            onFileSelect={handleFileSelect}
-            onAnalisar={handleAnalisar}
-          />
+        {/* ── Área Financeiro ─────────────────────────────────────────────── */}
+        {area === 'financeiro' && (
+          <>
+            {abaAtiva === 'upload' && (
+              <UploadPanel
+                arquivo={arquivo}
+                erro={erro}
+                periodo={periodoUpload}
+                onPeriodoChange={setPeriodoUpload}
+                onFileSelect={handleFileSelect}
+                onAnalisar={handleAnalisar}
+              />
+            )}
+            {abaAtiva === 'dashboard' && (
+              relatorio ? <DashboardView relatorio={relatorio} mesAnterior={mesAnterior} /> : <EstadoVazio onIrParaUpload={() => setAbaAtiva('upload')} />
+            )}
+            {abaAtiva === 'empresas' && (
+              relatorio ? <EmpresasView relatorio={relatorio} /> : <EstadoVazio onIrParaUpload={() => setAbaAtiva('upload')} />
+            )}
+            {abaAtiva === 'despesas' && (
+              relatorio ? (
+                <DespesasPorCategoria
+                  despesasGrupo={relatorio.consolidado.despesasPorCategoriaGrupo}
+                  resumoCustosGrupo={relatorio.consolidado.resumoCustosGrupo}
+                  empresas={relatorio.empresas}
+                />
+              ) : <EstadoVazio onIrParaUpload={() => setAbaAtiva('upload')} />
+            )}
+            {abaAtiva === 'clientes' && (
+              relatorio ? <ClienteTabela clientes={relatorio.clientes} /> : <EstadoVazio onIrParaUpload={() => setAbaAtiva('upload')} />
+            )}
+            {abaAtiva === 'relatorio' && (
+              relatorio ? <RelatorioView relatorio={relatorio} mesAnterior={mesAnterior} /> : <EstadoVazio onIrParaUpload={() => setAbaAtiva('upload')} />
+            )}
+            {abaAtiva === 'comparativo' && <ComparativoView />}
+            {abaAtiva === 'chat' && (
+              <ChatPanel
+                relatorio={relatorio}
+                mensagens={mensagensChat}
+                onMensagensChange={setMensagensChat}
+              />
+            )}
+          </>
         )}
-        {abaAtiva === 'dashboard' && (
-          relatorio ? <DashboardView relatorio={relatorio} mesAnterior={mesAnterior} /> : <EstadoVazio onIrParaUpload={() => setAbaAtiva('upload')} />
-        )}
-        {abaAtiva === 'empresas' && (
-          relatorio ? <EmpresasView relatorio={relatorio} /> : <EstadoVazio onIrParaUpload={() => setAbaAtiva('upload')} />
-        )}
-        {abaAtiva === 'despesas' && (
-          relatorio ? (
-            <DespesasPorCategoria
-              despesasGrupo={relatorio.consolidado.despesasPorCategoriaGrupo}
-              resumoCustosGrupo={relatorio.consolidado.resumoCustosGrupo}
-              empresas={relatorio.empresas}
-            />
-          ) : <EstadoVazio onIrParaUpload={() => setAbaAtiva('upload')} />
-        )}
-        {abaAtiva === 'clientes' && (
-          relatorio ? <ClienteTabela clientes={relatorio.clientes} /> : <EstadoVazio onIrParaUpload={() => setAbaAtiva('upload')} />
-        )}
-        {abaAtiva === 'relatorio' && (
-          relatorio ? <RelatorioView analise={relatorio.analise} /> : <EstadoVazio onIrParaUpload={() => setAbaAtiva('upload')} />
-        )}
-        {abaAtiva === 'comparativo' && <ComparativoView />}
-        {abaAtiva === 'chat' && (
-          <ChatPanel
-            relatorio={relatorio}
-            mensagens={mensagensChat}
-            onMensagensChange={setMensagensChat}
-          />
+
+        {/* ── Área Comercial ───────────────────────────────────────────────── */}
+        {area === 'comercial' && (
+          <>
+            {abaComAtiva === 'dashboard' && <ComercialDashboard />}
+            {abaComAtiva === 'cadastro' && <CadastroManual />}
+            {abaComAtiva === 'upload-ia' && (
+              <div className="flex flex-col animate-fadeIn">
+                <div className={`${styles.stitle} ${styles.serif}`}>Upload de Relatório (IA)</div>
+                <div className={styles.scap}>Envie um relatório de vendas para extração automática dos pedidos.</div>
+                <div className={styles.dropCom} style={{ maxWidth: 520 }}>
+                  <div className={styles.dropTitle}>Arraste um arquivo aqui ou clique para selecionar</div>
+                  <div className={styles.dropCaption}>PDF, XLSX ou CSV — a IA identifica cliente, produtos e quantidades automaticamente.</div>
+                </div>
+              </div>
+            )}
+            {abaComAtiva === 'revisao' && (
+              <div className="flex flex-col animate-fadeIn">
+                <div className={`${styles.stitle} ${styles.serif}`}>Revisão de Dados</div>
+                <div className={styles.scap}>Itens extraídos pela IA aguardando confirmação antes de entrar no sistema.</div>
+                <div className={`${styles.thead} ${styles.trev}`} style={{ marginTop: 18 }}>
+                  <div>Cliente</div>
+                  <div>Produto</div>
+                  <div className={styles.right}>Qtd</div>
+                  <div className={styles.right}>Confiança</div>
+                  <div className={styles.right}>Ação</div>
+                </div>
+                {REVISAO_ITEMS.map((r, i) => (
+                  <div key={i} className={`${styles.trow} ${styles.trev}`}>
+                    <div className={styles.fn}>{r.cliente}</div>
+                    <div className={styles.conf} style={{ color: 'var(--ink2)' }}>{r.produto}</div>
+                    <div className={`${styles.right} ${styles.num}`}>{r.qtd}</div>
+                    <div className={`${styles.right} ${styles.num}`}>{r.conf}</div>
+                    <div className={styles.actGroup}>
+                      <button className={`${styles.actBtn} ${styles.actOk}`}>Aprovar</button>
+                      <button className={`${styles.actBtn} ${styles.actNo}`}>Rejeitar</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
         )}
       </main>
     </div>

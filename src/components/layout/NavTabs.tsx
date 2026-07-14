@@ -15,14 +15,16 @@ interface NavTabsProps<T extends string> {
   itens: ItemNavTab<T>[]
   ativo: T
   onSelecionar?: (id: T) => void
+  /** Substitui styles.tabOn para áreas com acento diferente (ex: Comercial) */
+  activeTabCls?: string
 }
 
-export function NavTabs<T extends string>({ itens, ativo, onSelecionar }: NavTabsProps<T>) {
+export function NavTabs<T extends string>({ itens, ativo, onSelecionar, activeTabCls }: NavTabsProps<T>) {
   return (
     <nav className={styles.nav}>
       {itens.map(({ id, label, href }) => {
         const ativa = ativo === id
-        const className = `${styles.tab} ${ativa ? styles.tabOn : ''}`
+        const className = `${styles.tab} ${ativa ? (activeTabCls ?? styles.tabOn) : ''}`
 
         if (href) {
           return (

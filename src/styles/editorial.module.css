@@ -212,6 +212,112 @@
 .filtroDate { border: none; border-bottom: 1px solid var(--line2); background: none; color: var(--foreground); font-family: inherit; font-size: 12px; padding: 0 2px 2px; outline: none; width: 112px; cursor: pointer; }
 .filtroDate:focus { border-bottom-color: var(--marca); }
 
+/* ─── Seletor de área (Financeiro / Comercial) ──────────────────────────── */
+
+.areaSwitch { display: flex; border: 1px solid var(--line2); overflow: hidden; }
+.swBtn { display: flex; align-items: center; gap: 8px; padding: 8px 14px; font-size: 12px; font-weight: 600; letter-spacing: .02em; color: var(--ink3); cursor: pointer; border-right: 1px solid var(--line2); background: var(--background); font-family: inherit; border-left: none; border-top: none; border-bottom: none; white-space: nowrap; }
+.swBtn:last-child { border-right: none; }
+.swBtnOn { color: var(--background) !important; background: var(--foreground) !important; }
+.swDot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+.dotFin { background: var(--info); }
+.dotCom { background: var(--accentCom); }
+.areaLabel { font-size: 10.5px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; padding: 18px 0 10px; }
+.areaLabelFin { color: var(--info); }
+.areaLabelCom { color: var(--accentCom); }
+.tabOnCom { color: var(--accentCom); font-weight: 600; border-bottom-color: var(--accentCom); }
+
+/* ─── Seções empilhadas com espaço maior (Comercial Dashboard) ─────────── */
+
+.dsection { margin-top: 56px; }
+.dsection.first { margin-top: 0; }
+
+/* ─── Card de oportunidade ────────────────────────────────────────────── */
+
+.oppGrid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1px; background: var(--line2); border: 1px solid var(--line2); margin-top: 24px; }
+.oppCard { background: var(--background); padding: 22px 24px; }
+.oppVendedor { font-size: 10.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--ink3); margin-bottom: 14px; }
+.oppItem { padding: 12px 0; border-top: 1px solid var(--line); }
+.oppItem:first-of-type { border-top: none; padding-top: 0; }
+.oppCliente { font-size: 14.5px; font-weight: 500; }
+.oppDesc { font-size: 12.5px; color: var(--ink2); margin-top: 3px; }
+.oppMeta { display: flex; justify-content: space-between; align-items: baseline; margin-top: 8px; }
+.oppTag { font-size: 10px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--accentCom); }
+.oppVal { font-size: 15px; font-weight: 600; color: var(--accentCom); }
+
+/* ─── Ranking de vendedores ──────────────────────────────────────────── */
+
+.rankTabs { display: flex; gap: 24px; overflow-x: auto; scrollbar-width: none; border-bottom: 1px solid var(--line2); margin: 24px 0 26px; }
+.rankTabs::-webkit-scrollbar { display: none; }
+.rankTab { padding: 0 0 11px; font-size: 13px; color: var(--ink3); cursor: pointer; white-space: nowrap; border: none; border-bottom: 2px solid transparent; margin-bottom: -1px; background: none; font-family: inherit; }
+.rankTab:hover { color: var(--foreground); }
+.rankTabOn { color: var(--foreground); font-weight: 600; border-bottom-color: var(--accentCom); }
+.rankBlock { margin-bottom: 32px; }
+.rankBlock:last-child { margin-bottom: 0; }
+.rbHead { display: flex; justify-content: space-between; align-items: baseline; padding-bottom: 10px; border-bottom: 1px solid var(--line2); }
+.rbName { font-size: 15px; font-weight: 600; }
+.rbTotal { font-size: 16px; font-weight: 600; color: var(--accentCom); }
+.rRow { display: flex; align-items: center; gap: 16px; padding: 14px 2px; border-bottom: 1px solid var(--line); }
+.rRow:last-child { border-bottom: none; }
+.rPos { font-size: 19px; color: var(--ink3); width: 24px; flex-shrink: 0; font-family: var(--font-serif); }
+.rName { font-size: 14.5px; font-weight: 600; flex: 1; }
+.rMeta { font-size: 12px; color: var(--ink2); text-align: right; }
+.rVal { font-size: 15px; font-weight: 600; text-align: right; min-width: 100px; }
+.gAnalysis p { font-size: 14.5px; line-height: 1.7; color: var(--ink2); margin: 0 0 18px; max-width: 740px; }
+.gAnalysis p:last-child { margin-bottom: 0; }
+
+/* ─── Cadastro manual — badge de status ─────────────────────────────── */
+
+.badgeOrc { font-size: 10.5px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--baixo); }
+.badgeVen { font-size: 10.5px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--positivo); }
+
+/* ─── Edit panel inline ──────────────────────────────────────────────── */
+
+.editPanel { background: var(--paper); display: flex; gap: 20px; align-items: flex-end; padding: 16px 20px; flex-wrap: wrap; border-bottom: 1px solid var(--line); }
+.editField { display: flex; flex-direction: column; gap: 6px; }
+.editLabel { font-size: 10px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--ink3); }
+.editInput { border: none; border-bottom: 1px solid var(--line2); padding: 6px 2px; font-size: 13.5px; font-family: inherit; background: transparent; color: var(--foreground); outline: none; }
+.editInput:focus { border-bottom-color: var(--accentCom); }
+.actBtn { font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; cursor: pointer; background: none; border: none; font-family: inherit; padding: 0; }
+.actOk { color: var(--positivo); }
+.actNo { color: var(--critico); }
+.wkLink { font-size: 11.5px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--accentCom); cursor: pointer; background: none; border: none; font-family: inherit; padding: 0; }
+
+/* ─── Tabela semanal de orçamentos (grid 7 colunas) ─────────────────── */
+
+.wkHead { display: grid; grid-template-columns: 1.5fr 1.1fr 1.3fr .9fr .9fr .9fr 1.3fr; gap: 14px; padding: 0 4px 11px; border-bottom: 1px solid var(--line2); }
+.wkHead > div { font-size: 10px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--ink3); }
+.wkRow { display: grid; grid-template-columns: 1.5fr 1.1fr 1.3fr .9fr .9fr .9fr 1.3fr; gap: 14px; align-items: center; padding: 14px 4px; border-bottom: 1px solid var(--line); }
+.wkCli { font-size: 14.5px; font-weight: 500; }
+.wkSub { font-size: 12px; color: var(--ink3); margin-top: 2px; }
+.wkAct { text-align: right; }
+
+/* ─── Toggle binário (Orçado/Vendido) ──────────────────────────────── */
+
+.toggle2 { display: flex; border: 1px solid var(--line2); width: fit-content; }
+.tgBtn { padding: 9px 22px; font-size: 12.5px; font-weight: 600; letter-spacing: .02em; color: var(--ink3); cursor: pointer; background: var(--background); border-right: 1px solid var(--line2); border-left: none; border-top: none; border-bottom: none; font-family: inherit; }
+.tgBtn:last-child { border-right: none; }
+.tgBtnOn { background: var(--foreground); color: var(--background); }
+
+/* ─── Revisão IA — linha de ação ─────────────────────────────────────── */
+
+.trev { grid-template-columns: 1.6fr 1.8fr .8fr .8fr 1fr; }
+.conf { font-size: 13.5px; }
+.actGroup { display: flex; gap: 14px; justify-content: flex-end; }
+
+/* ─── Upload de Relatório (IA) drop zone ────────────────────────────── */
+
+.dropCom { margin-top: 32px; border: 1px dashed var(--line2); padding: 70px 24px; text-align: center; cursor: pointer; }
+.dropCom:hover { border-color: var(--accentCom); }
+.dropTitle { font-size: 15.5px; font-weight: 500; }
+.dropCaption { font-size: 12.5px; color: var(--ink3); margin-top: 6px; }
+
+/* ─── Tabela de período com selector  ──────────────────────────────── */
+
+.periodSel { border: 1px solid var(--line2); background: transparent; font-size: 12.5px; padding: 8px 12px; color: var(--foreground); font-family: inherit; cursor: pointer; outline: none; }
+.periodSel:focus { border-color: var(--accentCom); }
+.totalLine { margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--line2); }
+.totalVal { font-size: 34px; margin-top: 6px; }
+
 @media (max-width: 860px) {
   .kpis { grid-template-columns: repeat(2, 1fr); }
   .kpi:nth-child(2) { border-right: none; }

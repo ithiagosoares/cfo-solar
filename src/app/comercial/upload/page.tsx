@@ -453,7 +453,7 @@ export default function ComercialUploadPage() {
           Upload de Relatório Comercial
         </div>
         <div className={styles.scap} style={{ marginBottom: 32 }}>
-          Importe relatórios HTML exportados do SSG para revisão antes de inserir no banco.
+          Importe relatórios em formato <strong>HTML</strong> exportados do SSG para revisão antes de inserir no banco.
           Selecione ao menos o relatório de Pedidos de Orçamento. Os demais são opcionais.
         </div>
 
@@ -473,11 +473,13 @@ export default function ComercialUploadPage() {
             transition: 'border-color .15s, background .15s',
           }}
         >
-          <div style={{ fontSize: 13, color: 'var(--ink2)', marginBottom: 6 }}>
+          <div style={{ fontSize: 13, color: 'var(--ink2)', marginBottom: 10 }}>
             Arraste arquivos <strong>.html</strong> aqui ou clique para selecionar
           </div>
-          <div style={{ fontSize: 11, color: 'var(--ink3)' }}>
-            Aceito: Pedidos de Orçamento · Totais por Vendedor · Rentabilidade por Vendedor
+          <div style={{ fontSize: 11, color: 'var(--ink3)', lineHeight: 1.7 }}>
+            Relatórios aceitos (formato HTML):<br />
+            Rentabilidade · Rentabilidade por Vendedor · Total de Venda, Margem de Contribuição e Lucro por Vendedor<br />
+            Lista de Orçamentos · Relatório de Pedidos de Orçamento
           </div>
           <input
             ref={inputRef}

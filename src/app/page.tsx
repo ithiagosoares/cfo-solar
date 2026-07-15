@@ -49,11 +49,11 @@ const ABAS_FIN: ItemNavTab<AbaFin>[] = [
 const ABAS_COM: ItemNavTab<AbaCom>[] = [
   { id: 'dashboard', label: 'Dashboard' },
   { id: 'cadastro',  label: 'Cadastro Manual' },
-  { id: 'upload-ia', label: 'Upload de Relatório (IA)' },
+  { id: 'upload-ia', label: 'Upload de Relatório', href: '/comercial/upload' },
   { id: 'revisao',   label: 'Revisão de Dados' },
 ]
 
-// Dados mock para Revisão — a conectar com pipeline de extração IA
+// Dados mock para Revisão — a conectar com pipeline de importação
 const REVISAO_ITEMS = [
   { cliente: 'Neo Solar Distribuidora', produto: 'Perfil de Alumínio 40mm', qtd: '120', conf: '96%' },
   { cliente: 'EcoVolt Energia',         produto: 'Conector MC4 Par',         qtd: '80',  conf: '91%' },
@@ -707,20 +707,10 @@ export default function Home() {
           <>
             {abaComAtiva === 'dashboard' && <ComercialDashboard />}
             {abaComAtiva === 'cadastro' && <CadastroManual />}
-            {abaComAtiva === 'upload-ia' && (
-              <div className="flex flex-col animate-fadeIn">
-                <div className={`${styles.stitle} ${styles.serif}`}>Upload de Relatório (IA)</div>
-                <div className={styles.scap}>Envie um relatório de vendas para extração automática dos pedidos.</div>
-                <div className={styles.dropCom} style={{ maxWidth: 520 }}>
-                  <div className={styles.dropTitle}>Arraste um arquivo aqui ou clique para selecionar</div>
-                  <div className={styles.dropCaption}>PDF, XLSX ou CSV — a IA identifica cliente, produtos e quantidades automaticamente.</div>
-                </div>
-              </div>
-            )}
-            {abaComAtiva === 'revisao' && (
+{abaComAtiva === 'revisao' && (
               <div className="flex flex-col animate-fadeIn">
                 <div className={`${styles.stitle} ${styles.serif}`}>Revisão de Dados</div>
-                <div className={styles.scap}>Itens extraídos pela IA aguardando confirmação antes de entrar no sistema.</div>
+                <div className={styles.scap}>Registros importados aguardando confirmação antes de entrar no sistema.</div>
                 <div className={`${styles.thead} ${styles.trev}`} style={{ marginTop: 18 }}>
                   <div>Cliente</div>
                   <div>Produto</div>

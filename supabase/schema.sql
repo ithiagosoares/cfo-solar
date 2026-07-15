@@ -82,6 +82,9 @@ create index idx_vendedores_ativo on vendedores(ativo);
 
 grant select, insert, update, delete on vendedores to service_role;
 
+alter table vendedores enable row level security;
+create policy "apenas_service_role" on vendedores using (false);
+
 -- ─── Seed inicial — rodar manualmente no SQL Editor do Supabase ───────────
 
 /*
@@ -107,13 +110,55 @@ create table comercial_pedidos (
   status text not null default 'orcado' check (status in ('orcado', 'vendido')),
   valor_vendido numeric,
   data_venda date,
+  origem text not null default 'manual' check (origem in ('manual', 'upload_estruturado')),
+  importacao_id uuid references comercial_importacoes(id),
   created_at timestamptz default now()
 );
+
+-- Se a tabela já existir sem essas colunas, rodar:
+-- alter table comercial_pedidos add column if not exists origem text not null default 'manual' check (origem in ('manual', 'upload_estruturado'));
+-- alter table comercial_pedidos add column if not exists importacao_id uuid references comercial_importacoes(id);
 
 create index idx_pedidos_vendedor on comercial_pedidos(vendedor_id);
 create index idx_pedidos_status on comercial_pedidos(status);
 
 grant select, insert, update, delete on comercial_pedidos to service_role;
+
+alter table comercial_pedidos enable row level security;
+create policy "apenas_service_role" on comercial_pedidos using (false);
+
+-- ─── comercial_importacoes — adicionado 2026-07-15 ───────────────────────────
+
+create table comercial_importacoes (
+  id uuid primary key default gen_random_uuid(),
+  status text not null default 'pendente_revisao' check (status in ('pendente_revisao', 'confirmada', 'cancelada')),
+  empresa text,
+  filial text,
+  periodo_inicio date,
+  periodo_fim date,
+  arquivos jsonb not null default '[]',              -- [{ nome, tipo }]
+  registros_total int not null default 0,
+  divergencias jsonb not null default '[]',
+  vendedores_nao_reconhecidos jsonb not null default '[]',  -- [string]
+  registros_preview jsonb not null default '[]',     -- registros mapeados para comercial_pedidos
+  criado_por text,
+  created_at timestamptz default now(),
+  confirmado_at timestamptz
+);
+
+-- Se a tabela já existe com nomes antigos, rodar:
+-- alter table comercial_importacoes rename column arquivos_processados to arquivos;
+-- alter table comercial_importacoes rename column total_registros to registros_total;
+-- alter table comercial_importacoes rename column confirmado_em to confirmado_at;
+-- alter table comercial_importacoes add column if not exists registros_preview jsonb not null default '[]';
+-- alter table comercial_importacoes add column if not exists periodo_inicio date;
+-- alter table comercial_importacoes add column if not exists periodo_fim date;
+-- alter table comercial_importacoes add column if not exists criado_por text;
+
+grant select, insert, update, delete on comercial_importacoes to service_role;
+
+alter table comercial_importacoes enable row level security;
+create policy "apenas_service_role" on comercial_importacoes using (false);
 
 -- ─── investimentos_capex — adicionado 2026-07-13 ───────────────────────────
 

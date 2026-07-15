@@ -1,216 +1,490 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import styles from '@/styles/editorial.module.css'
-import { formatMoeda } from '@/lib/utils'
+import { formatMoeda, formatData } from '@/lib/utils'
+import { MetricaComFormula } from '@/components/relatorio/MetricaComFormula'
 
-// Dados de referência (mock) — a conectar com a API do Upper
-type VendedorBase = {
-  nome: string
-  filial: string
+// ─── Tipos da resposta da API ──────────────────────────────────────────────────
+
+interface SerieVendedor {
+  vendedor: string
+  valoresPorPeriodo: { label: string; valor: number }[]
+  total: number
+}
+
+interface IndicadoresVendedor {
+  vendedor: string
   orcamentos: number
   clientesOrcados: number
   valorOrcado: number
   pedidosVendidos: number
   clientesCompradores: number
   valorVendido: number
-  semanas: number[]
-  meses: number[]
+  taxaConversaoFinanceira: number | null
+  taxaConversaoComercial: number | null
 }
 
-const VENDEDORES: VendedorBase[] = [
-  { nome: 'Carla Nunes',    filial: 'São Paulo', orcamentos: 44, clientesOrcados: 26, valorOrcado: 612000, pedidosVendidos: 34, clientesCompradores: 21, valorVendido: 498000, semanas: [130000,115000,128000,125000], meses: [165000,168000,165000] },
-  { nome: 'Ana Ferreira',   filial: 'São Paulo', orcamentos: 38, clientesOrcados: 22, valorOrcado: 420000, pedidosVendidos: 29, clientesCompradores: 18, valorVendido: 356000, semanas: [82000,95000,78000,101000], meses: [118000,120000,118000] },
-  { nome: 'Bruno Castilho', filial: 'São Paulo', orcamentos: 31, clientesOrcados: 19, valorOrcado: 298000, pedidosVendidos: 20, clientesCompradores: 14, valorVendido: 227000, semanas: [52000,60000,55000,60000], meses: [75000,76000,76000] },
-  { nome: 'Elaine Sousa',   filial: 'Paraná',    orcamentos: 29, clientesOrcados: 17, valorOrcado: 265000, pedidosVendidos: 22, clientesCompradores: 15, valorVendido: 248000, semanas: [58000,64000,60000,66000], meses: [82000,83000,83000] },
-  { nome: 'Diego Martins',  filial: 'Paraná',    orcamentos: 24, clientesOrcados: 15, valorOrcado: 214000, pedidosVendidos: 16, clientesCompradores: 11, valorVendido: 162000, semanas: [38000,40000,41000,43000], meses: [54000,54000,54000] },
-]
+interface OportunidadePedido {
+  id: string
+  cliente: string
+  valorOrcado: number
+  dataOrcamento: string | null
+  proximaAcao: string | null
+  previsaoFechamento: string | null
+  empresa: string | null
+  filial: string | null
+}
 
-const OPORTUNIDADES = [
-  { vendedor: 'Carla Nunes',    cliente: 'Neo Solar Distribuidora',  produto: 'Estrutura Solo 4 Módulos — lote de 18 un.', valor: 128000, quando: 'Orçado há 3 dias' },
-  { vendedor: 'Ana Ferreira',   cliente: 'EcoVolt Energia',          produto: 'Perfil de Alumínio 40mm — lote de 300 barras', valor: 64500, quando: 'Orçado há 5 dias' },
-  { vendedor: 'Elaine Sousa',   cliente: 'Fotovolt Sul',             produto: 'Cabo Solar 6mm² — 1.200m', valor: 33800, quando: 'Orçado há 1 dia' },
-  { vendedor: 'Diego Martins',  cliente: 'Sol Nascente Engenharia',  produto: 'Trilho de Fixação 2.10m — lote de 90 barras', valor: 47200, quando: 'Orçado há 6 dias' },
-]
+interface GrandesOportunidades {
+  vendedor: string
+  oportunidades: OportunidadePedido[]
+  totalPipeline: number
+}
 
-const GERAL_PARAGRAPHS = [
-  'Carla Nunes segue como a maior geradora de receita da filial São Paulo, sustentada por contratos de maior porte com um número mais concentrado de clientes.',
-  'Elaine Sousa tem a maior taxa de conversão da empresa, transformando quase todo o valor orçado em venda — um padrão de eficiência que se destaca mesmo com volume menor de propostas.',
-  'A filial São Paulo responde por praticamente o triplo do valor vendido da filial Paraná, mas o ticket médio por vendedor é mais equilibrado entre as duas regiões do que sugere a diferença total.',
-  'Diego Martins tem o menor volume absoluto do time neste trimestre, mas mantém conversão estável — o ponto de atenção está no volume de orçamentos gerados, não na eficiência de fechamento.',
-]
+type OppComVendedor = OportunidadePedido & { vendedor: string }
+
+const LIMITE_OPP = 10
+
+interface EntradaRanking {
+  posicao: number
+  vendedor: string
+  valor: number
+  detalhes: Record<string, number | string | null>
+  formula: string
+}
+
+interface DadosDashboard {
+  ok: boolean
+  error?: string
+  granularidade: 'semana' | 'mes'
+  labels: string[]
+  desempenhoPorVendedor: SerieVendedor[]
+  totalComercialAtualizado: number
+  indicadoresPorVendedor: IndicadoresVendedor[]
+  grandesOportunidades: GrandesOportunidades[]
+  rankings: {
+    porFilial: { saoPaulo: EntradaRanking[]; parana: EntradaRanking[] }
+    porValorOrcado: EntradaRanking[]
+    porValorVendido: EntradaRanking[]
+    conversaoFinanceira: EntradaRanking[]
+    produtividade: EntradaRanking[]
+  }
+}
+
+// ─── Helpers ───────────────────────────────────────────────────────────────────
+
+function periodoParaDatas(period: '4s' | '3m') {
+  const hoje = new Date()
+  const fim = hoje.toISOString().slice(0, 10)
+  const ini = new Date(hoje)
+  if (period === '4s') ini.setDate(hoje.getDate() - 28)
+  else ini.setMonth(hoje.getMonth() - 3)
+  return { inicio: ini.toISOString().slice(0, 10), fim }
+}
+
+function formatLabel(label: string): string {
+  const weekMatch = label.match(/^(\d{4})-W(\d{2})$/)
+  if (weekMatch) return `Sem. ${parseInt(weekMatch[2])}`
+
+  const monthMatch = label.match(/^(\d{4})-(\d{2})$/)
+  if (monthMatch) {
+    const meses = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
+    return `${meses[parseInt(monthMatch[2]) - 1]}/${monthMatch[1].slice(2)}`
+  }
+  return label
+}
+
+function diasAtras(dataIso: string | null): string {
+  if (!dataIso) return '—'
+  const diff = Math.floor((Date.now() - new Date(dataIso).getTime()) / 86_400_000)
+  if (diff === 0) return 'Orçado hoje'
+  if (diff === 1) return 'Orçado há 1 dia'
+  return `Orçado há ${diff} dias`
+}
+
+// ─── Estados auxiliares ────────────────────────────────────────────────────────
+
+function SemDados({ mensagem }: { mensagem?: string }) {
+  return (
+    <p style={{ fontSize: 13, color: 'var(--ink3)', padding: '24px 4px' }}>
+      {mensagem ?? 'Nenhum dado importado para este período ainda. Faça upload de um relatório para começar.'}
+    </p>
+  )
+}
+
+function SkeletonRows({ linhas, cols }: { linhas: number; cols: number }) {
+  return (
+    <>
+      {Array.from({ length: linhas }).map((_, ri) => (
+        <tr key={ri}>
+          {Array.from({ length: cols }).map((_, ci) => (
+            <td key={ci} style={{ ...tdStyle, ...(ci > 0 ? { textAlign: 'right' as const } : {}) }}>
+              <div
+                className="animate-pulse"
+                style={{ height: 13, background: 'var(--line2)', borderRadius: 2, width: ci === 0 ? '65%' : '50%' }}
+              />
+            </td>
+          ))}
+        </tr>
+      ))}
+    </>
+  )
+}
+
+// ─── Ranking row sem fórmula ───────────────────────────────────────────────────
+
+function RankRow({ r, meta }: { r: EntradaRanking; meta?: string }) {
+  return (
+    <div className={styles.rRow}>
+      <span className={styles.rPos}>{r.posicao}</span>
+      <span className={styles.rName}>{r.vendedor}</span>
+      {meta && <span className={styles.rMeta}>{meta}</span>}
+      <span className={`${styles.rVal} ${styles.num}`}>{formatMoeda(r.valor)}</span>
+    </div>
+  )
+}
+
+// ─── Tipos de aba de ranking ───────────────────────────────────────────────────
 
 type RankTab = 'filial' | 'orcado' | 'vendido' | 'conversao' | 'produtividade' | 'geral'
 
-function withPos<T>(arr: T[], valFn: (v: T) => number, valFmt: (v: T) => string, metaFn?: (v: T) => string) {
-  return [...arr]
-    .sort((a, b) => valFn(b) - valFn(a))
-    .map((v, i) => ({ pos: i + 1, nome: (v as VendedorBase).nome, val: valFmt(v), meta: metaFn?.(v) }))
-}
+const RANK_TABS: { id: RankTab; label: string }[] = [
+  { id: 'filial',        label: 'Por Filial' },
+  { id: 'orcado',        label: 'Valor Orçado' },
+  { id: 'vendido',       label: 'Valor Vendido' },
+  { id: 'conversao',     label: '% Conversão' },
+  { id: 'produtividade', label: 'Produtividade' },
+  { id: 'geral',         label: 'Análise Geral' },
+]
+
+// ─── Componente principal ──────────────────────────────────────────────────────
+
+type TipoPeriodo = '4s' | '3m' | 'personalizado'
+
+const OPCOES_PERIODO: { id: TipoPeriodo; label: string }[] = [
+  { id: '4s',           label: 'Últimas 4 semanas' },
+  { id: '3m',           label: 'Últimos 3 meses' },
+  { id: 'personalizado', label: 'Personalizado' },
+]
 
 export function ComercialDashboard() {
-  const [period, setPeriod] = useState<'4s' | '3m'>('4s')
+  const [tipoPeriodo, setTipoPeriodo] = useState<TipoPeriodo>('4s')
+  const [customInicio, setCustomInicio] = useState('')
+  const [customFim, setCustomFim]     = useState('')
   const [rankTab, setRankTab] = useState<RankTab>('filial')
+  const [dados, setDados] = useState<DadosDashboard | null>(null)
+  const [carregando, setCarregando] = useState(true)
+  const [erro, setErro] = useState<string | null>(null)
+  const [vendedoresSelecionados, setVendedoresSelecionados] = useState<Set<string>>(new Set())
+  const [expandidoOpp, setExpandidoOpp] = useState(false)
 
-  const periodLabels = period === '4s'
-    ? ['Semana 1', 'Semana 2', 'Semana 3', 'Semana 4']
-    : ['Mês 1', 'Mês 2', 'Mês 3']
+  // Período ativo como string estável — null quando personalizado ainda incompleto/inválido
+  const periodoAtivo = useMemo<string | null>(() => {
+    if (tipoPeriodo === 'personalizado') {
+      if (!customInicio || !customFim || customInicio > customFim) return null
+      return `${customInicio}|${customFim}`
+    }
+    const p = periodoParaDatas(tipoPeriodo)
+    return `${p.inicio}|${p.fim}`
+  }, [tipoPeriodo, customInicio, customFim])
 
-  const vendPeriodRows = VENDEDORES.map(v => ({
-    nome: v.nome,
-    periods: (period === '4s' ? v.semanas : v.meses).map(n => formatMoeda(n)),
-    total: formatMoeda(v.valorVendido),
+  useEffect(() => {
+    if (!periodoAtivo) return
+    const [inicio, fim] = periodoAtivo.split('|')
+    setCarregando(true)
+    setErro(null)
+
+    fetch(`/api/comercial/dashboard?periodoInicio=${inicio}&periodoFim=${fim}`)
+      .then(r => r.json())
+      .then((d: DadosDashboard) => {
+        if (!d.ok) throw new Error(d.error ?? 'Erro ao carregar indicadores')
+        setDados(d)
+      })
+      .catch(e => setErro(e instanceof Error ? e.message : 'Erro desconhecido'))
+      .finally(() => setCarregando(false))
+  }, [periodoAtivo])
+
+  useEffect(() => {
+    if (!dados) return
+    setVendedoresSelecionados(new Set(dados.grandesOportunidades.map(g => g.vendedor)))
+    setExpandidoOpp(false)
+  }, [dados])
+
+  // ─── Dados derivados ────────────────────────────────────────────────────────
+
+  const primeiraCarreg = carregando && dados === null
+  const vazio = !carregando && dados !== null && dados.desempenhoPorVendedor.length === 0
+
+  const labels = (dados?.labels ?? []).map(formatLabel)
+  const expectedCols = (tipoPeriodo === '3m' ? 3 : 6) + 2  // estimativa para skeleton
+
+  const seriesRows = (dados?.desempenhoPorVendedor ?? []).map(s => ({
+    nome: s.vendedor,
+    periods: s.valoresPorPeriodo.map(v => formatMoeda(v.valor)),
+    total: formatMoeda(s.total),
   }))
 
-  const totalComercial = VENDEDORES.reduce((s, v) => s + v.valorVendido, 0)
-
-  const indicadores = [
-    { label: 'Orçamentos',           values: VENDEDORES.map(v => String(v.orcamentos)) },
-    { label: 'Clientes Orçados',      values: VENDEDORES.map(v => String(v.clientesOrcados)) },
-    { label: 'Valor Orçado',          values: VENDEDORES.map(v => formatMoeda(v.valorOrcado)) },
-    { label: 'Pedidos Vendidos',      values: VENDEDORES.map(v => String(v.pedidosVendidos)) },
-    { label: 'Clientes Compradores',  values: VENDEDORES.map(v => String(v.clientesCompradores)) },
-    { label: 'Valor Vendido',         values: VENDEDORES.map(v => formatMoeda(v.valorVendido)) },
+  const indic = dados?.indicadoresPorVendedor ?? []
+  const indicRows = [
+    { label: 'Orçamentos',          values: indic.map(v => String(v.orcamentos)) },
+    { label: 'Clientes Orçados',     values: indic.map(v => String(v.clientesOrcados)) },
+    { label: 'Valor Orçado',         values: indic.map(v => formatMoeda(v.valorOrcado)) },
+    { label: 'Pedidos Vendidos',     values: indic.map(v => String(v.pedidosVendidos)) },
+    { label: 'Clientes Compradores', values: indic.map(v => String(v.clientesCompradores)) },
+    { label: 'Valor Vendido',        values: indic.map(v => formatMoeda(v.valorVendido)) },
   ]
 
-  const oppByVendor = Object.values(
-    OPORTUNIDADES.reduce<Record<string, typeof OPORTUNIDADES>>((acc, it) => {
-      ;(acc[it.vendedor] ??= []).push(it)
-      return acc
-    }, {})
-  ).map(items => ({ vendedor: items[0].vendedor, items }))
+  const oportunidades = dados?.grandesOportunidades ?? []
+  const rankings = dados?.rankings
 
-  const rankOrcado = withPos(VENDEDORES, v => v.valorOrcado, v => formatMoeda(v.valorOrcado))
-  const rankVendido = withPos(VENDEDORES, v => v.valorVendido, v => formatMoeda(v.valorVendido))
-  const rankConversao = withPos(
-    VENDEDORES,
-    v => v.valorVendido / v.valorOrcado,
-    v => Math.round((v.valorVendido / v.valorOrcado) * 100) + '%',
-    v => `${formatMoeda(v.valorVendido)} vendido de ${formatMoeda(v.valorOrcado)} orçado`,
-  )
-  const rankProdutividade = withPos(
-    VENDEDORES,
-    v => v.valorVendido / v.pedidosVendidos,
-    v => formatMoeda(Math.round(v.valorVendido / v.pedidosVendidos)) + ' / pedido',
-    v => `${v.pedidosVendidos} pedidos vendidos`,
-  )
-  const rankFilial = ['São Paulo', 'Paraná'].map(filial => {
-    const membros = VENDEDORES.filter(v => v.filial === filial)
-    return {
-      filial,
-      total: formatMoeda(membros.reduce((s, v) => s + v.valorVendido, 0)),
-      vendedores: withPos(membros, v => v.valorVendido, v => formatMoeda(v.valorVendido)),
-    }
-  })
+  const oppsVisiveis: OppComVendedor[] = oportunidades
+    .filter(g => vendedoresSelecionados.has(g.vendedor))
+    .flatMap(g => g.oportunidades.map(op => ({ ...op, vendedor: g.vendedor })))
+    .sort((a, b) => b.valorOrcado - a.valorOrcado)
 
-  const RANK_TABS: { id: RankTab; label: string }[] = [
-    { id: 'filial', label: 'Por Filial' },
-    { id: 'orcado', label: 'Valor Orçado' },
-    { id: 'vendido', label: 'Valor Vendido' },
-    { id: 'conversao', label: '% Conversão' },
-    { id: 'produtividade', label: 'Produtividade' },
-    { id: 'geral', label: 'Análise Geral' },
-  ]
+  const oppsExibidas = expandidoOpp ? oppsVisiveis : oppsVisiveis.slice(0, LIMITE_OPP)
+
+  // ─── Render ─────────────────────────────────────────────────────────────────
+
+  if (erro) {
+    return (
+      <div className="flex flex-col animate-fadeIn">
+        <p style={{ fontSize: 13, color: 'var(--critico)', padding: '24px 4px' }}>
+          Erro ao carregar indicadores: {erro}
+        </p>
+      </div>
+    )
+  }
 
   return (
     <div className="flex flex-col animate-fadeIn">
 
-      {/* ── Desempenho por Vendedor ─────────────────────────────────── */}
-      <div>
-        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 20, marginBottom: 20 }}>
-          <div>
-            <div className={`${styles.stitle} ${styles.serif}`}>Desempenho por Vendedor</div>
-            <div className={styles.scap}>Valor vendido por vendedor no período selecionado.</div>
-          </div>
-          <select
-            className={styles.periodSel}
-            value={period}
-            onChange={e => setPeriod(e.target.value as '4s' | '3m')}
+      {/* ── Filtro de período ─────────────────────────────────────────────── */}
+      <div className={styles.filtroBar} style={{ marginBottom: 36 }}>
+        {OPCOES_PERIODO.map(op => (
+          <button
+            key={op.id}
+            onClick={() => { setTipoPeriodo(op.id); if (op.id !== 'personalizado') { setCustomInicio(''); setCustomFim('') } }}
+            className={`${styles.pfiltro} ${tipoPeriodo === op.id ? styles.pfiltroOn : ''}`}
+            disabled={carregando && tipoPeriodo !== op.id}
           >
-            <option value="4s">Últimas 4 semanas</option>
-            <option value="3m">Últimos 3 meses</option>
-          </select>
-        </div>
-
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 560 }}>
-            <thead>
-              <tr>
-                <th style={thFirstStyle}>Vendedor</th>
-                {periodLabels.map(l => <th key={l} style={thStyle}>{l}</th>)}
-                <th style={thStyle}>Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              {vendPeriodRows.map(v => (
-                <tr key={v.nome}>
-                  <td style={tdStyle}>{v.nome}</td>
-                  {v.periods.map((p, i) => <td key={i} style={{ ...tdStyle, textAlign: 'right' }} className={styles.num}>{p}</td>)}
-                  <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 700 }} className={styles.num}>{v.total}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        <div className={styles.totalLine}>
-          <div className={styles.over}>Total Comercial Atualizado</div>
-          <div className={`${styles.totalVal} ${styles.serif} ${styles.num}`}>{formatMoeda(totalComercial)}</div>
-        </div>
+            {op.label}
+          </button>
+        ))}
+        {tipoPeriodo === 'personalizado' && (
+          <div className={styles.filtroCustom}>
+            <span className={styles.filtroLbl}>De</span>
+            <input
+              type="date"
+              value={customInicio}
+              onChange={e => setCustomInicio(e.target.value)}
+              className={styles.filtroDate}
+            />
+            <span className={styles.filtroLbl}>Até</span>
+            <input
+              type="date"
+              value={customFim}
+              onChange={e => setCustomFim(e.target.value)}
+              className={styles.filtroDate}
+            />
+            {customInicio && customFim && customInicio > customFim && (
+              <span style={{ fontSize: 12, color: 'var(--critico)' }}>
+                Data início posterior ao fim
+              </span>
+            )}
+            {!periodoAtivo && (!customInicio || !customFim) && (
+              <span style={{ fontSize: 12, color: 'var(--ink3)' }}>
+                Preencha as duas datas para carregar
+              </span>
+            )}
+          </div>
+        )}
       </div>
 
-      {/* ── Indicadores por Vendedor ──────────────────────────────────── */}
+      {/* ── Desempenho por Vendedor ──────────────────────────────────────── */}
+      <div>
+        <div style={{ marginBottom: 20 }}>
+          <div className={`${styles.stitle} ${styles.serif}`}>Desempenho por Vendedor</div>
+          <div className={styles.scap}>
+            {carregando
+              ? 'Carregando indicadores…'
+              : 'Valor vendido por vendedor no período selecionado.'}
+          </div>
+        </div>
+
+        {vazio ? (
+          <SemDados />
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 560 }}>
+              <thead>
+                <tr>
+                  <th style={thFirstStyle}>Vendedor</th>
+                  {(primeiraCarreg
+                    ? Array.from({ length: expectedCols - 2 }, (_, i) => `Col ${i + 1}`)
+                    : labels
+                  ).map(l => <th key={l} style={thStyle}>{primeiraCarreg ? '' : l}</th>)}
+                  <th style={thStyle}>Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {primeiraCarreg ? (
+                  <SkeletonRows linhas={3} cols={expectedCols} />
+                ) : (
+                  seriesRows.map(v => (
+                    <tr key={v.nome}>
+                      <td style={tdStyle}>{v.nome}</td>
+                      {v.periods.map((p, i) => (
+                        <td key={i} style={{ ...tdStyle, textAlign: 'right' }} className={styles.num}>{p}</td>
+                      ))}
+                      <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 700 }} className={styles.num}>
+                        {v.total}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {!vazio && (
+          <div className={styles.totalLine}>
+            <div className={styles.over}>Total Comercial Atualizado</div>
+            <div className={`${styles.totalVal} ${styles.serif} ${styles.num}`}>
+              {primeiraCarreg ? '—' : formatMoeda(dados?.totalComercialAtualizado ?? 0)}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── Indicadores por Vendedor ─────────────────────────────────────── */}
       <div className={styles.dsection}>
         <div className={`${styles.stitle} ${styles.serif}`}>Indicadores por Vendedor</div>
-        <div className={styles.scap}>Ano fiscal 2026 · 2º trimestre</div>
-
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 560 }}>
-            <thead>
-              <tr>
-                <th style={thFirstStyle}>Indicador</th>
-                {VENDEDORES.map(v => <th key={v.nome} style={thStyle}>{v.nome}</th>)}
-              </tr>
-            </thead>
-            <tbody>
-              {indicadores.map(ind => (
-                <tr key={ind.label}>
-                  <td style={{ ...tdStyle, fontWeight: 500 }}>{ind.label}</td>
-                  {ind.values.map((val, i) => (
-                    <td key={i} style={{ ...tdStyle, textAlign: 'right' }} className={styles.num}>{val}</td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className={styles.scap}>
+          {dados?.granularidade === 'mes'
+            ? `${(dados?.labels ?? []).map(formatLabel).join(', ')}`
+            : 'Período selecionado'}
         </div>
+
+        {vazio ? (
+          <SemDados />
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 560 }}>
+              <thead>
+                <tr>
+                  <th style={thFirstStyle}>Indicador</th>
+                  {primeiraCarreg
+                    ? Array.from({ length: 3 }).map((_, i) => <th key={i} style={thStyle} />)
+                    : indic.map(v => <th key={v.vendedor} style={thStyle}>{v.vendedor}</th>)
+                  }
+                </tr>
+              </thead>
+              <tbody>
+                {primeiraCarreg ? (
+                  <SkeletonRows linhas={6} cols={4} />
+                ) : (
+                  indicRows.map(ind => (
+                    <tr key={ind.label}>
+                      <td style={{ ...tdStyle, fontWeight: 500 }}>{ind.label}</td>
+                      {ind.values.map((val, i) => (
+                        <td key={i} style={{ ...tdStyle, textAlign: 'right' }} className={styles.num}>{val}</td>
+                      ))}
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
-      {/* ── Grandes Oportunidades da Semana ───────────────────────────── */}
+      {/* ── Grandes Oportunidades da Semana ─────────────────────────────── */}
       <div className={styles.dsection}>
         <div className={`${styles.stitle} ${styles.serif}`}>Grandes Oportunidades da Semana</div>
-        <div className={styles.scap}>Pedidos orçados que ainda não viraram venda, por vendedor.</div>
+        <div className={styles.scap}>
+          Pedidos orçados em aberto · top {LIMITE_OPP} por valor. Filtre por vendedor abaixo.
+        </div>
 
-        <div className={styles.oppGrid}>
-          {oppByVendor.map(g => (
-            <div key={g.vendedor} className={styles.oppCard}>
-              <div className={styles.oppVendedor}>{g.vendedor}</div>
-              {g.items.map((it, i) => (
-                <div key={i} className={styles.oppItem}>
-                  <div className={styles.oppCliente}>{it.cliente}</div>
-                  <div className={styles.oppDesc}>{it.produto}</div>
-                  <div className={styles.oppMeta}>
-                    <span className={styles.oppTag}>{it.quando}</span>
-                    <span className={`${styles.oppVal} ${styles.num}`}>{formatMoeda(it.valor)}</span>
-                  </div>
-                </div>
+        {primeiraCarreg ? (
+          <p style={{ fontSize: 13, color: 'var(--ink3)', padding: '24px 4px' }}>
+            Carregando oportunidades…
+          </p>
+        ) : oportunidades.length === 0 ? (
+          <SemDados mensagem="Nenhum orçamento em aberto para este período." />
+        ) : (
+          <>
+            {/* Seleção de vendedores */}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 28px', margin: '16px 0 22px', paddingBottom: 14, borderBottom: '1px solid var(--line)' }}>
+              {oportunidades.map(g => (
+                <label
+                  key={g.vendedor}
+                  style={{ display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer', userSelect: 'none' }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={vendedoresSelecionados.has(g.vendedor)}
+                    onChange={() =>
+                      setVendedoresSelecionados(prev => {
+                        const s = new Set(prev)
+                        s.has(g.vendedor) ? s.delete(g.vendedor) : s.add(g.vendedor)
+                        return s
+                      })
+                    }
+                    style={{ accentColor: 'var(--accentCom)', width: 14, height: 14, cursor: 'pointer', flexShrink: 0 }}
+                  />
+                  <span style={{ fontSize: 13 }}>{g.vendedor}</span>
+                  <span style={{ fontSize: 11, color: 'var(--ink3)', fontVariantNumeric: 'tabular-nums' }}>
+                    {formatMoeda(g.totalPipeline)}
+                  </span>
+                </label>
               ))}
             </div>
-          ))}
-        </div>
+
+            {oppsExibidas.length === 0 ? (
+              <SemDados mensagem="Nenhum vendedor selecionado." />
+            ) : (
+              <>
+                {oppsExibidas.map(op => (
+                  <div
+                    key={op.id}
+                    style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 20, padding: '14px 2px', borderBottom: '1px solid var(--line)' }}
+                  >
+                    <div style={{ minWidth: 0 }}>
+                      <div className={styles.oppVendedor} style={{ marginBottom: 5 }}>{op.vendedor}</div>
+                      <div className={styles.oppCliente}>{op.cliente}</div>
+                      <div className={styles.oppDesc} style={{ marginTop: 3 }}>
+                        {op.previsaoFechamento
+                          ? `Previsão: ${formatData(op.previsaoFechamento)}`
+                          : op.proximaAcao ?? '—'}
+                      </div>
+                    </div>
+                    <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                      <div className={`${styles.oppVal} ${styles.num}`}>{formatMoeda(op.valorOrcado)}</div>
+                      <div className={styles.oppTag} style={{ marginTop: 6 }}>{diasAtras(op.dataOrcamento)}</div>
+                    </div>
+                  </div>
+                ))}
+
+                {oppsVisiveis.length > LIMITE_OPP && (
+                  <button
+                    onClick={() => setExpandidoOpp(e => !e)}
+                    style={{ marginTop: 16, background: 'none', border: 'none', padding: 0, color: 'var(--accentCom)', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', letterSpacing: '.02em' }}
+                  >
+                    {expandidoOpp
+                      ? 'Ocultar'
+                      : `Ver mais ${oppsVisiveis.length - LIMITE_OPP} oportunidade${oppsVisiveis.length - LIMITE_OPP !== 1 ? 's' : ''}`}
+                  </button>
+                )}
+              </>
+            )}
+          </>
+        )}
       </div>
 
-      {/* ── Ranking de Vendedores ─────────────────────────────────────── */}
+      {/* ── Ranking de Vendedores ────────────────────────────────────────── */}
       <div className={styles.dsection}>
         <div className={`${styles.stitle} ${styles.serif}`}>Ranking de Vendedores</div>
         <div className={styles.scap}>Posição e os números que a sustentam.</div>
@@ -227,85 +501,140 @@ export function ComercialDashboard() {
           ))}
         </div>
 
-        {rankTab === 'filial' && rankFilial.map(fl => (
-          <div key={fl.filial} className={styles.rankBlock}>
-            <div className={styles.rbHead}>
-              <span className={styles.rbName}>{fl.filial}</span>
-              <span className={`${styles.rbTotal} ${styles.num}`}>{fl.total}</span>
-            </div>
-            <div className={styles.rankList}>
-              {fl.vendedores.map(r => (
-                <div key={r.nome} className={styles.rRow}>
-                  <span className={styles.rPos}>{r.pos}</span>
-                  <span className={styles.rName}>{r.nome}</span>
-                  <span className={`${styles.rVal} ${styles.num}`}>{r.val}</span>
+        {vazio && rankTab !== 'geral' ? (
+          <SemDados />
+        ) : (
+          <>
+            {/* Por Filial */}
+            {rankTab === 'filial' && (() => {
+              const filiais = [
+                { nome: 'São Paulo', entradas: rankings?.porFilial.saoPaulo ?? [] },
+                { nome: 'Paraná',    entradas: rankings?.porFilial.parana ?? [] },
+              ]
+              return primeiraCarreg ? (
+                <p style={{ fontSize: 13, color: 'var(--ink3)', padding: '24px 4px' }}>Carregando…</p>
+              ) : filiais.map(fl => fl.entradas.length === 0 ? null : (
+                <div key={fl.nome} className={styles.rankBlock}>
+                  <div className={styles.rbHead}>
+                    <span className={styles.rbName}>{fl.nome}</span>
+                    <span className={`${styles.rbTotal} ${styles.num}`}>
+                      {formatMoeda(fl.entradas.reduce((s, r) => s + r.valor, 0))}
+                    </span>
+                  </div>
+                  <div className={styles.rankList}>
+                    {fl.entradas.map(r => <RankRow key={r.vendedor} r={r} />)}
+                  </div>
                 </div>
-              ))}
-            </div>
-          </div>
-        ))}
+              ))
+            })()}
 
-        {rankTab === 'orcado' && (
-          <div className={styles.rankList}>
-            {rankOrcado.map(r => (
-              <div key={r.nome} className={styles.rRow}>
-                <span className={styles.rPos}>{r.pos}</span>
-                <span className={styles.rName}>{r.nome}</span>
-                <span className={`${styles.rVal} ${styles.num}`}>{r.val}</span>
+            {/* Valor Orçado */}
+            {rankTab === 'orcado' && (
+              primeiraCarreg ? (
+                <p style={{ fontSize: 13, color: 'var(--ink3)', padding: '24px 4px' }}>Carregando…</p>
+              ) : (
+                <div className={styles.rankList}>
+                  {(rankings?.porValorOrcado ?? []).map(r => (
+                    <RankRow
+                      key={r.vendedor}
+                      r={r}
+                      meta={`${Number(r.detalhes.orcamentos ?? 0)} orçamentos`}
+                    />
+                  ))}
+                </div>
+              )
+            )}
+
+            {/* Valor Vendido */}
+            {rankTab === 'vendido' && (
+              primeiraCarreg ? (
+                <p style={{ fontSize: 13, color: 'var(--ink3)', padding: '24px 4px' }}>Carregando…</p>
+              ) : (
+                <div className={styles.rankList}>
+                  {(rankings?.porValorVendido ?? []).map(r => (
+                    <RankRow
+                      key={r.vendedor}
+                      r={r}
+                      meta={formatMoeda(Number(r.detalhes.valorOrcado ?? 0)) + ' orçado'}
+                    />
+                  ))}
+                </div>
+              )
+            )}
+
+            {/* % Conversão — usa MetricaComFormula (conversão financeira) */}
+            {rankTab === 'conversao' && (
+              primeiraCarreg ? (
+                <p style={{ fontSize: 13, color: 'var(--ink3)', padding: '24px 4px' }}>Carregando…</p>
+              ) : (
+                <div className={styles.rankList}>
+                  {(rankings?.conversaoFinanceira ?? []).map(r => {
+                    const valorVendido = Number(r.detalhes.valorVendido ?? 0)
+                    const valorOrcado  = Number(r.detalhes.valorOrcado  ?? 0)
+                    return (
+                      <div key={r.vendedor} className={styles.rRow} style={{ alignItems: 'flex-start' }}>
+                        <span className={styles.rPos}>{r.posicao}</span>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <MetricaComFormula
+                            variant="compact"
+                            label={r.vendedor}
+                            valor={Math.round(r.valor * 100) + '%'}
+                            formula={`${r.formula} · ${formatMoeda(valorVendido)} vendido de ${formatMoeda(valorOrcado)} orçado`}
+                          />
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )
+            )}
+
+            {/* Produtividade — usa MetricaComFormula */}
+            {rankTab === 'produtividade' && (
+              primeiraCarreg ? (
+                <p style={{ fontSize: 13, color: 'var(--ink3)', padding: '24px 4px' }}>Carregando…</p>
+              ) : (
+                <div className={styles.rankList}>
+                  {(rankings?.produtividade ?? []).map(r => {
+                    const orcamentos    = Number(r.detalhes.orcamentos        ?? 0)
+                    const clientes      = Number(r.detalhes.clientesDistintos  ?? 0)
+                    const mediaDiaria   = r.detalhes.mediaDiaria != null ? Number(r.detalhes.mediaDiaria) : null
+                    const detalheTexto  = `${orcamentos} orçamentos + ${clientes} clientes distintos` +
+                      (mediaDiaria !== null ? ` = ${mediaDiaria}/dia útil` : '')
+                    return (
+                      <div key={r.vendedor} className={styles.rRow} style={{ alignItems: 'flex-start' }}>
+                        <span className={styles.rPos}>{r.posicao}</span>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <MetricaComFormula
+                            variant="compact"
+                            label={r.vendedor}
+                            valor={String(r.valor)}
+                            formula={`${r.formula} · ${detalheTexto}`}
+                          />
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )
+            )}
+
+            {/* Análise Geral — placeholder até integração narrativa */}
+            {rankTab === 'geral' && (
+              <div className={styles.gAnalysis}>
+                <p style={{ fontStyle: 'italic' }}>
+                  A análise narrativa será exibida aqui após integração completa dos dados do período.
+                </p>
               </div>
-            ))}
-          </div>
-        )}
-
-        {rankTab === 'vendido' && (
-          <div className={styles.rankList}>
-            {rankVendido.map(r => (
-              <div key={r.nome} className={styles.rRow}>
-                <span className={styles.rPos}>{r.pos}</span>
-                <span className={styles.rName}>{r.nome}</span>
-                <span className={`${styles.rVal} ${styles.num}`}>{r.val}</span>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {rankTab === 'conversao' && (
-          <div className={styles.rankList}>
-            {rankConversao.map(r => (
-              <div key={r.nome} className={styles.rRow}>
-                <span className={styles.rPos}>{r.pos}</span>
-                <span className={styles.rName}>{r.nome}</span>
-                <span className={styles.rMeta}>{r.meta}</span>
-                <span className={`${styles.rVal} ${styles.num}`}>{r.val}</span>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {rankTab === 'produtividade' && (
-          <div className={styles.rankList}>
-            {rankProdutividade.map(r => (
-              <div key={r.nome} className={styles.rRow}>
-                <span className={styles.rPos}>{r.pos}</span>
-                <span className={styles.rName}>{r.nome}</span>
-                <span className={styles.rMeta}>{r.meta}</span>
-                <span className={`${styles.rVal} ${styles.num}`}>{r.val}</span>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {rankTab === 'geral' && (
-          <div className={styles.gAnalysis}>
-            {GERAL_PARAGRAPHS.map((p, i) => <p key={i}>{p}</p>)}
-          </div>
+            )}
+          </>
         )}
       </div>
     </div>
   )
 }
 
-// ─── Shared table styles ──────────────────────────────────────────────────────
+// ─── Estilos de tabela compartilhados ─────────────────────────────────────────
 
 const thStyle: React.CSSProperties = {
   fontSize: 10.5,

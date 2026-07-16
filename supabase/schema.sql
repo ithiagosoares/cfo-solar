@@ -160,6 +160,16 @@ grant select, insert, update, delete on comercial_importacoes to service_role;
 alter table comercial_importacoes enable row level security;
 create policy "apenas_service_role" on comercial_importacoes using (false);
 
+-- ─── comercial_pedidos — numero_pedido — adicionado 2026-07-16 ──────────────
+-- Armazena o número do pedido/orçamento original do ERP (ex: "998", "887"),
+-- extraído da primeira coluna do relatório "Relatório de pedidos de orçamento".
+-- Permite deduplicação confiável via constraint único por importação.
+--
+-- Rodar no SQL Editor do Supabase:
+--   alter table comercial_pedidos add column if not exists numero_pedido text;
+--   alter table comercial_pedidos
+--     add constraint uniq_pedido_importacao unique (numero_pedido, importacao_id);
+
 -- ─── investimentos_capex — adicionado 2026-07-13 ───────────────────────────
 
 create table investimentos_capex (

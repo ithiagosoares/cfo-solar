@@ -25,6 +25,7 @@ export async function inserirPedidosImportacao(
     status:          r.status,
     valor_vendido:   r.valorVendido,
     data_venda:      r.dataVenda || null,
+    numero_pedido:   r.numeroOrcamento || null,
     origem:          'upload_estruturado' as const,
     importacao_id:   importacaoId,
   }))

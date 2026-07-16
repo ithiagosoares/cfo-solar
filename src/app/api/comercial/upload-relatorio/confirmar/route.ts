@@ -33,13 +33,16 @@ export async function POST(request: Request) {
       )
     }
 
+    // Atualiza o status ANTES de inserir: se o insert falhar, o status já está
+    // 'confirmado' e o guard acima bloqueia qualquer retry com 409, evitando
+    // reinserção de duplicatas.
+    await atualizarStatusImportacao(importacaoId, 'confirmado')
+
     await inserirPedidosImportacao(
       importacao.registrosPreview,
       importacaoId,
       mapeamentoVendedores,
     )
-
-    await atualizarStatusImportacao(importacaoId, 'confirmado')
 
     return Response.json({ ok: true, totalInserido: importacao.registrosPreview.length })
   } catch (err) {

@@ -1,6 +1,9 @@
 import { listarVendedores, criarVendedor } from '@/lib/vendedores-repository'
+import { requireComercialAccess } from '@/lib/comercial-auth'
 
 export async function GET(request: Request) {
+  const denied = requireComercialAccess(request)
+  if (denied) return denied
   try {
     const { searchParams } = new URL(request.url)
     const apenasAtivos = searchParams.get('todos') !== '1'
@@ -13,6 +16,8 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const denied = requireComercialAccess(request)
+  if (denied) return denied
   try {
     const body = await request.json() as { nome?: unknown }
     if (!body.nome || typeof body.nome !== 'string') {

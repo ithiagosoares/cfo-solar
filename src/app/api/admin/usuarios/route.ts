@@ -23,7 +23,7 @@ export async function GET() {
 
   const { data, error } = await supabaseAdmin
     .from('usuarios_autorizados')
-    .select('id, email, role, nome, criado_em, criado_por')
+    .select('id, email, role, comercial_role, nome, criado_em, criado_por')
     .order('criado_em', { ascending: true })
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
@@ -52,6 +52,31 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: msg }, { status: 400 })
   }
   return NextResponse.json({ usuario: data }, { status: 201 })
+}
+
+export async function PATCH(request: NextRequest) {
+  const admin = await verificarAdmin()
+  if (!admin) return NextResponse.json({ error: 'Acesso negado' }, { status: 403 })
+
+  const body = await request.json() as { email?: string; comercial_role?: 'gestor' | null }
+  const { email, comercial_role } = body
+
+  if (!email) {
+    return NextResponse.json({ error: 'email é obrigatório' }, { status: 400 })
+  }
+  if (comercial_role !== 'gestor' && comercial_role !== null && comercial_role !== undefined) {
+    return NextResponse.json({ error: 'comercial_role deve ser "gestor" ou null' }, { status: 400 })
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from('usuarios_autorizados')
+    .update({ comercial_role: comercial_role ?? null })
+    .eq('email', email.toLowerCase())
+    .select()
+    .single()
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json({ usuario: data })
 }
 
 export async function DELETE(request: NextRequest) {

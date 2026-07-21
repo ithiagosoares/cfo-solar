@@ -14,10 +14,17 @@ import {
   parsePedidosOrcamento,
   parseTotaisPorVendedor,
   parseRentabilidadePorVendedor,
+  extrairOrigemRelatorio,
 } from '@/lib/comercial-relatorios-parser'
 import { validarDivergencias } from '@/lib/comercial-validacao'
 import { listarVendedores } from '@/lib/vendedores-repository'
 import { criarImportacao, type RegistroPreview } from '@/lib/comercial-importacoes-repository'
+import { requireComercialAccess } from '@/lib/comercial-auth'
+
+const FILIAL_PARA_UF: Record<string, string> = {
+  'São Paulo': 'SP',
+  'Paraná':    'PR',
+}
 
 const EMPRESAS_VALIDAS = [
   'Solar System Matriz',
@@ -29,6 +36,8 @@ const EMPRESAS_VALIDAS = [
 const FILIAIS_VALIDAS = ['São Paulo', 'Paraná']
 
 export async function POST(request: Request) {
+  const denied = requireComercialAccess(request)
+  if (denied) return denied
   try {
     // ── 1. Ler form data ────────────────────────────────────────────────────
     const formData = await request.formData()
@@ -126,7 +135,18 @@ export async function POST(request: Request) {
       }
     })
 
-    // ── 8. Salvar em comercial_importacoes (pendente_revisao) ───────────────
+    // ── 8. Verificar consistência de filial (UF do cabeçalho vs. seleção) ───
+    const ufEsperada = FILIAL_PARA_UF[filial]
+    const avisosFilial: { arquivoNome: string; ufDetectada: string; filialSelecionada: string }[] = []
+
+    for (const arq of arquivosProcessados) {
+      const { uf } = extrairOrigemRelatorio(arq.html)
+      if (uf && ufEsperada && uf !== ufEsperada) {
+        avisosFilial.push({ arquivoNome: arq.nome, ufDetectada: uf, filialSelecionada: filial })
+      }
+    }
+
+    // ── 9. Salvar em comercial_importacoes (pendente_revisao) ───────────────
     const importacao = await criarImportacao({
       empresa,
       filial,
@@ -137,11 +157,12 @@ export async function POST(request: Request) {
       registrosPreview: registros,
     })
 
-    // ── 9. Resposta ─────────────────────────────────────────────────────────
+    // ── 10. Resposta ────────────────────────────────────────────────────────
     return Response.json({
       ok: true,
       importacaoId: importacao.id,
       avisos,
+      avisosFilial,
       registros,
       divergencias,
       vendedoresNaoReconhecidos,

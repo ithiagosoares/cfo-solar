@@ -69,7 +69,7 @@ export async function proxy(request: NextRequest) {
 
   const { data: autorizado, error: erroQuery } = await admin
     .from('usuarios_autorizados')
-    .select('role')
+    .select('role, comercial_role')
     .eq('email', user.email)
     .single()
 
@@ -83,10 +83,28 @@ export async function proxy(request: NextRequest) {
     return redir
   }
 
-  // Injeta role e email nos headers para uso em API routes / Server Components
+  // Calcula o nível comercial:
+  //   admin financeiro → diretor comercial (acesso total)
+  //   comercial_role='gestor' → gestor comercial
+  //   null → sem acesso ao módulo comercial
+  const comercialRole =
+    autorizado.role === 'admin' ? 'diretor' :
+    autorizado.comercial_role === 'gestor' ? 'gestor' :
+    null
+
+  // Protege páginas /comercial/** (não /api/comercial, que retornam 403 via handler)
+  if ((pathname === '/comercial' || pathname.startsWith('/comercial/')) && comercialRole === null) {
+    const redir = NextResponse.redirect(new URL('/acesso-negado', request.url))
+    redir.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate')
+    redir.headers.set('Pragma', 'no-cache')
+    return redir
+  }
+
+  // Injeta role, email e nível comercial nos headers para uso em API routes / Server Components
   const requestHeaders = new Headers(request.headers)
   requestHeaders.set('x-user-role', autorizado.role)
   requestHeaders.set('x-user-email', user.email)
+  requestHeaders.set('x-comercial-role', comercialRole ?? '')
 
   const finalResponse = NextResponse.next({ request: { headers: requestHeaders } })
 

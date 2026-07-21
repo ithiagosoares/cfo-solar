@@ -95,6 +95,27 @@ export function identificarTipoRelatorio(html: string): TipoRelatorio {
   return TITULOS_TIPO[titulo] ?? 'desconhecido'
 }
 
+// ─── Origem do relatório (CNPJ e UF da filial emissora) ───────────────────────
+//
+// Extrai do cabeçalho do relatório:
+//   CNPJ: "CNPJ: 58501548000103" → "58501548000103"
+//   UF:   padrão "CIDADE - UF - CEP" (ex: "ARUJA - SP - 07430350") → "SP"
+//
+// Retorna null nos campos que não forem detectáveis.
+export function extrairOrigemRelatorio(html: string): { cnpj: string | null; uf: string | null } {
+  const $ = load(html)
+  const texto = $('body').text()
+
+  const matchCnpj = texto.match(/CNPJ\s*:\s*([\d./\-]+)/i)
+  const cnpj = matchCnpj ? matchCnpj[1].replace(/\D/g, '') || null : null
+
+  // "- SP - 07430350"  ou  "- PR - 83401520"
+  const matchUf = texto.match(/-\s*([A-Z]{2})\s*-\s*\d{5,8}/)
+  const uf = matchUf ? matchUf[1] : null
+
+  return { cnpj, uf }
+}
+
 // ─── Parser: Pedidos de Orçamento ─────────────────────────────────────────────
 //
 // Estrutura das linhas:

@@ -10,8 +10,11 @@ import {
   atualizarStatusImportacao,
 } from '@/lib/comercial-importacoes-repository'
 import { inserirPedidosImportacao } from '@/lib/comercial-pedidos-repository'
+import { requireComercialAccess } from '@/lib/comercial-auth'
 
 export async function POST(request: Request) {
+  const denied = requireComercialAccess(request)
+  if (denied) return denied
   try {
     const body = await request.json() as {
       importacaoId?: string
@@ -53,6 +56,8 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
+  const denied = requireComercialAccess(request)
+  if (denied) return denied
   try {
     const { searchParams } = new URL(request.url)
     const importacaoId = searchParams.get('importacaoId')

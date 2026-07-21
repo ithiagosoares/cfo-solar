@@ -30,9 +30,16 @@ interface Divergencia {
   fonte: 'totais_vendedor' | 'rentabilidade_vendedor'
 }
 
+interface AvisoFilial {
+  arquivoNome: string
+  ufDetectada: string
+  filialSelecionada: string
+}
+
 interface PreviewResult {
   importacaoId: string
   avisos: string[]
+  avisosFilial: AvisoFilial[]
   registros: RegistroPreview[]
   divergencias: Divergencia[]
   vendedoresNaoReconhecidos: string[]
@@ -266,6 +273,25 @@ export default function ComercialUploadPage() {
           {preview.avisos.map((a, i) => (
             <div key={i} className={`${styles.notice} ${styles.alertaDanger}`} style={{ marginBottom: 8 }}>
               <span>{a}</span>
+            </div>
+          ))}
+
+          {/* Avisos de inconsistência de filial */}
+          {(preview.avisosFilial ?? []).map((av, i) => (
+            <div
+              key={i}
+              className={styles.notice}
+              style={{
+                marginBottom: 8,
+                borderLeft: '3px solid #c8a000',
+                background: 'rgba(200,160,0,0.07)',
+              }}
+            >
+              <span>
+                <strong>Atenção:</strong> o arquivo &quot;{av.arquivoNome}&quot; parece ser da filial{' '}
+                <strong>{av.ufDetectada}</strong>, mas você selecionou{' '}
+                <strong>{av.filialSelecionada}</strong>. Confirme se isso está correto antes de prosseguir.
+              </span>
             </div>
           ))}
 

@@ -160,6 +160,17 @@ grant select, insert, update, delete on comercial_importacoes to service_role;
 alter table comercial_importacoes enable row level security;
 create policy "apenas_service_role" on comercial_importacoes using (false);
 
+-- ─── usuarios_autorizados — comercial_role — adicionado 2026-07-21 ─────────
+-- Nível de acesso ao módulo comercial, independente do papel financeiro.
+-- null   = sem acesso ao comercial (exceto admins financeiros, que são 'diretor' por derivação)
+-- gestor = acesso completo ao comercial, sem ser admin financeiro
+-- (diretor deriva de role='admin'; vendedor reservado para etapa futura)
+--
+-- Rodar no SQL Editor do Supabase:
+--   alter table usuarios_autorizados
+--     add column if not exists comercial_role text
+--     check (comercial_role in ('gestor'));
+
 -- ─── comercial_pedidos — numero_pedido — adicionado 2026-07-16 ──────────────
 -- Armazena o número do pedido/orçamento original do ERP (ex: "998", "887"),
 -- extraído da primeira coluna do relatório "Relatório de pedidos de orçamento".

@@ -1,8 +1,12 @@
 // Server-only route handler — único ponto da app que importa upper-client.
 // Nunca expor tokenAcesso, UPPER_EMAIL ou UPPER_SENHA em nenhuma resposta.
 import { buscarTodosPedidos } from '@/lib/upper-client'
+import { requireComercialAccess } from '@/lib/comercial-auth'
 
-export async function GET() {
+export async function GET(request: Request) {
+  const denied = requireComercialAccess(request)
+  if (denied) return denied
+
   console.log('[/api/comercial] iniciando busca Upper')
   console.log('[/api/comercial] UPPER_EMAIL presente:', !!process.env.UPPER_EMAIL)
   console.log('[/api/comercial] UPPER_SENHA presente:', !!process.env.UPPER_SENHA)

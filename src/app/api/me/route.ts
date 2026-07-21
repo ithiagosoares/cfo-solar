@@ -12,7 +12,7 @@ export async function GET() {
 
   const { data } = await supabaseAdmin
     .from('usuarios_autorizados')
-    .select('email, role, nome')
+    .select('email, role, nome, comercial_role')
     .eq('email', user.email)
     .single()
 
@@ -20,10 +20,16 @@ export async function GET() {
     return NextResponse.json({ error: 'Usuário não autorizado' }, { status: 403 })
   }
 
+  const comercialRole =
+    data.role === 'admin' ? 'diretor' :
+    data.comercial_role === 'gestor' ? 'gestor' :
+    null
+
   return NextResponse.json({
     email: data.email,
     role: data.role as 'admin' | 'viewer',
     nome: data.nome ?? (user.user_metadata?.full_name as string | undefined) ?? data.email,
     avatar: (user.user_metadata?.avatar_url as string | undefined) ?? null,
+    comercialRole,
   })
 }

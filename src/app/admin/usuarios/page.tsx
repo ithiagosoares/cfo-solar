@@ -8,6 +8,7 @@ interface UsuarioCadastrado {
   id: string
   email: string
   role: 'admin' | 'viewer'
+  comercial_role: 'gestor' | null
   nome: string | null
   criado_em: string
   criado_por: string | null
@@ -23,6 +24,7 @@ export default function AdminUsuariosPage() {
   const [novoNome, setNovoNome] = useState('')
   const [salvando, setSalvando] = useState(false)
   const [erroForm, setErroForm] = useState<string | null>(null)
+  const [salvandoComercial, setSalvandoComercial] = useState<Record<string, boolean>>({})
 
   async function carregar() {
     setCarregando(true)
@@ -62,6 +64,24 @@ export default function AdminUsuariosPage() {
       setErroForm(e instanceof Error ? e.message : 'Erro ao adicionar')
     } finally {
       setSalvando(false)
+    }
+  }
+
+  async function handleAlterarComercialRole(email: string, novoValor: 'gestor' | null) {
+    setSalvandoComercial(prev => ({ ...prev, [email]: true }))
+    try {
+      const res = await fetch('/api/admin/usuarios', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, comercial_role: novoValor }),
+      })
+      const json = await res.json() as { error?: string }
+      if (!res.ok) throw new Error(json.error ?? 'Erro ao atualizar')
+      await carregar()
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : 'Erro ao atualizar acesso comercial')
+    } finally {
+      setSalvandoComercial(prev => ({ ...prev, [email]: false }))
     }
   }
 
@@ -154,17 +174,18 @@ export default function AdminUsuariosPage() {
           <p style={{ fontSize: 13, color: 'var(--ink3)' }}>Carregando…</p>
         ) : (
           <div>
-            <div className={`${styles.thead} ${styles.t4}`} style={{ gridTemplateColumns: '2fr 1fr 1.2fr .6fr' }}>
+            <div className={`${styles.thead} ${styles.t4}`} style={{ gridTemplateColumns: '2fr 1fr 1fr 1.4fr .6fr' }}>
               <div>Email</div>
               <div>Nome</div>
               <div>Role</div>
+              <div>Comercial</div>
               <div />
             </div>
             {usuarios.map(u => (
               <div
                 key={u.id}
                 className={`${styles.trow} ${styles.t4}`}
-                style={{ gridTemplateColumns: '2fr 1fr 1.2fr .6fr' }}
+                style={{ gridTemplateColumns: '2fr 1fr 1fr 1.4fr .6fr' }}
               >
                 <div style={{ fontSize: 14 }}>{u.email}</div>
                 <div style={{ fontSize: 13, color: 'var(--ink2)' }}>{u.nome ?? '—'}</div>
@@ -180,6 +201,25 @@ export default function AdminUsuariosPage() {
                     {u.role}
                   </span>
                 </div>
+                <div style={{ fontSize: 12.5 }}>
+                  {u.role === 'admin' ? (
+                    <span style={{ color: 'var(--ink3)', fontStyle: 'italic' }}>
+                      Diretor — automático
+                    </span>
+                  ) : (
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: salvandoComercial[u.email] ? 'wait' : 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        checked={u.comercial_role === 'gestor'}
+                        disabled={salvandoComercial[u.email]}
+                        onChange={e => handleAlterarComercialRole(u.email, e.target.checked ? 'gestor' : null)}
+                      />
+                      <span style={{ color: u.comercial_role === 'gestor' ? 'var(--marca)' : 'var(--ink3)' }}>
+                        {u.comercial_role === 'gestor' ? 'Gestor' : 'Sem acesso'}
+                      </span>
+                    </label>
+                  )}
+                </div>
                 <div className={styles.right}>
                   <button
                     onClick={() => handleRemover(u.email)}
@@ -194,6 +234,10 @@ export default function AdminUsuariosPage() {
             {usuarios.length === 0 && (
               <p style={{ fontSize: 13, color: 'var(--ink3)', paddingTop: 16 }}>Nenhum usuário cadastrado.</p>
             )}
+            <p style={{ fontSize: 11.5, color: 'var(--ink3)', marginTop: 16, lineHeight: 1.5 }}>
+              * O nível <strong>Vendedor</strong> (acesso restrito à própria carteira) ainda não está disponível nesta versão.
+              Por ora, <em>Gestor</em> é o único papel comercial atribuível.
+            </p>
           </div>
         )}
       </div>

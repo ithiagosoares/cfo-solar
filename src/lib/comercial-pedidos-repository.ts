@@ -30,7 +30,20 @@ export async function inserirPedidosImportacao(
     importacao_id:   importacaoId,
   }))
 
-  const { error } = await supabaseAdmin.from(TABELA).insert(rows)
+  const semNumeroPedido = rows.filter(r => r.numero_pedido === null)
+  if (semNumeroPedido.length > 0) {
+    console.warn(
+      `[comercial-pedidos-repository] ${semNumeroPedido.length} registro(s) sem numero_pedido — ` +
+      `não protegidos pela constraint uniq_pedido_empresa. Clientes: ${semNumeroPedido.map(r => r.cliente).join(', ')}`,
+    )
+  }
+
+  // upsert: se (numero_pedido, empresa) já existe, atualiza os campos com os dados
+  // mais recentes em vez de inserir duplicata. Registros com numero_pedido = null
+  // não conflitam (NULL ≠ NULL no Postgres) e continuam sendo inseridos normalmente.
+  const { error } = await supabaseAdmin
+    .from(TABELA)
+    .upsert(rows, { onConflict: 'numero_pedido,empresa' })
 
   if (error) {
     console.error('[comercial-pedidos-repository] inserirPedidosImportacao erro:', JSON.stringify(error, null, 2))

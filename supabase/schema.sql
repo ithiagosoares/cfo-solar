@@ -174,12 +174,27 @@ create policy "apenas_service_role" on comercial_importacoes using (false);
 -- ─── comercial_pedidos — numero_pedido — adicionado 2026-07-16 ──────────────
 -- Armazena o número do pedido/orçamento original do ERP (ex: "998", "887"),
 -- extraído da primeira coluna do relatório "Relatório de pedidos de orçamento".
--- Permite deduplicação confiável via constraint único por importação.
+-- A chave real de negócio é (numero_pedido, empresa) — único no ERP de origem.
+-- O upsert no endpoint de confirmação usa esse par para deduplicar uploads sobrepostos.
 --
--- Rodar no SQL Editor do Supabase:
+-- Migrations a rodar no SQL Editor do Supabase (em ordem):
+--
+-- 1. Adicionar coluna (se ainda não existir):
 --   alter table comercial_pedidos add column if not exists numero_pedido text;
+--
+-- 2. Diagnóstico de duplicatas ANTES de alterar a constraint
+--    (rodar e aguardar limpeza manual se houver resultados):
+--   select numero_pedido, empresa, count(*) as total
+--   from comercial_pedidos
+--   where numero_pedido is not null
+--   group by numero_pedido, empresa
+--   having count(*) > 1
+--   order by total desc;
+--
+-- 3. Substituir constraint antiga pela nova após limpeza:
+--   alter table comercial_pedidos drop constraint if exists uniq_pedido_importacao;
 --   alter table comercial_pedidos
---     add constraint uniq_pedido_importacao unique (numero_pedido, importacao_id);
+--     add constraint uniq_pedido_empresa unique (numero_pedido, empresa);
 
 -- ─── investimentos_capex — adicionado 2026-07-13 ───────────────────────────
 

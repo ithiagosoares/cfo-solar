@@ -25,6 +25,9 @@ export default function AdminUsuariosPage() {
   const [salvando, setSalvando] = useState(false)
   const [erroForm, setErroForm] = useState<string | null>(null)
   const [salvandoComercial, setSalvandoComercial] = useState<Record<string, boolean>>({})
+  const [criarComSenha, setCriarComSenha] = useState(false)
+  const [senhaTmp, setSenhaTmp] = useState('')
+  const [senhaExibida, setSenhaExibida] = useState<string | null>(null)
 
   async function carregar() {
     setCarregando(true)
@@ -48,17 +51,26 @@ export default function AdminUsuariosPage() {
     e.preventDefault()
     setErroForm(null)
     setSalvando(true)
+    setSenhaExibida(null)
     try {
+      const body: Record<string, unknown> = { email: novoEmail, role: novoRole, nome: novoNome || undefined }
+      if (criarComSenha && senhaTmp) body.senha_temporaria = senhaTmp
+
       const res = await fetch('/api/admin/usuarios', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: novoEmail, role: novoRole, nome: novoNome || undefined }),
+        body: JSON.stringify(body),
       })
-      const json = await res.json() as { error?: string }
+      const json = await res.json() as { error?: string; conta_auth_criada?: boolean }
       if (!res.ok) throw new Error(json.error ?? 'Erro ao adicionar')
+
+      if (json.conta_auth_criada) setSenhaExibida(senhaTmp)
+
       setNovoEmail('')
       setNovoNome('')
       setNovoRole('viewer')
+      setSenhaTmp('')
+      setCriarComSenha(false)
       await carregar()
     } catch (e) {
       setErroForm(e instanceof Error ? e.message : 'Erro ao adicionar')
@@ -160,6 +172,35 @@ export default function AdminUsuariosPage() {
                 <option value="admin">admin — acesso total + gestão de usuários</option>
               </select>
             </div>
+            <div className={styles.field}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={criarComSenha}
+                  onChange={e => { setCriarComSenha(e.target.checked); setSenhaTmp('') }}
+                />
+                <span style={{ fontSize: 13, color: 'var(--ink2)' }}>
+                  Criar conta com senha (para quem não usa Google)
+                </span>
+              </label>
+            </div>
+            {criarComSenha && (
+              <div className={styles.field}>
+                <label className={styles.fieldLabel}>Senha temporária</label>
+                <input
+                  type="text"
+                  required={criarComSenha}
+                  value={senhaTmp}
+                  onChange={e => setSenhaTmp(e.target.value)}
+                  placeholder="mínimo 6 caracteres"
+                  minLength={6}
+                  className={styles.input}
+                />
+                <span style={{ fontSize: 11, color: 'var(--ink3)', marginTop: 2 }}>
+                  O usuário poderá alterar a senha depois pelo fluxo de recuperação.
+                </span>
+              </div>
+            )}
             {erroForm && (
               <p style={{ fontSize: 12.5, color: 'var(--critico)' }}>{erroForm}</p>
             )}
@@ -168,6 +209,51 @@ export default function AdminUsuariosPage() {
             </button>
           </form>
         </div>
+
+        {/* Banner: senha temporária gerada — exibida uma única vez */}
+        {senhaExibida && (
+          <div
+            style={{
+              border: '1px solid var(--positivo)',
+              borderLeft: '3px solid var(--positivo)',
+              padding: '16px 20px',
+              marginBottom: 32,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 10,
+            }}
+          >
+            <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--positivo)' }}>
+              Conta criada com sucesso
+            </p>
+            <p style={{ fontSize: 13, color: 'var(--ink2)' }}>
+              Repasse a senha abaixo ao usuário —{' '}
+              <strong style={{ color: 'var(--foreground)' }}>não será exibida novamente</strong>:
+            </p>
+            <code
+              style={{
+                display: 'block',
+                fontSize: 16,
+                fontWeight: 700,
+                letterSpacing: '.06em',
+                padding: '10px 14px',
+                background: 'var(--paper)',
+                border: '1px solid var(--line)',
+                userSelect: 'all',
+                color: 'var(--foreground)',
+              }}
+            >
+              {senhaExibida}
+            </code>
+            <button
+              onClick={() => setSenhaExibida(null)}
+              className={styles.btn}
+              style={{ alignSelf: 'flex-start', fontSize: 12, marginTop: 4 }}
+            >
+              Fechar
+            </button>
+          </div>
+        )}
 
         {/* Tabela de usuários */}
         {carregando ? (

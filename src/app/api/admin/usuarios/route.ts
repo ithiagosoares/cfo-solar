@@ -34,24 +34,51 @@ export async function POST(request: NextRequest) {
   const admin = await verificarAdmin()
   if (!admin) return NextResponse.json({ error: 'Acesso negado' }, { status: 403 })
 
-  const body = await request.json() as { email?: string; role?: string; nome?: string }
-  const { email, role, nome } = body
+  const body = await request.json() as { email?: string; role?: string; nome?: string; senha_temporaria?: string }
+  const { email, role, nome, senha_temporaria } = body
 
   if (!email || !role || !['admin', 'viewer'].includes(role)) {
     return NextResponse.json({ error: 'email e role (admin|viewer) são obrigatórios' }, { status: 400 })
   }
 
+  const emailNorm = email.toLowerCase().trim()
+
+  let authUserId: string | undefined
+
+  if (senha_temporaria) {
+    if (senha_temporaria.length < 6) {
+      return NextResponse.json({ error: 'Senha deve ter pelo menos 6 caracteres' }, { status: 400 })
+    }
+    const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+      email: emailNorm,
+      password: senha_temporaria,
+      email_confirm: true,
+    })
+    if (authError) {
+      const msg = authError.message.toLowerCase().includes('already been registered')
+        ? 'Este email já possui uma conta no sistema de autenticação'
+        : authError.message
+      return NextResponse.json({ error: msg }, { status: 400 })
+    }
+    authUserId = authData.user.id
+  }
+
   const { data, error } = await supabaseAdmin
     .from('usuarios_autorizados')
-    .insert({ email: email.toLowerCase().trim(), role, nome: nome ?? null, criado_por: admin.email })
+    .insert({ email: emailNorm, role, nome: nome ?? null, criado_por: admin.email })
     .select()
     .single()
 
   if (error) {
+    // Rollback: se criamos um usuário Auth mas o insert no DB falhou, remover o Auth user
+    if (authUserId) {
+      await supabaseAdmin.auth.admin.deleteUser(authUserId)
+    }
     const msg = error.code === '23505' ? 'Email já cadastrado' : error.message
     return NextResponse.json({ error: msg }, { status: 400 })
   }
-  return NextResponse.json({ usuario: data }, { status: 201 })
+
+  return NextResponse.json({ usuario: data, conta_auth_criada: !!senha_temporaria }, { status: 201 })
 }
 
 export async function PATCH(request: NextRequest) {

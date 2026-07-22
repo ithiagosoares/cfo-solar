@@ -8,22 +8,39 @@ export default function LoginPage() {
   const [carregando, setCarregando] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
 
+  const [email, setEmail] = useState('')
+  const [senha, setSenha] = useState('')
+  const [carregandoSenha, setCarregandoSenha] = useState(false)
+
   async function handleGoogleLogin() {
     setCarregando(true)
     setErro(null)
     const supabase = createSupabaseBrowserClient()
-    console.log('[login] redirectTo:', 'https://nihaobr.com.br/auth/callback')
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: {
-        redirectTo: 'https://nihaobr.com.br/auth/callback',
-      },
+      options: { redirectTo: 'https://nihaobr.com.br/auth/callback' },
     })
     if (error) {
       setErro('Não foi possível iniciar o login. Tente novamente.')
       setCarregando(false)
     }
   }
+
+  async function handleEmailLogin(e: React.FormEvent) {
+    e.preventDefault()
+    setCarregandoSenha(true)
+    setErro(null)
+    const supabase = createSupabaseBrowserClient()
+    const { error } = await supabase.auth.signInWithPassword({ email, password: senha })
+    if (error) {
+      setErro('Email ou senha incorretos.')
+      setCarregandoSenha(false)
+      return
+    }
+    window.location.href = '/'
+  }
+
+  const algumCarregando = carregando || carregandoSenha
 
   return (
     <div
@@ -41,7 +58,7 @@ export default function LoginPage() {
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
-          gap: 32,
+          gap: 24,
           width: '100%',
           maxWidth: 360,
           padding: '0 24px',
@@ -59,9 +76,10 @@ export default function LoginPage() {
         </div>
 
         <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {/* Google OAuth */}
           <button
             onClick={handleGoogleLogin}
-            disabled={carregando}
+            disabled={algumCarregando}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -70,12 +88,12 @@ export default function LoginPage() {
               border: '1px solid var(--line2)',
               background: 'none',
               padding: '11px 24px',
-              cursor: carregando ? 'default' : 'pointer',
+              cursor: algumCarregando ? 'default' : 'pointer',
               width: '100%',
               fontFamily: 'inherit',
               fontSize: 14,
               color: 'var(--foreground)',
-              opacity: carregando ? 0.5 : 1,
+              opacity: algumCarregando ? 0.5 : 1,
               transition: 'border-color .15s, color .15s',
             }}
           >
@@ -87,6 +105,68 @@ export default function LoginPage() {
             </svg>
             {carregando ? 'Aguarde…' : 'Entrar com Google'}
           </button>
+
+          {/* Divider */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <hr style={{ flex: 1, border: 'none', borderTop: '1px solid var(--line2)', margin: 0 }} />
+            <span style={{ fontSize: 11.5, color: 'var(--ink3)' }}>ou</span>
+            <hr style={{ flex: 1, border: 'none', borderTop: '1px solid var(--line2)', margin: 0 }} />
+          </div>
+
+          {/* Email + senha */}
+          <form onSubmit={handleEmailLogin} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <input
+              type="email"
+              required
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              placeholder="Email"
+              disabled={algumCarregando}
+              className={styles.input}
+              style={{ width: '100%' }}
+            />
+            <input
+              type="password"
+              required
+              value={senha}
+              onChange={e => setSenha(e.target.value)}
+              placeholder="Senha"
+              disabled={algumCarregando}
+              className={styles.input}
+              style={{ width: '100%' }}
+            />
+            <button
+              type="submit"
+              disabled={algumCarregando}
+              style={{
+                border: '1px solid var(--line2)',
+                background: 'none',
+                padding: '11px 24px',
+                cursor: algumCarregando ? 'default' : 'pointer',
+                width: '100%',
+                fontFamily: 'inherit',
+                fontSize: 14,
+                color: 'var(--foreground)',
+                opacity: algumCarregando ? 0.5 : 1,
+                transition: 'border-color .15s',
+                marginTop: 2,
+              }}
+            >
+              {carregandoSenha ? 'Aguarde…' : 'Entrar com email'}
+            </button>
+            <a
+              href="/login/recuperar-senha"
+              style={{
+                fontSize: 12,
+                color: 'var(--ink3)',
+                textAlign: 'right',
+                textDecoration: 'none',
+                marginTop: 2,
+              }}
+            >
+              Esqueci minha senha
+            </a>
+          </form>
 
           {erro && (
             <p style={{ fontSize: 12.5, color: 'var(--critico)', textAlign: 'center' }}>

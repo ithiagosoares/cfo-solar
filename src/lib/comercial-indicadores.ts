@@ -37,27 +37,43 @@ interface PedidoRow {
 
 // ─── Query base ───────────────────────────────────────────────────────────────
 
+const PAGE_SIZE = 1000
+
+// Busca todos os pedidos do período em lotes de PAGE_SIZE para nunca truncar.
+// O loop termina quando um lote retorna menos de PAGE_SIZE linhas — sinal de
+// que chegamos ao fim, independente do volume total.
 async function buscarPedidos(
   periodo: PeriodoFiltro,
   filtros: FiltrosComerciais,
 ): Promise<PedidoRow[]> {
-  let query = supabaseAdmin
-    .from('comercial_pedidos')
-    .select('*, vendedores(nome)')
-    .gte('data_orcamento', periodo.inicio)
-    .lte('data_orcamento', periodo.fim)
+  const todos: PedidoRow[] = []
+  let from = 0
 
-  if (filtros.empresa) query = query.eq('empresa', filtros.empresa)
-  if (filtros.filial)  query = query.eq('filial',  filtros.filial)
+  while (true) {
+    let query = supabaseAdmin
+      .from('comercial_pedidos')
+      .select('*, vendedores(nome)')
+      .gte('data_orcamento', periodo.inicio)
+      .lte('data_orcamento', periodo.fim)
+      .range(from, from + PAGE_SIZE - 1)
 
-  const { data, error } = await query
+    if (filtros.empresa) query = query.eq('empresa', filtros.empresa)
+    if (filtros.filial)  query = query.eq('filial',  filtros.filial)
 
-  if (error) {
-    console.error('[comercial-indicadores] buscarPedidos erro:', JSON.stringify(error, null, 2))
-    throw new Error(`Falha ao buscar pedidos: ${error.message}`)
+    const { data, error } = await query
+
+    if (error) {
+      console.error('[comercial-indicadores] buscarPedidos erro:', JSON.stringify(error, null, 2))
+      throw new Error(`Falha ao buscar pedidos: ${error.message}`)
+    }
+
+    const lote = (data ?? []) as PedidoRow[]
+    todos.push(...lote)
+    if (lote.length < PAGE_SIZE) break
+    from += PAGE_SIZE
   }
 
-  return (data ?? []) as PedidoRow[]
+  return todos
 }
 
 // ─── Utilitários de data ──────────────────────────────────────────────────────

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createSupabaseBrowserClient } from '@/lib/supabase-client'
 import styles from '@/styles/editorial.module.css'
 
@@ -12,8 +12,12 @@ export default function RedefinirSenhaPage() {
   const [confirmar, setConfirmar] = useState('')
   const [carregando, setCarregando] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
+  const jaVerificou = useRef(false)
 
   useEffect(() => {
+    if (jaVerificou.current) return
+    jaVerificou.current = true
+
     const params = new URLSearchParams(window.location.search)
     const tokenHash = params.get('token_hash')
     const type = params.get('type')

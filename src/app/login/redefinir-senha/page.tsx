@@ -7,6 +7,7 @@ import styles from '@/styles/editorial.module.css'
 type Estado = 'verificando' | 'form' | 'link_invalido' | 'sucesso'
 
 export default function RedefinirSenhaPage() {
+  const [supabase] = useState(() => createSupabaseBrowserClient())
   const [estado, setEstado] = useState<Estado>('verificando')
   const [novaSenha, setNovaSenha] = useState('')
   const [confirmar, setConfirmar] = useState('')
@@ -27,11 +28,10 @@ export default function RedefinirSenhaPage() {
       return
     }
 
-    const supabase = createSupabaseBrowserClient()
     supabase.auth.verifyOtp({ token_hash: tokenHash, type: 'recovery' }).then(({ error }) => {
       setEstado(error ? 'link_invalido' : 'form')
     })
-  }, [])
+  }, [supabase])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -45,7 +45,6 @@ export default function RedefinirSenhaPage() {
       return
     }
     setCarregando(true)
-    const supabase = createSupabaseBrowserClient()
     const { data: sessionData } = await supabase.auth.getSession()
     console.log('[redefinir-senha] sessão no momento do updateUser:', JSON.stringify(sessionData, null, 2))
     const { error } = await supabase.auth.updateUser({ password: novaSenha })

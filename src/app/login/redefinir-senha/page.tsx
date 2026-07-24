@@ -48,6 +48,7 @@ export default function RedefinirSenhaPage() {
     const supabase = createSupabaseBrowserClient()
     const { error } = await supabase.auth.updateUser({ password: novaSenha })
     if (error) {
+      console.error('[redefinir-senha] erro completo do updateUser:', JSON.stringify(error, null, 2))
       setErro('Não foi possível redefinir a senha. O link pode ter expirado — solicite uma nova recuperação.')
       setCarregando(false)
       return

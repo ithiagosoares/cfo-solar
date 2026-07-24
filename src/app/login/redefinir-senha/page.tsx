@@ -46,6 +46,8 @@ export default function RedefinirSenhaPage() {
     }
     setCarregando(true)
     const supabase = createSupabaseBrowserClient()
+    const { data: sessionData } = await supabase.auth.getSession()
+    console.log('[redefinir-senha] sessão no momento do updateUser:', JSON.stringify(sessionData, null, 2))
     const { error } = await supabase.auth.updateUser({ password: novaSenha })
     if (error) {
       console.error('[redefinir-senha] erro completo do updateUser:', JSON.stringify(error, null, 2))

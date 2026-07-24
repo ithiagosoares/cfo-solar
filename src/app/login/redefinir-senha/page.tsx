@@ -28,7 +28,11 @@ export default function RedefinirSenhaPage() {
       return
     }
 
-    supabase.auth.verifyOtp({ token_hash: tokenHash, type: 'recovery' }).then(({ error }) => {
+    supabase.auth.verifyOtp({ token_hash: tokenHash, type: 'recovery' }).then(async ({ error }) => {
+      if (!error) {
+        const { data: sessionData } = await supabase.auth.getSession()
+        console.log('[redefinir-senha] sessão LOGO APÓS verifyOtp:', JSON.stringify(sessionData, null, 2))
+      }
       setEstado(error ? 'link_invalido' : 'form')
     })
   }, [supabase])

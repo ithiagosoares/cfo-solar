@@ -69,7 +69,7 @@ export async function proxy(request: NextRequest) {
 
   const { data: autorizado, error: erroQuery } = await admin
     .from('usuarios_autorizados')
-    .select('role, comercial_role')
+    .select('role, comercial_role, papel, vendedor_id')
     .eq('email', user.email)
     .single()
 
@@ -83,7 +83,7 @@ export async function proxy(request: NextRequest) {
     return redir
   }
 
-  // Calcula o nível comercial:
+  // Calcula o nível comercial (lógica legada — mantida para rotas do financeiro):
   //   admin financeiro → diretor comercial (acesso total)
   //   comercial_role='gestor' → gestor comercial
   //   null → sem acesso ao módulo comercial
@@ -92,19 +92,25 @@ export async function proxy(request: NextRequest) {
     autorizado.comercial_role === 'gestor' ? 'gestor' :
     null
 
-  // Protege páginas /comercial/** (não /api/comercial, que retornam 403 via handler)
-  if ((pathname === '/comercial' || pathname.startsWith('/comercial/')) && comercialRole === null) {
+  // Papel único — novo sistema de controle de acesso comercial
+  const papel = (autorizado.papel as string) ?? 'sem_acesso'
+  const vendedorId = (autorizado.vendedor_id as string | null) ?? null
+
+  // Protege páginas /comercial/** pelo campo papel (não /api/comercial, que retornam 403 via handler)
+  if ((pathname === '/comercial' || pathname.startsWith('/comercial/')) && papel === 'sem_acesso') {
     const redir = NextResponse.redirect(new URL('/acesso-negado', request.url))
     redir.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate')
     redir.headers.set('Pragma', 'no-cache')
     return redir
   }
 
-  // Injeta role, email e nível comercial nos headers para uso em API routes / Server Components
+  // Injeta role, email, nível comercial e papel nos headers para uso em API routes / Server Components
   const requestHeaders = new Headers(request.headers)
   requestHeaders.set('x-user-role', autorizado.role)
   requestHeaders.set('x-user-email', user.email)
   requestHeaders.set('x-comercial-role', comercialRole ?? '')
+  requestHeaders.set('x-papel', papel)
+  requestHeaders.set('x-vendedor-id', vendedorId ?? '')
 
   const finalResponse = NextResponse.next({ request: { headers: requestHeaders } })
 

@@ -3,6 +3,17 @@ import type { NextRequest } from 'next/server'
 import { createSupabaseServerClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 
+const PAPEIS_VALIDOS = ['administrador', 'gestor', 'sdr', 'vendedor', 'sem_acesso'] as const
+type Papel = typeof PAPEIS_VALIDOS[number]
+
+function papelParaRole(papel: Papel): 'admin' | 'viewer' {
+  return papel === 'administrador' ? 'admin' : 'viewer'
+}
+
+function papelParaComercialRole(papel: Papel): 'gestor' | null {
+  return papel === 'gestor' ? 'gestor' : null
+}
+
 async function verificarAdmin() {
   const supabase = await createSupabaseServerClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -23,7 +34,7 @@ export async function GET() {
 
   const { data, error } = await supabaseAdmin
     .from('usuarios_autorizados')
-    .select('id, email, role, comercial_role, nome, criado_em, criado_por')
+    .select('id, email, role, comercial_role, papel, vendedor_id, nome, criado_em, criado_por')
     .order('criado_em', { ascending: true })
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
@@ -34,14 +45,27 @@ export async function POST(request: NextRequest) {
   const admin = await verificarAdmin()
   if (!admin) return NextResponse.json({ error: 'Acesso negado' }, { status: 403 })
 
-  const body = await request.json() as { email?: string; role?: string; nome?: string; senha_temporaria?: string }
-  const { email, role, nome, senha_temporaria } = body
+  const body = await request.json() as {
+    email?: string
+    papel?: string
+    nome?: string
+    senha_temporaria?: string
+    vendedor_id?: string | null
+  }
+  const { email, papel, nome, senha_temporaria, vendedor_id } = body
 
-  if (!email || !role || !['admin', 'viewer'].includes(role)) {
-    return NextResponse.json({ error: 'email e role (admin|viewer) são obrigatórios' }, { status: 400 })
+  if (!email || !papel || !PAPEIS_VALIDOS.includes(papel as Papel)) {
+    return NextResponse.json({ error: 'email e papel são obrigatórios' }, { status: 400 })
   }
 
+  if (papel === 'vendedor' && !vendedor_id) {
+    return NextResponse.json({ error: 'vendedor_id é obrigatório quando papel = vendedor' }, { status: 400 })
+  }
+
+  const papelValido = papel as Papel
   const emailNorm = email.toLowerCase().trim()
+  const role = papelParaRole(papelValido)
+  const comercial_role = papelParaComercialRole(papelValido)
 
   let authUserId: string | undefined
 
@@ -65,15 +89,20 @@ export async function POST(request: NextRequest) {
 
   const { data, error } = await supabaseAdmin
     .from('usuarios_autorizados')
-    .insert({ email: emailNorm, role, nome: nome ?? null, criado_por: admin.email })
+    .insert({
+      email: emailNorm,
+      role,
+      comercial_role,
+      papel: papelValido,
+      vendedor_id: vendedor_id ?? null,
+      nome: nome ?? null,
+      criado_por: admin.email,
+    })
     .select()
     .single()
 
   if (error) {
-    // Rollback: se criamos um usuário Auth mas o insert no DB falhou, remover o Auth user
-    if (authUserId) {
-      await supabaseAdmin.auth.admin.deleteUser(authUserId)
-    }
+    if (authUserId) await supabaseAdmin.auth.admin.deleteUser(authUserId)
     const msg = error.code === '23505' ? 'Email já cadastrado' : error.message
     return NextResponse.json({ error: msg }, { status: 400 })
   }
@@ -85,19 +114,35 @@ export async function PATCH(request: NextRequest) {
   const admin = await verificarAdmin()
   if (!admin) return NextResponse.json({ error: 'Acesso negado' }, { status: 403 })
 
-  const body = await request.json() as { email?: string; comercial_role?: 'gestor' | null }
-  const { email, comercial_role } = body
+  const body = await request.json() as {
+    email?: string
+    papel?: string
+    vendedor_id?: string | null
+  }
+  const { email, papel, vendedor_id } = body
 
   if (!email) {
     return NextResponse.json({ error: 'email é obrigatório' }, { status: 400 })
   }
-  if (comercial_role !== 'gestor' && comercial_role !== null && comercial_role !== undefined) {
-    return NextResponse.json({ error: 'comercial_role deve ser "gestor" ou null' }, { status: 400 })
+  if (!papel || !PAPEIS_VALIDOS.includes(papel as Papel)) {
+    return NextResponse.json({ error: 'papel inválido' }, { status: 400 })
   }
+  if (papel === 'vendedor' && !vendedor_id) {
+    return NextResponse.json({ error: 'vendedor_id é obrigatório quando papel = vendedor' }, { status: 400 })
+  }
+
+  const papelValido = papel as Papel
+  const role = papelParaRole(papelValido)
+  const comercial_role = papelParaComercialRole(papelValido)
 
   const { data, error } = await supabaseAdmin
     .from('usuarios_autorizados')
-    .update({ comercial_role: comercial_role ?? null })
+    .update({
+      papel: papelValido,
+      role,
+      comercial_role,
+      vendedor_id: papel === 'vendedor' ? (vendedor_id ?? null) : null,
+    })
     .eq('email', email.toLowerCase())
     .select()
     .single()

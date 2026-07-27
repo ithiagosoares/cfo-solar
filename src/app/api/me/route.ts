@@ -12,7 +12,7 @@ export async function GET() {
 
   const { data } = await supabaseAdmin
     .from('usuarios_autorizados')
-    .select('email, role, nome, comercial_role')
+    .select('email, role, nome, comercial_role, papel, vendedor_id')
     .eq('email', user.email)
     .single()
 
@@ -31,5 +31,7 @@ export async function GET() {
     nome: data.nome ?? (user.user_metadata?.full_name as string | undefined) ?? data.email,
     avatar: (user.user_metadata?.avatar_url as string | undefined) ?? null,
     comercialRole,
+    papel: (data.papel as string) ?? 'sem_acesso',
+    vendedorId: (data.vendedor_id as string | null) ?? null,
   })
 }

@@ -11,6 +11,8 @@ export interface UsuarioInfo {
   role: 'admin' | 'viewer'
   nome: string | null
   avatar: string | null
+  papel: string
+  vendedorId: string | null
 }
 
 interface UserMenuProps {

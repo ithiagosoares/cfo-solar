@@ -28,11 +28,7 @@ export default function RedefinirSenhaPage() {
       return
     }
 
-    supabase.auth.verifyOtp({ token_hash: tokenHash, type: 'recovery' }).then(async ({ error }) => {
-      if (!error) {
-        const { data: sessionData } = await supabase.auth.getSession()
-        console.log('[redefinir-senha] sessão LOGO APÓS verifyOtp:', JSON.stringify(sessionData, null, 2))
-      }
+    supabase.auth.verifyOtp({ token_hash: tokenHash, type: 'recovery' }).then(({ error }) => {
       setEstado(error ? 'link_invalido' : 'form')
     })
   }, [supabase])
@@ -49,11 +45,8 @@ export default function RedefinirSenhaPage() {
       return
     }
     setCarregando(true)
-    const { data: sessionData } = await supabase.auth.getSession()
-    console.log('[redefinir-senha] sessão no momento do updateUser:', JSON.stringify(sessionData, null, 2))
     const { error } = await supabase.auth.updateUser({ password: novaSenha })
     if (error) {
-      console.error('[redefinir-senha] erro completo do updateUser:', JSON.stringify(error, null, 2))
       setErro('Não foi possível redefinir a senha. O link pode ter expirado — solicite uma nova recuperação.')
       setCarregando(false)
       return

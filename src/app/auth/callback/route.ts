@@ -34,15 +34,11 @@ export async function GET(request: NextRequest) {
       },
     )
 
-    const { data, error } = await supabase.auth.exchangeCodeForSession(code)
-
-    console.log('[callback] sessão criada:', !!data.session, '| email:', data.session?.user?.email ?? 'n/a')
+    const { error } = await supabase.auth.exchangeCodeForSession(code)
 
     if (!error) {
       return supabaseResponse
     }
-
-    console.error('[callback] erro na troca de código:', error.message)
   }
 
   return NextResponse.redirect(new URL('/login?erro=callback_falhou', origin))

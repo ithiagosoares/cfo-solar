@@ -10,11 +10,15 @@ import {
   atualizarStatusImportacao,
 } from '@/lib/comercial-importacoes-repository'
 import { inserirPedidosImportacao } from '@/lib/comercial-pedidos-repository'
-import { requireComercialAccess } from '@/lib/comercial-auth'
+import { getPapel } from '@/lib/comercial-auth'
+
+const PAPEIS_UPLOAD = new Set(['administrador', 'gestor'])
 
 export async function POST(request: Request) {
-  const denied = requireComercialAccess(request)
-  if (denied) return denied
+  const papel = getPapel(request)
+  if (!papel || !PAPEIS_UPLOAD.has(papel)) {
+    return Response.json({ ok: false, error: 'Acesso negado' }, { status: 403 })
+  }
   try {
     const body = await request.json() as {
       importacaoId?: string
@@ -56,8 +60,10 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  const denied = requireComercialAccess(request)
-  if (denied) return denied
+  const papel = getPapel(request)
+  if (!papel || !PAPEIS_UPLOAD.has(papel)) {
+    return Response.json({ ok: false, error: 'Acesso negado' }, { status: 403 })
+  }
   try {
     const { searchParams } = new URL(request.url)
     const importacaoId = searchParams.get('importacaoId')

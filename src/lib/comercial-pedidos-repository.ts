@@ -1,13 +1,71 @@
 // Server-only — usa supabaseAdmin (service_role key). Nunca importar de 'use client'.
+// Exporta também inserirPedidoManual e listarPedidos usados por /api/orcamentos.
 
 import { supabaseAdmin } from './supabase-admin'
 import type { RegistroPreview } from './comercial-importacoes-repository'
 
 const TABELA = 'comercial_pedidos'
 
+// ─── Tipos públicos ───────────────────────────────────────────────────────────
+
+export type StatusPedido = 'orcado' | 'vendido'
+
+export interface PedidoResumo {
+  vendedorId: string | null
+  empresa: string
+  filial: string
+  cliente: string
+  valorOrcado: number
+  dataOrcamento: string | null
+  status: StatusPedido
+  valorVendido: number | null
+  dataVenda: string | null
+  origem: string
+  numeroPedido: string | null
+  criadoEm: string
+}
+
+export interface DadosPedidoManual {
+  vendedorId: string | null
+  empresa: string
+  filial: string
+  cliente: string
+  valorOrcado: number
+  dataOrcamento: string | null
+  status: StatusPedido
+  valorVendido: number | null
+  dataVenda: string | null
+}
+
+// ─── Helpers internos ────────────────────────────────────────────────────────
+
+// Tenta resolver cliente_cnpj por correspondência normalizada de razao_social.
+// Carrega todos os clientes em memória — tabela pequena no início do projeto.
+// Retorna mapa nome_original → cnpj (só para os nomes que encontraram correspondência).
+async function resolverClienteCnpj(nomes: string[]): Promise<Record<string, string>> {
+  if (nomes.length === 0) return {}
+
+  const { data } = await supabaseAdmin.from('clientes').select('cnpj, razao_social')
+  if (!data || data.length === 0) return {}
+
+  const norm = (s: string) => s.trim().toUpperCase().replace(/\s+/g, ' ')
+  const porNomeNorm: Record<string, string> = {}
+  for (const row of data as { cnpj: string; razao_social: string }[]) {
+    porNomeNorm[norm(row.razao_social)] = row.cnpj
+  }
+
+  const resultado: Record<string, string> = {}
+  for (const nome of nomes) {
+    const cnpj = porNomeNorm[norm(nome)]
+    if (cnpj) resultado[nome] = cnpj
+  }
+  return resultado
+}
+
 // Insere múltiplos registros de uma importação em comercial_pedidos.
 // mapeamentoVendedores: nome_original_no_relatorio -> vendedor_id resolvido pelo usuário.
 // Se o registro já tem vendedorId (reconhecido automaticamente), o mapeamento é ignorado.
+// cliente_cnpj é preenchido quando razao_social do cliente já existe em clientes; null caso contrário.
 export async function inserirPedidosImportacao(
   registros: RegistroPreview[],
   importacaoId: string,
@@ -15,11 +73,15 @@ export async function inserirPedidosImportacao(
 ): Promise<void> {
   if (registros.length === 0) return
 
+  const nomesUnicos = [...new Set(registros.map(r => r.cliente).filter(Boolean))]
+  const cnpjPorNome = await resolverClienteCnpj(nomesUnicos)
+
   const rows = registros.map(r => ({
     vendedor_id:     r.vendedorId ?? mapeamentoVendedores[r.vendedorNome] ?? null,
     empresa:         r.empresa,
     filial:          r.filial,
     cliente:         r.cliente,
+    cliente_cnpj:    cnpjPorNome[r.cliente] ?? null,
     valor_orcado:    r.valorOrcado,
     data_orcamento:  r.dataOrcamento || null,
     status:          r.status,
@@ -48,5 +110,95 @@ export async function inserirPedidosImportacao(
   if (error) {
     console.error('[comercial-pedidos-repository] inserirPedidosImportacao erro:', JSON.stringify(error, null, 2))
     throw new Error(`Falha ao inserir pedidos: ${error.message}`)
+  }
+}
+
+// Insere um único pedido cadastrado manualmente (origem='manual', sem numero_pedido).
+// Registros manuais com numero_pedido=null não conflitam pela constraint
+// uniq_pedido_empresa (NULL ≠ NULL no Postgres) — INSERT simples é seguro.
+export async function inserirPedidoManual(dados: DadosPedidoManual): Promise<void> {
+  const cnpjPorNome = dados.cliente
+    ? await resolverClienteCnpj([dados.cliente])
+    : {}
+
+  const { error } = await supabaseAdmin
+    .from(TABELA)
+    .insert({
+      vendedor_id:    dados.vendedorId,
+      empresa:        dados.empresa,
+      filial:         dados.filial,
+      cliente:        dados.cliente,
+      cliente_cnpj:   cnpjPorNome[dados.cliente] ?? null,
+      valor_orcado:   dados.valorOrcado,
+      data_orcamento: dados.dataOrcamento || null,
+      status:         dados.status,
+      valor_vendido:  dados.status === 'vendido' ? dados.valorVendido : null,
+      data_venda:     dados.status === 'vendido' ? (dados.dataVenda || null) : null,
+      numero_pedido:  null,
+      origem:         'manual' as const,
+      importacao_id:  null,
+    })
+
+  if (error) throw new Error(`Falha ao inserir pedido manual: ${error.message}`)
+}
+
+// Lista pedidos com paginação. Filtra por vendedor_id quando informado.
+// Ordena por data de criação decrescente (mais recente primeiro).
+export async function listarPedidos(filtros: {
+  vendedorId?: string
+  pagina?: number
+  porPagina?: number
+} = {}): Promise<{ pedidos: PedidoResumo[]; total: number }> {
+  const pagina    = Math.max(1, filtros.pagina    ?? 1)
+  const porPagina = Math.min(100, Math.max(1, filtros.porPagina ?? 20))
+  const from      = (pagina - 1) * porPagina
+  const to        = from + porPagina - 1
+
+  type Row = {
+    vendedor_id: string | null
+    empresa: string
+    filial: string
+    cliente: string
+    valor_orcado: number
+    data_orcamento: string | null
+    status: StatusPedido
+    valor_vendido: number | null
+    data_venda: string | null
+    origem: string
+    numero_pedido: string | null
+    created_at: string
+  }
+
+  let query = supabaseAdmin
+    .from(TABELA)
+    .select(
+      'vendedor_id, empresa, filial, cliente, valor_orcado, data_orcamento, status, valor_vendido, data_venda, origem, numero_pedido, created_at',
+      { count: 'exact' },
+    )
+    .order('created_at', { ascending: false })
+    .range(from, to)
+
+  if (filtros.vendedorId) query = query.eq('vendedor_id', filtros.vendedorId)
+
+  const { data, error, count } = await query
+
+  if (error) throw new Error(`Falha ao listar pedidos: ${error.message}`)
+
+  return {
+    pedidos: (data ?? []).map((row: Row) => ({
+      vendedorId:    row.vendedor_id,
+      empresa:       row.empresa,
+      filial:        row.filial,
+      cliente:       row.cliente,
+      valorOrcado:   row.valor_orcado,
+      dataOrcamento: row.data_orcamento,
+      status:        row.status,
+      valorVendido:  row.valor_vendido,
+      dataVenda:     row.data_venda,
+      origem:        row.origem,
+      numeroPedido:  row.numero_pedido,
+      criadoEm:      row.created_at,
+    })),
+    total: count ?? 0,
   }
 }

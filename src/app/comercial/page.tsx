@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, Cell, ResponsiveContainer, LabelList,
@@ -17,24 +18,16 @@ import {
 } from '@/lib/upper-mock-data'
 import { formatMoeda, formatData, formatPercentual } from '@/lib/utils'
 import { CORES } from '@/lib/tema'
-import { NavTabs, type ItemNavTab } from '@/components/layout/NavTabs'
 import { UserMenu, type UsuarioInfo } from '@/components/layout/UserMenu'
 import styles from '@/styles/editorial.module.css'
 
 const LIMITE_ESTOQUE_CRITICO = 10
 const LIMITE_ESTOQUE_ATENCAO = 30
 
-const ABAS_NAV: ItemNavTab<string>[] = [
-  { id: 'dashboard',   label: 'Dashboard',        href: '/' },
-  { id: 'empresas',    label: 'Empresas',          href: '/?tab=empresas' },
-  { id: 'despesas',    label: 'Despesas',          href: '/?tab=despesas' },
-  { id: 'clientes',    label: 'Clientes',          href: '/?tab=clientes' },
-  { id: 'comercial',   label: 'Comercial' },
-  { id: 'relatorio',   label: 'Relatório IA',      href: '/?tab=relatorio' },
-  { id: 'comparativo', label: 'Comparativo',       href: '/?tab=comparativo' },
-  { id: 'chat',        label: 'Chat',              href: '/?tab=chat' },
-  { id: 'upload',      label: 'Adicionar Arquivo', href: '/?tab=upload' },
-]
+// TODO [fase futura — filtro por carteira]:
+// Vendedores devem ver apenas pedidos vinculados à própria carteira (cliente_cnpj
+// presente em clientes onde vendedor_id = x-vendedor-id). Aguarda a tabela clientes
+// estar populada com CNPJs suficientes para o filtro ser útil.
 
 const LABEL_SITUACAO: Record<string, string> = {
   PENDENTE:    'pendente',
@@ -318,6 +311,7 @@ function SecaoCurvaABCD({ pedidos }: { pedidos: PedidoUpper[] }) {
 type SubAba = 'pessoas' | 'compras' | 'estoque'
 
 export default function ComercialPage() {
+  const router = useRouter()
   const [dados, setDados] = useState<DadosComerciais | null>(null)
   const [erro, setErro] = useState<string | null>(null)
   const [usuario, setUsuario] = useState<UsuarioInfo | null>(null)
@@ -325,9 +319,13 @@ export default function ComercialPage() {
   useEffect(() => {
     fetch('/api/me')
       .then(r => r.json())
-      .then((d: UsuarioInfo) => setUsuario(d))
+      .then((d: UsuarioInfo) => {
+        // sdr não tem acesso a esta tela — o proxy já redireciona, mas reforçamos aqui
+        if (d.papel === 'sdr') { router.replace('/inicio'); return }
+        setUsuario(d)
+      })
       .catch(() => {})
-  }, [])
+  }, [router])
   const [expandidos, setExpandidos] = useState<Set<string>>(new Set())
   const [subAba, setSubAba] = useState<SubAba>('pessoas')
   const [tipoPeriodo, setTipoPeriodo] = useState<TipoPeriodo>('30dias')
@@ -359,21 +357,19 @@ export default function ComercialPage() {
     })
   }
 
-  const abasNavVisiveis = usuario?.role === 'viewer'
-    ? ABAS_NAV.filter(a => a.id !== 'upload')
-    : ABAS_NAV
-
   const cabecalho = (
-    <div className={`${styles.hdr} ${styles.htop}`}>
-      <div className={styles.wrap}>
-        <div className={styles.brand} style={{ alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
-          <div className="flex items-center gap-3">
-            <img src="/logo.png" alt="CFO.IA" style={{ height: 52, width: 'auto', margin: '-9px 0' }} />
-            <div className={styles.bsub}>Painel financeiro · Estruturas para energia solar</div>
-          </div>
-          {usuario && <UserMenu usuario={usuario} />}
+    <div style={{ borderBottom: '1px solid var(--line)', padding: '16px 0', marginBottom: 0 }}>
+      <div className={styles.wrap} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+          <a
+            href="/inicio"
+            style={{ fontSize: 13, color: 'var(--ink3)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 4 }}
+          >
+            ← Início
+          </a>
+          <img src="/logo.png" alt="CFO.IA" style={{ height: 36, width: 'auto' }} />
         </div>
-        <NavTabs itens={abasNavVisiveis} ativo="comercial" />
+        {usuario && <UserMenu usuario={usuario} />}
       </div>
     </div>
   )

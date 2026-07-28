@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import styles from '@/styles/editorial.module.css'
 import { formatMoeda } from '@/lib/utils'
 
@@ -69,6 +70,20 @@ const EMPRESAS = [
 // ─── Página ───────────────────────────────────────────────────────────────────
 
 export default function ComercialUploadPage() {
+  const router = useRouter()
+
+  // Reforço client-side: o proxy já bloqueia, mas redirecionamos explicitamente
+  useEffect(() => {
+    fetch('/api/me')
+      .then(r => r.json())
+      .then((d: { papel?: string }) => {
+        if (d.papel !== 'administrador' && d.papel !== 'gestor') {
+          router.replace('/inicio')
+        }
+      })
+      .catch(() => {})
+  }, [router])
+
   // ── Upload phase ────────────────────────────────────────────────────────────
   const [arquivos, setArquivos] = useState<File[]>([])
   const [empresa, setEmpresa] = useState('')
@@ -240,10 +255,10 @@ export default function ComercialUploadPage() {
               Nova importação
             </button>
             <button
-              onClick={() => window.history.back()}
+              onClick={() => router.push('/inicio')}
               style={btnGhostStyle}
             >
-              Voltar
+              ← Início
             </button>
           </div>
         </div>
@@ -471,8 +486,8 @@ export default function ComercialUploadPage() {
   return (
     <div className={styles.page}>
       <div className={styles.wrap} style={{ maxWidth: 680, paddingTop: 40, paddingBottom: 60 }}>
-        <button onClick={() => window.history.back()} style={btnGhostStyle}>
-          ← Voltar
+        <button onClick={() => router.push('/inicio')} style={btnGhostStyle}>
+          ← Início
         </button>
 
         <div className={`${styles.stitle} ${styles.serif}`} style={{ marginTop: 24, marginBottom: 6 }}>

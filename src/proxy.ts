@@ -96,12 +96,58 @@ export async function proxy(request: NextRequest) {
   const papel = (autorizado.papel as string) ?? 'sem_acesso'
   const vendedorId = (autorizado.vendedor_id as string | null) ?? null
 
-  // Protege páginas /comercial/** pelo campo papel (não /api/comercial, que retornam 403 via handler)
-  if ((pathname === '/comercial' || pathname.startsWith('/comercial/')) && papel === 'sem_acesso') {
+  // sem_acesso → bloqueia qualquer página autenticada; /acesso-negado já é rota pública
+  if (papel === 'sem_acesso') {
     const redir = NextResponse.redirect(new URL('/acesso-negado', request.url))
     redir.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate')
     redir.headers.set('Pragma', 'no-cache')
     return redir
+  }
+
+  // Módulo financeiro desativado — código mantido mas sem roteamento ativo.
+  // A página raiz (/) é o dashboard financeiro; as rotas de API abaixo são seus endpoints.
+  // Qualquer acesso direto é silenciosamente redirecionado para /inicio.
+  const APIS_FINANCEIRO = ['/api/analisar', '/api/historico', '/api/chat', '/api/comparativo']
+  const eFinanceiro =
+    pathname === '/' ||
+    APIS_FINANCEIRO.some(r => pathname === r || pathname.startsWith(r + '/'))
+  if (eFinanceiro) {
+    if (pathname.startsWith('/api/')) {
+      return new Response(JSON.stringify({ ok: false, error: 'Módulo desativado' }), {
+        status: 403,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    }
+    const redir = NextResponse.redirect(new URL('/inicio', request.url))
+    redir.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate')
+    return redir
+  }
+
+  // Mapa de rotas gerenciadas — define quais papéis têm acesso a cada rota.
+  // Verificação usa o prefixo mais específico (sorted by length desc) para que
+  // /comercial/upload não seja coberto pelo prefixo /comercial de vendedor.
+  const PAPEIS_POR_ROTA: Record<string, readonly string[]> = {
+    '/orcamentos/cadastro': ['administrador', 'gestor', 'vendedor'],
+    '/admin/vendedores':    ['administrador'],
+    '/admin/usuarios':      ['administrador'],
+    '/comercial/upload':    ['administrador', 'gestor'],
+    '/clientes/cadastro':   ['administrador', 'gestor', 'sdr', 'vendedor'],
+    '/orcamentos':          ['administrador', 'gestor', 'vendedor'],
+    '/comercial':           ['administrador', 'gestor', 'vendedor'],
+  }
+  const rotasOrdenadas = Object.entries(PAPEIS_POR_ROTA)
+    .sort(([a], [b]) => b.length - a.length)
+
+  for (const [rota, papeis] of rotasOrdenadas) {
+    if (pathname === rota || pathname.startsWith(rota + '/')) {
+      if (!(papeis as string[]).includes(papel)) {
+        // Papel sem permissão para esta rota → hub (não acesso-negado, que é só para sem_acesso)
+        const redir = NextResponse.redirect(new URL('/inicio', request.url))
+        redir.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate')
+        return redir
+      }
+      break // rota mais específica encontrada, parar
+    }
   }
 
   // Injeta role, email, nível comercial e papel nos headers para uso em API routes / Server Components

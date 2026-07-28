@@ -19,7 +19,9 @@ import {
 import { validarDivergencias } from '@/lib/comercial-validacao'
 import { listarVendedores } from '@/lib/vendedores-repository'
 import { criarImportacao, type RegistroPreview } from '@/lib/comercial-importacoes-repository'
-import { requireComercialAccess } from '@/lib/comercial-auth'
+import { getPapel } from '@/lib/comercial-auth'
+
+const PAPEIS_UPLOAD = new Set(['administrador', 'gestor'])
 
 const FILIAL_PARA_UF: Record<string, string> = {
   'São Paulo': 'SP',
@@ -36,8 +38,10 @@ const EMPRESAS_VALIDAS = [
 const FILIAIS_VALIDAS = ['São Paulo', 'Paraná']
 
 export async function POST(request: Request) {
-  const denied = requireComercialAccess(request)
-  if (denied) return denied
+  const papel = getPapel(request)
+  if (!papel || !PAPEIS_UPLOAD.has(papel)) {
+    return Response.json({ ok: false, error: 'Acesso negado' }, { status: 403 })
+  }
   try {
     // ── 1. Ler form data ────────────────────────────────────────────────────
     const formData = await request.formData()

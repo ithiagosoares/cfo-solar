@@ -1,4 +1,10 @@
 {
+  "crons": [
+    {
+      "path": "/api/cron/verificar-vencimentos",
+      "schedule": "0 6 * * *"
+    }
+  ],
   "headers": [
     {
       "source": "/login",

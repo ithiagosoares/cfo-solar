@@ -111,6 +111,27 @@ export interface FiltrosCliente {
   tipo?: TipoCliente
   origem?: OrigemCliente
   criadoPor?: string
+  pagina?: number
+  porPagina?: number
+}
+
+export interface DadosAtualizacaoCliente {
+  razaoSocial?: string
+  tipo?: TipoCliente
+  origem?: OrigemCliente
+  origemLeadDetalhe?: string | null
+  cidade?: string
+  estado?: string
+  telefone?: string
+  nomeContato?: string | null
+  emailContato?: string | null
+  statusCrm?: StatusCrm
+  ultimoContato?: string | null
+  proximaAcao?: string | null
+  proximaAcaoData?: string | null
+  observacoes?: string | null
+  canalPreferido?: CanalPreferido | null
+  produtoInteresse?: string | null
 }
 
 // ─── Mapper ──────────────────────────────────────────────────────────────────
@@ -191,11 +212,17 @@ export async function criarCliente(dados: DadosNovoCliente, criadoPor: string): 
   return mapearLinha(data as ClienteRow)
 }
 
-export async function listarClientes(filtros: FiltrosCliente = {}): Promise<Cliente[]> {
+export async function listarClientes(filtros: FiltrosCliente = {}): Promise<{ clientes: Cliente[]; total: number }> {
+  const pagina    = Math.max(1, filtros.pagina    ?? 1)
+  const porPagina = Math.min(100, Math.max(1, filtros.porPagina ?? 20))
+  const from      = (pagina - 1) * porPagina
+  const to        = from + porPagina - 1
+
   let query = supabaseAdmin
     .from(TABELA)
-    .select('*')
+    .select('*', { count: 'exact' })
     .order('created_at', { ascending: false })
+    .range(from, to)
 
   if (filtros.status)     query = query.eq('status',     filtros.status)
   if (filtros.vendedorId) query = query.eq('vendedor_id', filtros.vendedorId)
@@ -203,10 +230,66 @@ export async function listarClientes(filtros: FiltrosCliente = {}): Promise<Clie
   if (filtros.origem)     query = query.eq('origem',     filtros.origem)
   if (filtros.criadoPor)  query = query.eq('criado_por', filtros.criadoPor)
 
-  const { data, error } = await query
+  const { data, error, count } = await query
   if (error) throw new Error(`Falha ao listar clientes: ${error.message}`)
 
-  return (data ?? []).map(row => mapearLinha(row as ClienteRow))
+  return {
+    clientes: (data ?? []).map(row => mapearLinha(row as ClienteRow)),
+    total: count ?? 0,
+  }
+}
+
+export async function buscarCliente(cnpj: string): Promise<Cliente | null> {
+  const cnpjNorm = normalizarCNPJ(cnpj)
+  const { data, error } = await supabaseAdmin
+    .from(TABELA)
+    .select('*')
+    .eq('cnpj', cnpjNorm)
+    .single()
+
+  if (error) {
+    if (error.code === 'PGRST116') return null
+    throw new Error(`Falha ao buscar cliente: ${error.message}`)
+  }
+
+  return data ? mapearLinha(data as ClienteRow) : null
+}
+
+export async function atualizarCliente(cnpj: string, dados: DadosAtualizacaoCliente): Promise<Cliente> {
+  const patch: Record<string, unknown> = {}
+
+  if (dados.razaoSocial    !== undefined) patch.razao_social        = dados.razaoSocial.trim()
+  if (dados.tipo           !== undefined) patch.tipo                = dados.tipo
+  if (dados.origem         !== undefined) patch.origem              = dados.origem
+  if (dados.origemLeadDetalhe !== undefined) patch.origem_lead_detalhe = dados.origemLeadDetalhe
+  if (dados.cidade         !== undefined) patch.cidade              = dados.cidade.trim()
+  if (dados.estado         !== undefined) patch.estado              = dados.estado.trim().toUpperCase()
+  if (dados.telefone       !== undefined) patch.telefone            = dados.telefone.trim()
+  if (dados.nomeContato    !== undefined) patch.nome_contato        = dados.nomeContato?.trim() || null
+  if (dados.emailContato   !== undefined) patch.email               = dados.emailContato?.trim() || null
+  if (dados.statusCrm      !== undefined) patch.status_crm          = dados.statusCrm
+  if (dados.ultimoContato  !== undefined) patch.ultimo_contato      = dados.ultimoContato
+  if (dados.proximaAcao    !== undefined) patch.proxima_acao        = dados.proximaAcao
+  if (dados.proximaAcaoData !== undefined) patch.proxima_acao_data  = dados.proximaAcaoData
+  if (dados.observacoes    !== undefined) patch.observacoes         = dados.observacoes
+  if (dados.canalPreferido !== undefined) patch.canal_preferido     = dados.canalPreferido
+  if (dados.produtoInteresse !== undefined) patch.produto_interesse = dados.produtoInteresse
+
+  if (Object.keys(patch).length === 0) throw new Error('Nenhum campo para atualizar')
+
+  const { data, error } = await supabaseAdmin
+    .from(TABELA)
+    .update(patch)
+    .eq('cnpj', normalizarCNPJ(cnpj))
+    .select()
+    .single()
+
+  if (error) {
+    if (error.code === 'PGRST116') throw new Error('Cliente não encontrado')
+    throw new Error(`Falha ao atualizar cliente: ${error.message}`)
+  }
+
+  return mapearLinha(data as ClienteRow)
 }
 
 export async function atribuirVendedor(cnpj: string, vendedorId: string | null): Promise<Cliente> {

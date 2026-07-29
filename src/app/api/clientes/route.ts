@@ -2,6 +2,8 @@ import { getPapel, getVendedorId, requireComercialAccess } from '@/lib/comercial
 import { criarCliente, listarClientes } from '@/lib/clientes-repository'
 import type { FiltrosCliente, TipoCliente, OrigemCliente, StatusCliente } from '@/lib/clientes-repository'
 
+const POR_PAGINA_MAX = 100
+
 const PAPEIS_CRIACAO = new Set(['sdr', 'administrador', 'gestor', 'vendedor'])
 
 export async function GET(request: Request) {
@@ -16,6 +18,11 @@ export async function GET(request: Request) {
   if (searchParams.get('status')) filtros.status = searchParams.get('status') as StatusCliente
   if (searchParams.get('tipo'))   filtros.tipo   = searchParams.get('tipo')   as TipoCliente
   if (searchParams.get('origem')) filtros.origem = searchParams.get('origem') as OrigemCliente
+
+  const pagina    = parseInt(searchParams.get('pagina')    ?? '1',  10)
+  const porPagina = parseInt(searchParams.get('porPagina') ?? '20', 10)
+  filtros.pagina    = isNaN(pagina)    ? 1  : Math.max(1, pagina)
+  filtros.porPagina = isNaN(porPagina) ? 20 : Math.min(POR_PAGINA_MAX, Math.max(1, porPagina))
 
   // Filtros automáticos por papel — ignoram query params para garantir isolamento:
   if (papel === 'vendedor') {
@@ -39,8 +46,8 @@ export async function GET(request: Request) {
   }
 
   try {
-    const clientes = await listarClientes(filtros)
-    return Response.json({ ok: true, clientes })
+    const { clientes, total } = await listarClientes(filtros)
+    return Response.json({ ok: true, clientes, total })
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Erro desconhecido'
     return Response.json({ ok: false, error: msg }, { status: 500 })

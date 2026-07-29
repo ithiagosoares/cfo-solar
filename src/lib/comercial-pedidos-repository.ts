@@ -167,6 +167,21 @@ export async function inserirPedidoManual(dados: DadosPedidoManual): Promise<voi
   }
 }
 
+// ─── VendaResumo ─────────────────────────────────────────────────────────────
+
+export interface VendaResumo {
+  vendedorId: string | null
+  empresa: string
+  filial: string
+  cliente: string
+  valorVendido: number
+  dataVenda: string
+  origem: string
+  numeroPedido: string | null
+}
+
+// ─── Queries ──────────────────────────────────────────────────────────────────
+
 // Lista pedidos com paginação. Filtra por vendedor_id quando informado.
 // Ordena por data de criação decrescente (mais recente primeiro).
 export async function listarPedidos(filtros: {
@@ -225,5 +240,85 @@ export async function listarPedidos(filtros: {
       criadoEm:      row.created_at,
     })),
     total: count ?? 0,
+  }
+}
+
+// Lista registros com status='vendido', filtrados por período e vendedor.
+// Retorna lista paginada + total de registros + soma de valor_vendido no período.
+// Ordena por data_venda decrescente.
+export async function listarVendas(filtros: {
+  vendedorId?: string
+  dataInicio?: string
+  dataFim?: string
+  pagina?: number
+  porPagina?: number
+} = {}): Promise<{ vendas: VendaResumo[]; total: number; totalVendido: number }> {
+  const pagina    = Math.max(1, filtros.pagina    ?? 1)
+  const porPagina = Math.min(100, Math.max(1, filtros.porPagina ?? 20))
+  const from      = (pagina - 1) * porPagina
+  const to        = from + porPagina - 1
+
+  type Row = {
+    vendedor_id: string | null
+    empresa: string
+    filial: string
+    cliente: string
+    valor_vendido: number | null
+    data_venda: string | null
+    origem: string
+    numero_pedido: string | null
+  }
+
+  let dataQuery = supabaseAdmin
+    .from(TABELA)
+    .select(
+      'vendedor_id, empresa, filial, cliente, valor_vendido, data_venda, origem, numero_pedido',
+      { count: 'exact' },
+    )
+    .eq('status', 'vendido')
+    .order('data_venda', { ascending: false })
+    .range(from, to)
+
+  let sumQuery = supabaseAdmin
+    .from(TABELA)
+    .select('valor_vendido')
+    .eq('status', 'vendido')
+
+  if (filtros.vendedorId) {
+    dataQuery = dataQuery.eq('vendedor_id', filtros.vendedorId)
+    sumQuery  = sumQuery.eq('vendedor_id', filtros.vendedorId)
+  }
+  if (filtros.dataInicio) {
+    dataQuery = dataQuery.gte('data_venda', filtros.dataInicio)
+    sumQuery  = sumQuery.gte('data_venda', filtros.dataInicio)
+  }
+  if (filtros.dataFim) {
+    dataQuery = dataQuery.lte('data_venda', filtros.dataFim)
+    sumQuery  = sumQuery.lte('data_venda', filtros.dataFim)
+  }
+
+  const [dataResult, sumResult] = await Promise.all([dataQuery, sumQuery])
+
+  if (dataResult.error) throw new Error(`Falha ao listar vendas: ${dataResult.error.message}`)
+  if (sumResult.error)  throw new Error(`Falha ao calcular total vendido: ${sumResult.error.message}`)
+
+  const totalVendido = (sumResult.data ?? []).reduce(
+    (acc: number, row: { valor_vendido: number | null }) => acc + (row.valor_vendido ?? 0),
+    0,
+  )
+
+  return {
+    vendas: (dataResult.data ?? []).map((row: Row) => ({
+      vendedorId:   row.vendedor_id,
+      empresa:      row.empresa,
+      filial:       row.filial,
+      cliente:      row.cliente,
+      valorVendido: row.valor_vendido ?? 0,
+      dataVenda:    row.data_venda ?? '',
+      origem:       row.origem,
+      numeroPedido: row.numero_pedido,
+    })),
+    total:        dataResult.count ?? 0,
+    totalVendido,
   }
 }

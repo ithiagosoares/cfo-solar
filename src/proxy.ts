@@ -146,6 +146,7 @@ export async function proxy(request: NextRequest) {
     '/comercial/upload':    ['administrador', 'gestor'],
     '/orcamentos':          ['administrador', 'gestor', 'vendedor'],
     '/dashboard':           ['administrador', 'gestor', 'vendedor'],
+    '/vendas':              ['administrador', 'gestor', 'vendedor'],
     '/clientes':            ['administrador', 'gestor', 'sdr', 'vendedor'],
   }
   const rotasOrdenadas = Object.entries(PAPEIS_POR_ROTA)

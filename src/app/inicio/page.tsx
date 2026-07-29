@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { BarChart2, Upload, UserPlus, FilePlus, Users, FileText, LogOut, UserCheck } from 'lucide-react'
+import { BarChart2, Upload, UserPlus, FilePlus, Users, FileText, LogOut, UserCheck, TrendingUp } from 'lucide-react'
 import { createSupabaseBrowserClient } from '@/lib/supabase-client'
 import styles from '@/styles/editorial.module.css'
 
@@ -35,6 +35,13 @@ const MODULOS: Modulo[] = [
     descricao: 'Lista de orçamentos e pedidos da carteira comercial.',
     href: '/orcamentos',
     icon: FileText,
+    papeis: ['administrador', 'gestor', 'vendedor'],
+  },
+  {
+    titulo: 'Vendas',
+    descricao: 'Orçamentos convertidos em venda, com total e filtro por período.',
+    href: '/vendas',
+    icon: TrendingUp,
     papeis: ['administrador', 'gestor', 'vendedor'],
   },
   {

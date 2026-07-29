@@ -333,10 +333,13 @@ export default function ComercialPage() {
   const [customFim, setCustomFim] = useState('')
 
   useEffect(() => {
+    if (!usuario) return
+    const papel = usuario.papel
+    if (papel !== 'administrador' && papel !== 'gestor') return
     buscarDadosComerciais()
       .then(setDados)
       .catch(e => setErro(e instanceof Error ? e.message : 'Erro ao carregar dados comerciais'))
-  }, [])
+  }, [usuario])
 
   const filtro = useMemo(
     () => construirFiltro(tipoPeriodo, customInicio, customFim),
@@ -380,6 +383,27 @@ export default function ComercialPage() {
       <span><b>Ambiente de demonstração.</b> Os valores nesta tela são fictícios — a integração com a Upper Softwares está pendente de liberação pelo fornecedor.</span>
     </div>
   )
+
+  if (!usuario) {
+    return (
+      <div className={styles.page} style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div className="h-8 w-8 rounded-full border-2 animate-spin" style={{ borderTopColor: 'var(--foreground)', borderRightColor: 'var(--line2)', borderBottomColor: 'var(--line2)', borderLeftColor: 'var(--line2)' }} />
+      </div>
+    )
+  }
+
+  if (usuario.papel === 'vendedor' || usuario.papel === 'sdr') {
+    return (
+      <div className={styles.page}>
+        {cabecalho}
+        <div className={`${styles.wrap} ${styles.sect}`}>
+          <p style={{ fontSize: 14, color: 'var(--ink3)' }}>
+            Você não tem acesso a esta área.
+          </p>
+        </div>
+      </div>
+    )
+  }
 
   if (erro) {
     return (

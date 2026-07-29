@@ -705,7 +705,9 @@ export default function Home() {
         {/* ── Área Comercial ───────────────────────────────────────────────── */}
         {area === 'comercial' && (
           <>
-            {abaComAtiva === 'dashboard' && <ComercialDashboard />}
+            {abaComAtiva === 'dashboard' && usuario && (
+              <ComercialDashboard papel={usuario.papel} vendedorId={usuario.vendedorId} />
+            )}
             {abaComAtiva === 'cadastro' && <CadastroManual />}
 {abaComAtiva === 'revisao' && (
               <div className="flex flex-col animate-fadeIn">

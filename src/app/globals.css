@@ -1,26 +1,46 @@
 @import "tailwindcss";
 
-/* Tokens editoriais — espelham src/lib/tema.ts. Esta é a fonte central de
-   cor/tipografia do app; mudanças de estilo começam aqui (e em
-   src/styles/editorial.module.css, que consome estas variáveis). */
+/* ─── Tokens de identidade visual ─────────────────────────────────────────── */
+/* Fonte única de cor e tipografia do app. Mudanças de estilo começam aqui.   */
+
 :root {
-  --background: #ffffff;
-  --paper: #fafaf8;
-  --foreground: #1a1a1a;
-  --ink2: #5c5c54;
-  --ink3: #8a8a80;
-  --line: #e5e5e0;
-  --line2: #d8d8d2;
-  --pendente: #b8860b;
-  --positivo: #3f7d4f;
-  --info: #3a5a8c;
-  --fornecedor: #6b4a86;
-  --critico: #9a2d22;
-  --baixo: #8a6a1f;
-  --marca: #1e0e62;      /* azul-roxo da identidade visual */
-  --destaque: #f78b26;   /* laranja de destaque */
-  --accentCom: #9a5b2d;  /* acento da área Comercial */
-  --font-serif: Georgia, 'Times New Roman', serif;
+  /* Paleta nova */
+  --cor-fundo: #EFEDE8;
+  --cor-superficie: #F7F6F3;
+  --cor-superficie-alt: #FFFFFF;
+  --cor-texto: #1C1C1A;
+  --cor-texto-secundario: #8A857C;
+  --cor-borda: #E4E0D8;
+  --cor-borda-sutil: #DCD8D0;
+  --cor-destaque: #C78A2E;
+  --cor-destaque-hover: #8C5A1D;
+  --cor-sucesso: #3E6B63;
+  --cor-sucesso-bg: #EDF3F1;
+  --cor-erro: #A8452F;
+  --cor-erro-bg: #FAEDEA;
+  --cor-fundo-escuro: #141513;
+  --cor-destaque-escuro: #E0A93F;
+
+  /* Aliases retrocompatíveis — componentes existentes usam estes nomes */
+  --background: var(--cor-fundo);
+  --paper: var(--cor-superficie);
+  --foreground: var(--cor-texto);
+  --ink2: #5C5752;
+  --ink3: var(--cor-texto-secundario);
+  --line: var(--cor-borda);
+  --line2: var(--cor-borda-sutil);
+  --marca: var(--cor-destaque);
+  --destaque: var(--cor-destaque);
+  --accentCom: var(--cor-destaque);
+  --positivo: var(--cor-sucesso);
+  --critico: var(--cor-erro);
+  --pendente: #A07830;
+  --baixo: #8A6A1F;
+  --info: #3A6080;
+  --fornecedor: #5A4070;
+
+  /* Tipografia */
+  --font-serif: var(--font-garamond), 'EB Garamond', Georgia, serif;
 }
 
 @theme inline {
@@ -34,8 +54,8 @@
   --color-positivo: var(--positivo);
   --color-info: var(--info);
   --color-critico: var(--critico);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-plex-sans), 'IBM Plex Sans', 'Helvetica Neue', sans-serif;
+  --font-mono: var(--font-plex-mono), 'IBM Plex Mono', monospace;
   --font-serif: var(--font-serif);
 }
 
@@ -44,9 +64,9 @@
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: 'Helvetica Neue', Helvetica, var(--font-geist-sans), Arial, sans-serif;
+  background: var(--cor-fundo);
+  color: var(--cor-texto);
+  font-family: var(--font-plex-sans), 'IBM Plex Sans', 'Helvetica Neue', Helvetica, Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -56,16 +76,16 @@ body {
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--paper);
+  background: var(--cor-superficie);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--line2);
+  background: var(--cor-borda-sutil);
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--ink3);
+  background: var(--cor-texto-secundario);
 }
 
 @keyframes fadeIn {
@@ -83,7 +103,7 @@ body {
 }
 
 .skeleton {
-  background: linear-gradient(90deg, var(--paper) 25%, var(--line) 50%, var(--paper) 75%);
+  background: linear-gradient(90deg, var(--cor-superficie) 25%, var(--cor-borda) 50%, var(--cor-superficie) 75%);
   background-size: 200% 100%;
   animation: shimmer 1.4s infinite;
   border-radius: 6px;

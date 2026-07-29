@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { BarChart2, Upload, UserPlus, FilePlus, Users, FileText, LogOut } from 'lucide-react'
+import { BarChart2, Upload, UserPlus, FilePlus, Users, FileText, LogOut, UserCheck } from 'lucide-react'
 import { createSupabaseBrowserClient } from '@/lib/supabase-client'
 import styles from '@/styles/editorial.module.css'
 
@@ -26,7 +26,7 @@ const MODULOS: Modulo[] = [
   {
     titulo: 'Dashboard Comercial',
     descricao: 'Visão geral de orçamentos, vendas e indicadores de performance.',
-    href: '/comercial',
+    href: '/dashboard',
     icon: BarChart2,
     papeis: ['administrador', 'gestor', 'vendedor'],
   },
@@ -57,6 +57,13 @@ const MODULOS: Modulo[] = [
     href: '/orcamentos/cadastro',
     icon: FilePlus,
     papeis: ['administrador', 'gestor', 'vendedor'],
+  },
+  {
+    titulo: 'Gerenciar Vendedores',
+    descricao: 'Cadastrar e gerenciar vendedores ativos no sistema.',
+    href: '/admin/vendedores',
+    icon: UserCheck,
+    papeis: ['administrador'],
   },
   {
     titulo: 'Usuários do Sistema',
@@ -165,22 +172,19 @@ export default function InicioPage() {
               <a
                 key={modulo.href}
                 href={modulo.href}
-                style={{ textDecoration: 'none', color: 'inherit' }}
+                style={{ textDecoration: 'none', color: 'inherit', display: 'block', height: '100%' }}
               >
                 <div
-                  className={styles.panel}
+                  className={`${styles.panel} ${styles.hubCard}`}
                   style={{
                     cursor: 'pointer',
-                    transition: 'border-color .15s',
                     height: '100%',
                     display: 'flex',
                     flexDirection: 'column',
                     gap: 12,
                   }}
-                  onMouseEnter={e => (e.currentTarget.style.borderColor = 'var(--marca)')}
-                  onMouseLeave={e => (e.currentTarget.style.borderColor = 'var(--line)')}
                 >
-                  <Icon style={{ width: 22, height: 22, color: 'var(--ink3)' }} />
+                  <Icon className={styles.hubIcon} style={{ width: 22, height: 22 }} />
                   <div>
                     <p style={{ fontSize: 15, fontWeight: 600, marginBottom: 4 }}>{modulo.titulo}</p>
                     <p style={{ fontSize: 13, color: 'var(--ink2)', lineHeight: 1.5 }}>{modulo.descricao}</p>

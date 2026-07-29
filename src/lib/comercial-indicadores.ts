@@ -13,8 +13,9 @@ export interface PeriodoFiltro {
 }
 
 export interface FiltrosComerciais {
-  empresa?: string
-  filial?:  string
+  empresa?:    string
+  filial?:     string
+  vendedorId?: string   // quando definido, restringe todas as queries a um vendedor_id específico
 }
 
 // ─── Tipo base de row retornado do banco ──────────────────────────────────────
@@ -57,8 +58,9 @@ async function buscarPedidos(
       .lte('data_orcamento', periodo.fim)
       .range(from, from + PAGE_SIZE - 1)
 
-    if (filtros.empresa) query = query.eq('empresa', filtros.empresa)
-    if (filtros.filial)  query = query.eq('filial',  filtros.filial)
+    if (filtros.empresa)    query = query.eq('empresa',     filtros.empresa)
+    if (filtros.filial)     query = query.eq('filial',      filtros.filial)
+    if (filtros.vendedorId) query = query.eq('vendedor_id', filtros.vendedorId)
 
     const { data, error } = await query
 

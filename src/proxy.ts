@@ -104,9 +104,8 @@ export async function proxy(request: NextRequest) {
     return redir
   }
 
-  // Módulo financeiro desativado — código mantido mas sem roteamento ativo.
-  // A página raiz (/) é o dashboard financeiro; as rotas de API abaixo são seus endpoints.
-  // Qualquer acesso direto é silenciosamente redirecionado para /inicio.
+  // Módulo financeiro + página raiz original desativados — código mantido mas sem roteamento.
+  // O Dashboard Comercial vive em /dashboard; a raiz (/) é a página original combinada, agora inativa.
   const APIS_FINANCEIRO = ['/api/analisar', '/api/historico', '/api/chat', '/api/comparativo']
   const eFinanceiro =
     pathname === '/' ||
@@ -123,17 +122,31 @@ export async function proxy(request: NextRequest) {
     return redir
   }
 
+  // Módulo legado Upper desativado — página /comercial removida do roteamento.
+  // /comercial/upload (sistema de import de relatórios, Supabase) continua ativo.
+  // /api/comercial (busca live da Upper) e /api/teste-upper ficam como código morto
+  // mas inacessíveis via UI — limpeza definitiva em sprint posterior.
+  const eComercialLegado =
+    pathname === '/comercial' ||
+    (pathname.startsWith('/comercial/') && !pathname.startsWith('/comercial/upload'))
+  if (eComercialLegado) {
+    const redir = NextResponse.redirect(new URL('/inicio', request.url))
+    redir.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate')
+    return redir
+  }
+
   // Mapa de rotas gerenciadas — define quais papéis têm acesso a cada rota.
-  // Verificação usa o prefixo mais específico (sorted by length desc) para que
-  // /comercial/upload não seja coberto pelo prefixo /comercial de vendedor.
+  // Verificação usa o prefixo mais específico (sorted by length desc), portanto
+  // rotas mais longas têm precedência (ex: /clientes/cadastro antes de /clientes).
   const PAPEIS_POR_ROTA: Record<string, readonly string[]> = {
     '/orcamentos/cadastro': ['administrador', 'gestor', 'vendedor'],
+    '/clientes/cadastro':   ['administrador', 'gestor', 'sdr', 'vendedor'],
     '/admin/vendedores':    ['administrador'],
     '/admin/usuarios':      ['administrador'],
     '/comercial/upload':    ['administrador', 'gestor'],
-    '/clientes/cadastro':   ['administrador', 'gestor', 'sdr', 'vendedor'],
     '/orcamentos':          ['administrador', 'gestor', 'vendedor'],
-    '/comercial':           ['administrador', 'gestor', 'vendedor'],
+    '/dashboard':           ['administrador', 'gestor', 'vendedor'],
+    '/clientes':            ['administrador', 'gestor', 'sdr', 'vendedor'],
   }
   const rotasOrdenadas = Object.entries(PAPEIS_POR_ROTA)
     .sort(([a], [b]) => b.length - a.length)

@@ -69,7 +69,7 @@ interface DadosDashboard {
     porValorVendido: EntradaRanking[]
     conversaoFinanceira: EntradaRanking[]
     produtividade: EntradaRanking[]
-  }
+  } | null
 }
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
@@ -168,7 +168,7 @@ const OPCOES_PERIODO: { id: TipoPeriodo; label: string }[] = [
   { id: 'personalizado', label: 'Personalizado' },
 ]
 
-export function ComercialDashboard() {
+export function ComercialDashboard({ papel, vendedorId }: { papel: string; vendedorId: string | null }) {
   const [tipoPeriodo, setTipoPeriodo] = useState<TipoPeriodo>('4s')
   const [customInicio, setCustomInicio] = useState('')
   const [customFim, setCustomFim]     = useState('')
@@ -195,7 +195,10 @@ export function ComercialDashboard() {
     setCarregando(true)
     setErro(null)
 
-    fetch(`/api/comercial/dashboard?periodoInicio=${inicio}&periodoFim=${fim}`)
+    const headers: HeadersInit = {}
+    if (papel === 'vendedor' && vendedorId) headers['x-vendedor-id'] = vendedorId
+
+    fetch(`/api/comercial/dashboard?periodoInicio=${inicio}&periodoFim=${fim}`, { headers })
       .then(r => r.json())
       .then((d: DadosDashboard) => {
         if (!d.ok) throw new Error(d.error ?? 'Erro ao carregar indicadores')
@@ -416,32 +419,34 @@ export function ComercialDashboard() {
           <SemDados mensagem="Nenhum orçamento em aberto para este período." />
         ) : (
           <>
-            {/* Seleção de vendedores */}
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 28px', margin: '16px 0 22px', paddingBottom: 14, borderBottom: '1px solid var(--line)' }}>
-              {oportunidades.map(g => (
-                <label
-                  key={g.vendedor}
-                  style={{ display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer', userSelect: 'none' }}
-                >
-                  <input
-                    type="checkbox"
-                    checked={vendedoresSelecionados.has(g.vendedor)}
-                    onChange={() =>
-                      setVendedoresSelecionados(prev => {
-                        const s = new Set(prev)
-                        s.has(g.vendedor) ? s.delete(g.vendedor) : s.add(g.vendedor)
-                        return s
-                      })
-                    }
-                    style={{ accentColor: 'var(--accentCom)', width: 14, height: 14, cursor: 'pointer', flexShrink: 0 }}
-                  />
-                  <span style={{ fontSize: 13 }}>{g.vendedor}</span>
-                  <span style={{ fontSize: 11, color: 'var(--ink3)', fontVariantNumeric: 'tabular-nums' }}>
-                    {formatMoeda(g.totalPipeline)}
-                  </span>
-                </label>
-              ))}
-            </div>
+            {/* Seleção de vendedores — oculta para vendedor (só vê a própria carteira) */}
+            {papel !== 'vendedor' && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 28px', margin: '16px 0 22px', paddingBottom: 14, borderBottom: '1px solid var(--line)' }}>
+                {oportunidades.map(g => (
+                  <label
+                    key={g.vendedor}
+                    style={{ display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer', userSelect: 'none' }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={vendedoresSelecionados.has(g.vendedor)}
+                      onChange={() =>
+                        setVendedoresSelecionados(prev => {
+                          const s = new Set(prev)
+                          s.has(g.vendedor) ? s.delete(g.vendedor) : s.add(g.vendedor)
+                          return s
+                        })
+                      }
+                      style={{ accentColor: 'var(--accentCom)', width: 14, height: 14, cursor: 'pointer', flexShrink: 0 }}
+                    />
+                    <span style={{ fontSize: 13 }}>{g.vendedor}</span>
+                    <span style={{ fontSize: 11, color: 'var(--ink3)', fontVariantNumeric: 'tabular-nums' }}>
+                      {formatMoeda(g.totalPipeline)}
+                    </span>
+                  </label>
+                ))}
+              </div>
+            )}
 
             {oppsExibidas.length === 0 ? (
               <SemDados mensagem="Nenhum vendedor selecionado." />
@@ -484,8 +489,8 @@ export function ComercialDashboard() {
         )}
       </div>
 
-      {/* ── Ranking de Vendedores ────────────────────────────────────────── */}
-      <div className={styles.dsection}>
+      {/* ── Ranking de Vendedores — oculto para vendedor ────────────────── */}
+      {papel !== 'vendedor' && <div className={styles.dsection}>
         <div className={`${styles.stitle} ${styles.serif}`}>Ranking de Vendedores</div>
         <div className={styles.scap}>Posição e os números que a sustentam.</div>
 
@@ -629,7 +634,7 @@ export function ComercialDashboard() {
             )}
           </>
         )}
-      </div>
+      </div>}
     </div>
   )
 }

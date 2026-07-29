@@ -62,6 +62,21 @@ async function resolverClienteCnpj(nomes: string[]): Promise<Record<string, stri
   return resultado
 }
 
+// Atualiza data_ultima_compra do cliente apenas quando a data_venda do pedido for
+// mais recente que a já registrada. Operação best-effort: falhas são logadas mas não
+// propagadas, pois o pedido já foi inserido com sucesso neste ponto.
+async function atualizarDataUltimaCompra(cnpj: string, dataVenda: string): Promise<void> {
+  const { error } = await supabaseAdmin
+    .from('clientes')
+    .update({ data_ultima_compra: dataVenda })
+    .eq('cnpj', cnpj)
+    .or(`data_ultima_compra.is.null,data_ultima_compra.lt.${dataVenda}`)
+
+  if (error) {
+    console.warn('[comercial-pedidos-repository] falha ao atualizar data_ultima_compra:', error.message)
+  }
+}
+
 // Insere múltiplos registros de uma importação em comercial_pedidos.
 // mapeamentoVendedores: nome_original_no_relatorio -> vendedor_id resolvido pelo usuário.
 // Se o registro já tem vendedorId (reconhecido automaticamente), o mapeamento é ignorado.
@@ -111,6 +126,10 @@ export async function inserirPedidosImportacao(
     console.error('[comercial-pedidos-repository] inserirPedidosImportacao erro:', JSON.stringify(error, null, 2))
     throw new Error(`Falha ao inserir pedidos: ${error.message}`)
   }
+
+  // Sincroniza data_ultima_compra dos clientes vinculados para os pedidos vendidos
+  const vendidosComCnpj = rows.filter(r => r.status === 'vendido' && r.data_venda && r.cliente_cnpj)
+  await Promise.all(vendidosComCnpj.map(r => atualizarDataUltimaCompra(r.cliente_cnpj!, r.data_venda!)))
 }
 
 // Insere um único pedido cadastrado manualmente (origem='manual', sem numero_pedido).
@@ -140,6 +159,12 @@ export async function inserirPedidoManual(dados: DadosPedidoManual): Promise<voi
     })
 
   if (error) throw new Error(`Falha ao inserir pedido manual: ${error.message}`)
+
+  // Sincroniza data_ultima_compra se o pedido foi cadastrado como vendido
+  if (dados.status === 'vendido' && dados.dataVenda) {
+    const cnpjCliente = cnpjPorNome[dados.cliente] ?? null
+    if (cnpjCliente) await atualizarDataUltimaCompra(cnpjCliente, dados.dataVenda)
+  }
 }
 
 // Lista pedidos com paginação. Filtra por vendedor_id quando informado.

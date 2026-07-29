@@ -26,19 +26,38 @@ export function normalizarCNPJ(raw: string): string {
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 
-export type TipoCliente = 'distribuidora' | 'integrador'
-export type OrigemCliente = 'prospeccao' | 'lead'
-export type StatusCliente = 'em_fila' | 'atribuido' | 'liberado'
+export type TipoCliente      = 'distribuidora' | 'integrador'
+export type OrigemCliente    = 'prospeccao' | 'lead'
+export type StatusCliente    = 'em_fila' | 'atribuido' | 'liberado'
+export type StatusCrm        = 'novo_lead' | 'em_contato' | 'negociando' | 'cliente_ativo' | 'inativo' | 'perdido'
+export type CanalPreferido   = 'whatsapp' | 'telefone' | 'email'
+export type OrigemLeadDetalhe =
+  | 'indicacao' | 'site_formulario' | 'instagram' | 'facebook' | 'google_ads'
+  | 'whatsapp' | 'feira_evento' | 'ligacao_receptiva' | 'parceiro_revenda' | 'outro'
 
 interface ClienteRow {
   cnpj: string
   razao_social: string
   tipo: TipoCliente
   origem: OrigemCliente
+  origem_lead_detalhe: OrigemLeadDetalhe | null
+  cidade: string
+  estado: string
+  telefone: string
+  nome_contato: string | null
+  email: string | null
   vendedor_id: string | null
   data_atribuicao: string | null
   data_vencimento: string | null
   status: StatusCliente
+  status_crm: StatusCrm
+  ultimo_contato: string | null
+  proxima_acao: string | null
+  proxima_acao_data: string | null
+  observacoes: string | null
+  canal_preferido: CanalPreferido | null
+  produto_interesse: string | null
+  data_ultima_compra: string | null
   criado_por: string
   created_at: string
   updated_at: string
@@ -49,10 +68,24 @@ export interface Cliente {
   razaoSocial: string
   tipo: TipoCliente
   origem: OrigemCliente
+  origemLeadDetalhe: OrigemLeadDetalhe | null
+  cidade: string
+  estado: string
+  telefone: string
+  nomeContato: string | null
+  email: string | null
   vendedorId: string | null
   dataAtribuicao: string | null
   dataVencimento: string | null
   status: StatusCliente
+  statusCrm: StatusCrm
+  ultimoContato: string | null
+  proximaAcao: string | null
+  proximaAcaoData: string | null
+  observacoes: string | null
+  canalPreferido: CanalPreferido | null
+  produtoInteresse: string | null
+  dataUltimaCompra: string | null
   criadoPor: string
   criadoEm: string
   atualizadoEm: string
@@ -63,6 +96,12 @@ export interface DadosNovoCliente {
   razaoSocial: string
   tipo: TipoCliente
   origem: OrigemCliente
+  origemLeadDetalhe?: string | null
+  cidade: string
+  estado: string
+  telefone: string
+  nomeContato?: string | null
+  emailContato?: string | null
   vendedorId?: string | null
 }
 
@@ -78,17 +117,31 @@ export interface FiltrosCliente {
 
 function mapearLinha(row: ClienteRow): Cliente {
   return {
-    cnpj: row.cnpj,
-    razaoSocial: row.razao_social,
-    tipo: row.tipo,
-    origem: row.origem,
-    vendedorId: row.vendedor_id,
-    dataAtribuicao: row.data_atribuicao,
-    dataVencimento: row.data_vencimento,
-    status: row.status,
-    criadoPor: row.criado_por,
-    criadoEm: row.created_at,
-    atualizadoEm: row.updated_at,
+    cnpj:               row.cnpj,
+    razaoSocial:        row.razao_social,
+    tipo:               row.tipo,
+    origem:             row.origem,
+    origemLeadDetalhe:  row.origem_lead_detalhe,
+    cidade:             row.cidade,
+    estado:             row.estado,
+    telefone:           row.telefone,
+    nomeContato:        row.nome_contato,
+    email:              row.email,
+    vendedorId:         row.vendedor_id,
+    dataAtribuicao:     row.data_atribuicao,
+    dataVencimento:     row.data_vencimento,
+    status:             row.status,
+    statusCrm:          row.status_crm,
+    ultimoContato:      row.ultimo_contato,
+    proximaAcao:        row.proxima_acao,
+    proximaAcaoData:    row.proxima_acao_data,
+    observacoes:        row.observacoes,
+    canalPreferido:     row.canal_preferido,
+    produtoInteresse:   row.produto_interesse,
+    dataUltimaCompra:   row.data_ultima_compra,
+    criadoPor:          row.criado_por,
+    criadoEm:           row.created_at,
+    atualizadoEm:       row.updated_at,
   }
 }
 
@@ -98,15 +151,34 @@ export async function criarCliente(dados: DadosNovoCliente, criadoPor: string): 
   const cnpj = normalizarCNPJ(dados.cnpj)
   if (!validarCNPJ(cnpj)) throw new Error('CNPJ inválido')
 
+  // Campos obrigatórios independente de origem
+  if (!dados.cidade?.trim())   throw new Error('Cidade é obrigatória')
+  if (!dados.estado?.trim() || dados.estado.trim().length !== 2) throw new Error('Estado deve ser a sigla com 2 letras (ex: SP)')
+  if (!dados.telefone?.trim()) throw new Error('Telefone é obrigatório')
+
+  // Validação condicional de origemLeadDetalhe
+  let origemLeadDetalhe: string | null = null
+  if (dados.origem === 'lead') {
+    if (!dados.origemLeadDetalhe) throw new Error('Canal de origem é obrigatório para leads')
+    origemLeadDetalhe = dados.origemLeadDetalhe
+  }
+  // Para 'prospeccao', origemLeadDetalhe fica null independente do que veio
+
   const { data, error } = await supabaseAdmin
     .from(TABELA)
     .insert({
       cnpj,
-      razao_social: dados.razaoSocial.trim(),
-      tipo: dados.tipo,
-      origem: dados.origem,
-      vendedor_id: dados.vendedorId ?? null,
-      criado_por: criadoPor,
+      razao_social:        dados.razaoSocial.trim(),
+      tipo:                dados.tipo,
+      origem:              dados.origem,
+      origem_lead_detalhe: origemLeadDetalhe,
+      cidade:              dados.cidade.trim(),
+      estado:              dados.estado.trim().toUpperCase(),
+      telefone:            dados.telefone.trim(),
+      nome_contato:        dados.nomeContato?.trim() || null,
+      email:               dados.emailContato?.trim() || null,
+      vendedor_id:         dados.vendedorId ?? null,
+      criado_por:          criadoPor,
     })
     .select()
     .single()
@@ -125,11 +197,11 @@ export async function listarClientes(filtros: FiltrosCliente = {}): Promise<Clie
     .select('*')
     .order('created_at', { ascending: false })
 
-  if (filtros.status) query = query.eq('status', filtros.status)
+  if (filtros.status)     query = query.eq('status',     filtros.status)
   if (filtros.vendedorId) query = query.eq('vendedor_id', filtros.vendedorId)
-  if (filtros.tipo) query = query.eq('tipo', filtros.tipo)
-  if (filtros.origem) query = query.eq('origem', filtros.origem)
-  if (filtros.criadoPor) query = query.eq('criado_por', filtros.criadoPor)
+  if (filtros.tipo)       query = query.eq('tipo',       filtros.tipo)
+  if (filtros.origem)     query = query.eq('origem',     filtros.origem)
+  if (filtros.criadoPor)  query = query.eq('criado_por', filtros.criadoPor)
 
   const { data, error } = await query
   if (error) throw new Error(`Falha ao listar clientes: ${error.message}`)

@@ -66,26 +66,41 @@ export async function POST(request: Request) {
     return Response.json({ ok: false, error: 'JSON inválido' }, { status: 400 })
   }
 
-  const { cnpj, razaoSocial, tipo, origem, vendedorId: vendedorIdBody } = body as {
-    cnpj?: unknown
-    razaoSocial?: unknown
-    tipo?: unknown
-    origem?: unknown
+  const {
+    cnpj, razaoSocial, tipo, origem,
+    origemLeadDetalhe,
+    cidade, estado, telefone,
+    nomeContato, emailContato,
+    vendedorId: vendedorIdBody,
+  } = body as {
+    cnpj?: unknown; razaoSocial?: unknown; tipo?: unknown; origem?: unknown
+    origemLeadDetalhe?: unknown
+    cidade?: unknown; estado?: unknown; telefone?: unknown
+    nomeContato?: unknown; emailContato?: unknown
     vendedorId?: unknown
   }
 
-  if (!cnpj || typeof cnpj !== 'string') {
+  // Validações obrigatórias de estrutura
+  if (!cnpj || typeof cnpj !== 'string')
     return Response.json({ ok: false, error: 'cnpj é obrigatório' }, { status: 400 })
-  }
-  if (!razaoSocial || typeof razaoSocial !== 'string') {
+  if (!razaoSocial || typeof razaoSocial !== 'string')
     return Response.json({ ok: false, error: 'razaoSocial é obrigatório' }, { status: 400 })
-  }
-  if (tipo !== 'distribuidora' && tipo !== 'integrador') {
+  if (tipo !== 'distribuidora' && tipo !== 'integrador')
     return Response.json({ ok: false, error: 'tipo deve ser "distribuidora" ou "integrador"' }, { status: 400 })
-  }
-  if (origem !== 'prospeccao' && origem !== 'lead') {
+  if (origem !== 'prospeccao' && origem !== 'lead')
     return Response.json({ ok: false, error: 'origem deve ser "prospeccao" ou "lead"' }, { status: 400 })
-  }
+
+  // Campos de contato obrigatórios
+  if (!cidade || typeof cidade !== 'string' || !cidade.trim())
+    return Response.json({ ok: false, error: 'cidade é obrigatória' }, { status: 400 })
+  if (!estado || typeof estado !== 'string' || estado.trim().length !== 2)
+    return Response.json({ ok: false, error: 'estado deve ser a sigla com 2 letras (ex: SP)' }, { status: 400 })
+  if (!telefone || typeof telefone !== 'string' || !telefone.trim())
+    return Response.json({ ok: false, error: 'telefone é obrigatório' }, { status: 400 })
+
+  // origemLeadDetalhe: obrigatório para lead, ignorado para prospecção
+  if (origem === 'lead' && (!origemLeadDetalhe || typeof origemLeadDetalhe !== 'string'))
+    return Response.json({ ok: false, error: 'Canal de origem é obrigatório para leads' }, { status: 400 })
 
   // vendedorId: vendedor usa o próprio id (do header) — nunca aceita valor do corpo
   let resolvedVendedorId: string | null
@@ -101,19 +116,27 @@ export async function POST(request: Request) {
   try {
     const cliente = await criarCliente(
       {
-        cnpj: cnpj as string,
-        razaoSocial: razaoSocial as string,
-        tipo: tipo as TipoCliente,
-        origem: origem as OrigemCliente,
-        vendedorId: resolvedVendedorId,
+        cnpj:                cnpj as string,
+        razaoSocial:         razaoSocial as string,
+        tipo:                tipo as TipoCliente,
+        origem:              origem as OrigemCliente,
+        origemLeadDetalhe:   origem === 'lead' ? (origemLeadDetalhe as string) : null,
+        cidade:              cidade as string,
+        estado:              estado as string,
+        telefone:            telefone as string,
+        nomeContato:         typeof nomeContato  === 'string' ? nomeContato  : null,
+        emailContato:        typeof emailContato === 'string' ? emailContato : null,
+        vendedorId:          resolvedVendedorId,
       },
       criadoPor,
     )
     return Response.json({ ok: true, cliente }, { status: 201 })
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Erro desconhecido'
-    const status = msg === 'CNPJ inválido' ? 422
-      : msg === 'CNPJ já cadastrado' ? 409
+    const status = msg === 'CNPJ inválido'    ? 422
+      : msg === 'CNPJ já cadastrado'          ? 409
+      : msg.includes('obrigatório')           ? 400
+      : msg.includes('obrigatória')           ? 400
       : 500
     return Response.json({ ok: false, error: msg }, { status })
   }

@@ -30,6 +30,27 @@ function validarCNPJ(raw: string): boolean {
   return Number(d[12]) === d1 && Number(d[13]) === d2
 }
 
+// ─── Constantes ──────────────────────────────────────────────────────────────
+
+const ESTADOS_BR = [
+  'AC','AL','AP','AM','BA','CE','DF','ES','GO','MA',
+  'MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN',
+  'RS','RO','RR','SC','SP','SE','TO',
+]
+
+const ORIGEM_LEAD_OPT = [
+  { value: 'indicacao',         label: 'Indicação' },
+  { value: 'site_formulario',   label: 'Site / Formulário' },
+  { value: 'instagram',         label: 'Instagram' },
+  { value: 'facebook',          label: 'Facebook' },
+  { value: 'google_ads',        label: 'Google Ads' },
+  { value: 'whatsapp',          label: 'WhatsApp' },
+  { value: 'feira_evento',      label: 'Feira / Evento' },
+  { value: 'ligacao_receptiva', label: 'Ligação Receptiva' },
+  { value: 'parceiro_revenda',  label: 'Parceiro / Revenda' },
+  { value: 'outro',             label: 'Outro' },
+]
+
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 
 interface ClienteResumo {
@@ -63,6 +84,10 @@ export default function CadastroClientePage() {
   const [razaoSocial, setRazaoSocial] = useState('')
   const [tipo, setTipo] = useState<'distribuidora' | 'integrador'>('integrador')
   const [origem, setOrigem] = useState<'prospeccao' | 'lead'>('prospeccao')
+  const [origemLeadDetalhe, setOrigemLeadDetalhe] = useState('')
+  const [cidade, setCidade] = useState('')
+  const [estado, setEstado] = useState('')
+  const [telefone, setTelefone] = useState('')
   const [vendedorId, setVendedorId] = useState<string | null>(null)
   const [vendedorLabel, setVendedorLabel] = useState('')
 
@@ -146,14 +171,26 @@ export default function CadastroClientePage() {
     const digits = normalizarCNPJ(cnpj)
     if (!validarCNPJ(digits)) { setErroCnpj('CNPJ inválido.'); return }
     if (!razaoSocial.trim()) return
+    if (!telefone.trim() || !cidade.trim() || !estado) {
+      setFeedback({ tipo: 'erro', msg: 'Telefone, cidade e estado são obrigatórios.' })
+      return
+    }
+    if (origem === 'lead' && !origemLeadDetalhe) {
+      setFeedback({ tipo: 'erro', msg: 'Selecione o canal de origem do lead.' })
+      return
+    }
 
     setSalvando(true)
     try {
       const body: Record<string, unknown> = {
-        cnpj: digits,
-        razaoSocial: razaoSocial.trim(),
+        cnpj:               digits,
+        razaoSocial:        razaoSocial.trim(),
         tipo,
         origem,
+        origemLeadDetalhe:  origem === 'lead' ? origemLeadDetalhe : undefined,
+        cidade:             cidade.trim(),
+        estado,
+        telefone:           telefone.trim(),
       }
       // vendedor: não envia vendedorId — servidor usa x-vendedor-id do header
       if (!eVendedor) body.vendedorId = vendedorId ?? null
@@ -173,6 +210,10 @@ export default function CadastroClientePage() {
       setRazaoSocial('')
       setTipo('integrador')
       setOrigem('prospeccao')
+      setOrigemLeadDetalhe('')
+      setCidade('')
+      setEstado('')
+      setTelefone('')
       setVendedorId(null)
       setVendedorLabel('')
       setErroCnpj(null)
@@ -280,11 +321,71 @@ export default function CadastroClientePage() {
             <select
               className={styles.select}
               value={origem}
-              onChange={e => setOrigem(e.target.value as 'prospeccao' | 'lead')}
+              onChange={e => { setOrigem(e.target.value as 'prospeccao' | 'lead'); setOrigemLeadDetalhe('') }}
             >
               <option value="prospeccao">Prospecção</option>
               <option value="lead">Lead</option>
             </select>
+          </div>
+
+          {/* Canal de origem — apenas quando Origem = Lead */}
+          {origem === 'lead' && (
+            <div className={styles.field}>
+              <label className={styles.fieldLabel}>Canal de origem</label>
+              <select
+                className={styles.select}
+                value={origemLeadDetalhe}
+                onChange={e => setOrigemLeadDetalhe(e.target.value)}
+                required
+              >
+                <option value="">Selecionar canal…</option>
+                {ORIGEM_LEAD_OPT.map(o => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* Telefone */}
+          <div className={styles.field}>
+            <label className={styles.fieldLabel}>Telefone</label>
+            <input
+              type="tel"
+              placeholder="(11) 98765-4321"
+              value={telefone}
+              onChange={e => { setTelefone(e.target.value); setFeedback(null) }}
+              className={styles.input}
+              required
+            />
+          </div>
+
+          {/* Cidade + Estado lado a lado */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 72px', gap: '0 16px' }}>
+            <div className={styles.field}>
+              <label className={styles.fieldLabel}>Cidade</label>
+              <input
+                type="text"
+                placeholder="São Paulo"
+                value={cidade}
+                onChange={e => { setCidade(e.target.value); setFeedback(null) }}
+                className={styles.input}
+                required
+              />
+            </div>
+            <div className={styles.field}>
+              <label className={styles.fieldLabel}>UF</label>
+              <select
+                className={styles.select}
+                value={estado}
+                onChange={e => setEstado(e.target.value)}
+                required
+              >
+                <option value="">—</option>
+                {ESTADOS_BR.map(uf => (
+                  <option key={uf} value={uf}>{uf}</option>
+                ))}
+              </select>
+            </div>
           </div>
 
           {/* Responsável — apenas para sdr / administrador / gestor */}

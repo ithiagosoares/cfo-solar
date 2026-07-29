@@ -49,14 +49,14 @@ const MODULOS: Modulo[] = [
     descricao: 'Cadastrar novo cliente CNPJ na carteira comercial.',
     href: '/clientes/cadastro',
     icon: UserPlus,
-    papeis: ['administrador', 'gestor', 'sdr'],
+    papeis: ['administrador', 'gestor', 'sdr', 'vendedor'],
   },
   {
     titulo: 'Cadastro de Orçamento',
     descricao: 'Registrar orçamento manualmente sem upload de relatório.',
     href: '/orcamentos/cadastro',
     icon: FilePlus,
-    papeis: ['administrador', 'gestor'],
+    papeis: ['administrador', 'gestor', 'vendedor'],
   },
   {
     titulo: 'Usuários do Sistema',

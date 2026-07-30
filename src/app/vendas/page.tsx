@@ -20,6 +20,17 @@ interface VendaResumo {
   numeroPedido: string | null
 }
 
+interface VendasApiResponse {
+  ok: boolean
+  vendas?: VendaResumo[]
+  total?: number
+  totalVendido?: number
+  totalVendidoOficial?: number | null
+  quantidadeVendasOficial?: number | null
+  fonteOficial?: string | null
+  divergenciaOficial?: number | null
+}
+
 function periodoParaDatas(p: '4s' | '3m'): { inicio: string; fim: string } {
   const hoje = new Date()
   const fim  = hoje.toISOString().slice(0, 10)
@@ -49,6 +60,9 @@ export default function VendasPage() {
   const [vendas, setVendas] = useState<VendaResumo[]>([])
   const [total, setTotal] = useState(0)
   const [totalVendido, setTotalVendido] = useState(0)
+  const [totalVendidoOficial, setTotalVendidoOficial] = useState<number | null>(null)
+  const [quantidadeVendasOficial, setQuantidadeVendasOficial] = useState<number | null>(null)
+  const [divergenciaOficial, setDivergenciaOficial] = useState<number | null>(null)
   const [paginaAtual, setPaginaAtual] = useState(1)
   const [carregandoLista, setCarregandoLista] = useState(true)
   const [carregandoMais, setCarregandoMais] = useState(false)
@@ -89,17 +103,15 @@ export default function VendasPage() {
       if (filtroAtivo.fim)    params.set('periodoFim',    filtroAtivo.fim)
 
       const res  = await fetch(`/api/vendas?${params}`)
-      const json = await res.json() as {
-        ok: boolean
-        vendas?: VendaResumo[]
-        total?: number
-        totalVendido?: number
-      }
+      const json = await res.json() as VendasApiResponse
       if (!json.ok) return
       const novas = json.vendas ?? []
       setVendas(prev => reset ? novas : [...prev, ...novas])
       setTotal(json.total ?? 0)
       setTotalVendido(json.totalVendido ?? 0)
+      setTotalVendidoOficial(json.totalVendidoOficial ?? null)
+      setQuantidadeVendasOficial(json.quantidadeVendasOficial ?? null)
+      setDivergenciaOficial(json.divergenciaOficial ?? null)
       setPaginaAtual(pagina)
     } finally {
       if (reset) setCarregandoLista(false)
@@ -132,6 +144,10 @@ export default function VendasPage() {
   const colGrid = eVendedor
     ? '2.5fr 1.2fr 1.3fr .9fr'
     : '2fr 1fr 1.2fr 1.3fr .9fr'
+
+  // Valor a exibir como total principal: oficial (ERP) se disponível, senão calculado
+  const valorExibido  = totalVendidoOficial ?? totalVendido
+  const usouOficial   = totalVendidoOficial !== null
 
   return (
     <div className={styles.page} style={{ minHeight: '100vh' }}>
@@ -225,22 +241,45 @@ export default function VendasPage() {
         {!carregandoLista && (
           <div
             className={styles.panel}
-            style={{ marginBottom: 32, display: 'flex', gap: 40, flexWrap: 'wrap', alignItems: 'center' }}
+            style={{ marginBottom: 32, display: 'flex', gap: 40, flexWrap: 'wrap', alignItems: 'flex-start' }}
           >
             <div>
               <p style={{ fontSize: 11, fontWeight: 600, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--ink3)', marginBottom: 6 }}>
                 Total vendido
               </p>
-              <p className={styles.num} style={{ fontSize: 28, fontWeight: 700, color: 'var(--cor-destaque)' }}>
-                {formatMoeda(totalVendido)}
-              </p>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                <p className={styles.num} style={{ fontSize: 28, fontWeight: 700, color: 'var(--cor-destaque)' }}>
+                  {formatMoeda(valorExibido)}
+                </p>
+                {usouOficial && (
+                  <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--cor-destaque)', letterSpacing: '.05em' }}>
+                    ✓ Total oficial
+                  </span>
+                )}
+              </div>
+
+              {/* Divergência: listagem calculada difere do total ERP */}
+              {divergenciaOficial !== null && divergenciaOficial > 0.01 && (
+                <p style={{ fontSize: 11.5, color: 'var(--ink3)', marginTop: 6, lineHeight: 1.5 }}>
+                  Diferença de {formatMoeda(divergenciaOficial)} em relação à listagem
+                  {quantidadeVendasOficial !== null && total > 0 && quantidadeVendasOficial > total
+                    ? ` — ${quantidadeVendasOficial - total} venda(s) sem orçamento correspondente`
+                    : ''}.
+                </p>
+              )}
             </div>
+
             <div>
               <p style={{ fontSize: 11, fontWeight: 600, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--ink3)', marginBottom: 6 }}>
                 Vendas no período
               </p>
               <p className={styles.num} style={{ fontSize: 28, fontWeight: 700 }}>
-                {total}
+                {quantidadeVendasOficial ?? total}
+                {quantidadeVendasOficial !== null && (
+                  <span style={{ fontSize: 13, fontWeight: 400, color: 'var(--ink3)', marginLeft: 6 }}>
+                    (oficial)
+                  </span>
+                )}
               </p>
             </div>
           </div>

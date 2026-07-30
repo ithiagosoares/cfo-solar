@@ -4,6 +4,7 @@
 // Filtros comuns: periodo { inicio, fim }, empresa?, filial?
 
 import { supabaseAdmin } from './supabase-admin'
+import { buscarTotaisOficiais, type TotalOficial, type FonteTotalOficial } from './vendedores-totais-repository'
 
 // ─── Tipos de filtro ──────────────────────────────────────────────────────────
 
@@ -143,9 +144,15 @@ function diasUteis(inicio: string, fim: string): number {
 // ─── 1. Desempenho por vendedor (série temporal) ──────────────────────────────
 
 export interface SerieVendedor {
-  vendedor:         string
+  vendedor:          string
   valoresPorPeriodo: { label: string; valor: number }[]
-  total:            number
+  total:             number
+  // Totais oficiais (null quando sem cobertura para o período exato)
+  totalOficial:            number | null
+  quantidadeVendasOficial: number | null
+  fonteOficial:            FonteTotalOficial | null
+  // Divergência = |total - totalOficial| quando ambos existem e diferem > R$ 0,01
+  divergenciaOficial:      number | null
 }
 
 export interface ResultadoDesempenho {
@@ -159,7 +166,11 @@ export async function calcularDesempenhoPorVendedor(
   periodo:  PeriodoFiltro,
   filtros:  FiltrosComerciais = {},
 ): Promise<ResultadoDesempenho> {
-  const pedidos = await buscarPedidos(periodo, filtros)
+  const [pedidos, totaisOficiais] = await Promise.all([
+    buscarPedidos(periodo, filtros),
+    buscarTotaisOficiais(periodo.inicio, periodo.fim, filtros.vendedorId),
+  ])
+
   const granularidade = granularidadePeriodo(periodo)
   const labels = gerarLabels(periodo, granularidade)
 
@@ -179,6 +190,21 @@ export async function calcularDesempenhoPorVendedor(
     subMapa.set(label, (subMapa.get(label) ?? 0) + (p.valor_vendido ?? 0))
   }
 
+  // Constrói mapa de totais oficiais por nome de vendedor.
+  // Quando existem duas fontes, prefere rentabilidade_vendedor (contém quantidadeVendas).
+  const oficialPorNome = new Map<string, TotalOficial>()
+  for (const t of totaisOficiais) {
+    const existing = oficialPorNome.get(t.vendedorNome)
+    if (!existing || t.fonte === 'rentabilidade_vendedor') {
+      oficialPorNome.set(t.vendedorNome, t)
+    }
+  }
+
+  // Garante que vendedores com total oficial mas sem pedidos registrados apareçam.
+  for (const [nome] of oficialPorNome) {
+    if (!mapa.has(nome)) mapa.set(nome, new Map())
+  }
+
   let totalComercialAtualizado = 0
 
   const series: SerieVendedor[] = Array.from(mapa.entries()).map(([vendedor, subMapa]) => {
@@ -188,11 +214,26 @@ export async function calcularDesempenhoPorVendedor(
     }))
     const total = valoresPorPeriodo.reduce((s, v) => s + v.valor, 0)
     totalComercialAtualizado += total
-    return { vendedor, valoresPorPeriodo, total }
+
+    const oficial = oficialPorNome.get(vendedor) ?? null
+    const totalOficial = oficial?.valorTotalOficial ?? null
+    const divergenciaOficial = totalOficial !== null && Math.abs(total - totalOficial) > 0.01
+      ? Math.abs(total - totalOficial)
+      : null
+
+    return {
+      vendedor,
+      valoresPorPeriodo,
+      total,
+      totalOficial,
+      quantidadeVendasOficial: oficial?.quantidadeVendas ?? null,
+      fonteOficial:            oficial?.fonte ?? null,
+      divergenciaOficial,
+    }
   })
 
-  // Ordena por total decrescente
-  series.sort((a, b) => b.total - a.total)
+  // Ordena por valor efetivo decrescente (oficial quando disponível, senão registrado)
+  series.sort((a, b) => (b.totalOficial ?? b.total) - (a.totalOficial ?? a.total))
 
   return { series, totalComercialAtualizado, granularidade, labels }
 }

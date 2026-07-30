@@ -11,6 +11,10 @@ interface SerieVendedor {
   vendedor: string
   valoresPorPeriodo: { label: string; valor: number }[]
   total: number
+  totalOficial: number | null
+  quantidadeVendasOficial: number | null
+  fonteOficial: string | null
+  divergenciaOficial: number | null
 }
 
 interface IndicadoresVendedor {
@@ -223,9 +227,12 @@ export function ComercialDashboard({ papel, vendedorId }: { papel: string; vende
   const expectedCols = (tipoPeriodo === '3m' ? 3 : 6) + 2  // estimativa para skeleton
 
   const seriesRows = (dados?.desempenhoPorVendedor ?? []).map(s => ({
-    nome: s.vendedor,
-    periods: s.valoresPorPeriodo.map(v => formatMoeda(v.valor)),
-    total: formatMoeda(s.total),
+    nome:                    s.vendedor,
+    periods:                 s.valoresPorPeriodo.map(v => formatMoeda(v.valor)),
+    total:                   formatMoeda(s.total),
+    totalOficial:            s.totalOficial !== null ? formatMoeda(s.totalOficial) : null,
+    quantidadeVendasOficial: s.quantidadeVendasOficial,
+    divergenciaOficial:      s.divergenciaOficial,
   }))
 
   const indic = dados?.indicadoresPorVendedor ?? []
@@ -341,8 +348,17 @@ export function ComercialDashboard({ papel, vendedorId }: { papel: string; vende
                       {v.periods.map((p, i) => (
                         <td key={i} style={{ ...tdStyle, textAlign: 'right' }} className={styles.num}>{p}</td>
                       ))}
-                      <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 700 }} className={styles.num}>
-                        {v.total}
+                      <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 700 }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
+                          <span className={styles.num}>
+                            {v.totalOficial ?? v.total}
+                          </span>
+                          {v.totalOficial !== null && (
+                            <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--cor-destaque)', letterSpacing: '.05em' }}>
+                              ✓ oficial
+                            </span>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -358,6 +374,26 @@ export function ComercialDashboard({ papel, vendedorId }: { papel: string; vende
             <div className={`${styles.totalVal} ${styles.serif} ${styles.num}`}>
               {primeiraCarreg ? '—' : formatMoeda(dados?.totalComercialAtualizado ?? 0)}
             </div>
+          </div>
+        )}
+
+        {/* Avisos de divergência entre total oficial e listagem calculada */}
+        {!primeiraCarreg && seriesRows.some(v => v.divergenciaOficial !== null) && (
+          <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {seriesRows
+              .filter(v => v.divergenciaOficial !== null)
+              .map(v => {
+                const semOrc = v.quantidadeVendasOficial !== null
+                  ? ` — ${v.quantidadeVendasOficial} venda(s) no ERP`
+                  : ''
+                return (
+                  <p key={v.nome} style={{ fontSize: 12, color: 'var(--ink3)', lineHeight: 1.5 }}>
+                    <strong style={{ color: 'var(--cor-texto)' }}>{v.nome}:</strong>{' '}
+                    diferença de {formatMoeda(v.divergenciaOficial!)} entre o total oficial e a listagem de orçamentos{semOrc}.
+                  </p>
+                )
+              })
+            }
           </div>
         )}
       </div>

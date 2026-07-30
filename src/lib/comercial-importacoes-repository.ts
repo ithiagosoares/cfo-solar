@@ -2,6 +2,7 @@
 
 import { supabaseAdmin } from './supabase-admin'
 import type { Divergencia } from './comercial-validacao'
+import type { TotaisVendedor, RentabilidadeVendedor } from './comercial-relatorios-parser'
 
 export type { Divergencia }
 
@@ -41,12 +42,19 @@ export interface NovaImportacao {
   divergencias: Divergencia[]
   vendedoresNaoReconhecidos: string[]
   registrosPreview: RegistroPreview[]
+  // Dados de período e totais ERP — opcionais; quando presentes são persistidos em
+  // vendedores_totais_oficiais na confirmação do upload.
+  periodoInicio?: string | null
+  periodoFim?: string | null
+  totaisVendedor?: TotaisVendedor[]
+  rentabilidadeVendedor?: RentabilidadeVendedor[]
 }
 
 // Espelho das colunas reais da tabela (snake_case).
 // Nomes confirmados contra o banco em 2026-07-15:
 //   arquivos (não arquivos_processados), registros_total (não total_registros),
 //   confirmado_at (não confirmado_em), registros_preview (adicionada via ALTER TABLE).
+// Adicionadas em 2026-07-30: periodo_inicio, periodo_fim, totais_vendedor, rentabilidade_vendedor.
 interface ImportacaoRow {
   id: string
   status: string
@@ -59,6 +67,10 @@ interface ImportacaoRow {
   registros_preview: RegistroPreview[]
   created_at: string
   confirmado_at: string | null
+  periodo_inicio: string | null
+  periodo_fim: string | null
+  totais_vendedor: TotaisVendedor[] | null
+  rentabilidade_vendedor: RentabilidadeVendedor[] | null
 }
 
 export interface ComercialImportacao {
@@ -73,6 +85,10 @@ export interface ComercialImportacao {
   registrosPreview: RegistroPreview[]
   criadoEm: string
   confirmadoEm: string | null
+  periodoInicio: string | null
+  periodoFim: string | null
+  totaisVendedor: TotaisVendedor[]
+  rentabilidadeVendedor: RentabilidadeVendedor[]
 }
 
 // ─── Mapper ───────────────────────────────────────────────────────────────────
@@ -90,6 +106,10 @@ function mapearLinha(row: ImportacaoRow): ComercialImportacao {
     registrosPreview: row.registros_preview,
     criadoEm: row.created_at,
     confirmadoEm: row.confirmado_at,
+    periodoInicio: row.periodo_inicio,
+    periodoFim: row.periodo_fim,
+    totaisVendedor: row.totais_vendedor ?? [],
+    rentabilidadeVendedor: row.rentabilidade_vendedor ?? [],
   }
 }
 
@@ -99,13 +119,17 @@ export async function criarImportacao(dados: NovaImportacao): Promise<ComercialI
   const { data, error } = await supabaseAdmin
     .from(TABELA)
     .insert({
-      empresa: dados.empresa,
-      filial: dados.filial,
-      arquivos: dados.arquivosProcessados,
-      registros_total: dados.totalRegistros,
-      divergencias: dados.divergencias,
+      empresa:                    dados.empresa,
+      filial:                     dados.filial,
+      arquivos:                   dados.arquivosProcessados,
+      registros_total:            dados.totalRegistros,
+      divergencias:               dados.divergencias,
       vendedores_nao_reconhecidos: dados.vendedoresNaoReconhecidos,
-      registros_preview: dados.registrosPreview,
+      registros_preview:          dados.registrosPreview,
+      periodo_inicio:             dados.periodoInicio ?? null,
+      periodo_fim:                dados.periodoFim    ?? null,
+      totais_vendedor:            dados.totaisVendedor?.length ? dados.totaisVendedor : null,
+      rentabilidade_vendedor:     dados.rentabilidadeVendedor?.length ? dados.rentabilidadeVendedor : null,
     })
     .select()
     .single()

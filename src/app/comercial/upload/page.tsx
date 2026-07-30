@@ -37,6 +37,13 @@ interface AvisoFilial {
   filialSelecionada: string
 }
 
+interface TotalEncontrado {
+  vendedor: string
+  valorTotal: number
+  quantidadeVendas: number | null
+  fonte: 'totais_vendedor' | 'rentabilidade_vendedor'
+}
+
 interface PreviewResult {
   importacaoId: string
   avisos: string[]
@@ -44,6 +51,7 @@ interface PreviewResult {
   registros: RegistroPreview[]
   divergencias: Divergencia[]
   vendedoresNaoReconhecidos: string[]
+  totaisEncontrados?: TotalEncontrado[]
   resumo: {
     totalRegistros: number
     totalAberto: number
@@ -88,6 +96,8 @@ export default function ComercialUploadPage() {
   const [arquivos, setArquivos] = useState<File[]>([])
   const [empresa, setEmpresa] = useState('')
   const [filial, setFilial] = useState('')
+  const [periodoInicio, setPeriodoInicio] = useState('')
+  const [periodoFim, setPeriodoFim] = useState('')
   const [isDragging, setIsDragging] = useState(false)
   const [processando, setProcessando] = useState(false)
   const [erroUpload, setErroUpload] = useState<string | null>(null)
@@ -102,7 +112,7 @@ export default function ComercialUploadPage() {
   const [confirmando, setConfirmando] = useState(false)
   const [descartando, setDescartando] = useState(false)
   const [erroConfirmar, setErroConfirmar] = useState<string | null>(null)
-  const [concluido, setConcluido] = useState<{ total: number } | null>(null)
+  const [concluido, setConcluido] = useState<{ total: number; totaisOficiais: number } | null>(null)
 
   // ── Drag & drop ─────────────────────────────────────────────────────────────
 
@@ -134,6 +144,8 @@ export default function ComercialUploadPage() {
       const fd = new FormData()
       fd.append('empresa', empresa)
       fd.append('filial', filial)
+      if (periodoInicio) fd.append('periodoInicio', periodoInicio)
+      if (periodoFim)    fd.append('periodoFim',    periodoFim)
       arquivos.forEach(f => fd.append('arquivos', f))
 
       const res  = await fetch('/api/comercial/upload-relatorio/preview', { method: 'POST', body: fd })
@@ -202,9 +214,9 @@ export default function ComercialUploadPage() {
           mapeamentoVendedores: resolucoes,
         }),
       })
-      const json = await res.json() as { ok: boolean; totalInserido?: number; error?: string }
+      const json = await res.json() as { ok: boolean; totalInserido?: number; totaisOficiaisInseridos?: number; error?: string }
       if (!json.ok) throw new Error(json.error ?? 'Erro ao confirmar')
-      setConcluido({ total: json.totalInserido ?? preview.registros.length })
+      setConcluido({ total: json.totalInserido ?? preview.registros.length, totaisOficiais: json.totaisOficiaisInseridos ?? 0 })
     } catch (e) {
       setErroConfirmar(e instanceof Error ? e.message : 'Erro desconhecido')
     } finally {
@@ -234,15 +246,18 @@ export default function ComercialUploadPage() {
   // ─── Estado: concluído ───────────────────────────────────────────────────────
 
   if (concluido) {
+    const standalone = concluido.total === 0 && concluido.totaisOficiais > 0
     return (
       <div className={styles.page}>
         <div className={styles.wrap} style={{ maxWidth: 560, paddingTop: 80, paddingBottom: 60, textAlign: 'center' }}>
           <div style={{ fontSize: 44, marginBottom: 20, color: 'var(--marca)' }}>✓</div>
           <div className={`${styles.stitle} ${styles.serif}`} style={{ marginBottom: 8 }}>
-            Importação confirmada
+            {standalone ? 'Totais oficiais salvos' : 'Importação confirmada'}
           </div>
           <div className={styles.scap} style={{ marginBottom: 32 }}>
-            {concluido.total} registro{concluido.total !== 1 ? 's foram inseridos' : ' foi inserido'} em comercial_pedidos.
+            {standalone
+              ? `${concluido.totaisOficiais} total(is) oficial(is) salvo(s) — nenhum pedido inserido.`
+              : `${concluido.total} registro${concluido.total !== 1 ? 's foram inseridos' : ' foi inserido'} em comercial_pedidos.${concluido.totaisOficiais > 0 ? ` ${concluido.totaisOficiais} total(is) oficial(is) salvo(s).` : ''}`}
           </div>
           <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
             <button
@@ -407,7 +422,35 @@ export default function ComercialUploadPage() {
             </section>
           )}
 
+          {/* ── Totais ERP encontrados (standalone ou complementar) ─────────── */}
+          {(preview.totaisEncontrados ?? []).length > 0 && (
+            <section style={{ marginBottom: 40 }}>
+              <SectionLabel texto={`${preview.totaisEncontrados!.length} total(is) por vendedor encontrado(s)`} />
+              <p style={{ fontSize: 13, color: 'var(--ink3)', marginTop: 0, marginBottom: 12 }}>
+                Esses totais serão salvos como fonte oficial para o período informado ao confirmar.
+              </p>
+              {preview.totaisEncontrados!.map((t, i) => (
+                <div
+                  key={i}
+                  style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid var(--line)', fontSize: 13 }}
+                >
+                  <div>
+                    <span style={{ fontWeight: 500 }}>{t.vendedor}</span>
+                    <span style={{ fontSize: 11, color: 'var(--ink3)', marginLeft: 10 }}>
+                      {t.fonte === 'rentabilidade_vendedor' ? 'rentabilidade' : 'totais de venda'}
+                      {t.quantidadeVendas !== null ? ` · ${t.quantidadeVendas} vendas` : ''}
+                    </span>
+                  </div>
+                  <span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>
+                    {formatMoeda(t.valorTotal)}
+                  </span>
+                </div>
+              ))}
+            </section>
+          )}
+
           {/* ── Tabela de registros ───────────────────────────────────────────── */}
+          {preview.registros.length > 0 && (
           <section style={{ marginBottom: 40 }}>
             <SectionLabel texto={`${preview.registros.length} registros para importar`} />
 
@@ -440,6 +483,7 @@ export default function ComercialUploadPage() {
               </div>
             ))}
           </section>
+          )}
 
           {/* ── Ações ────────────────────────────────────────────────────────── */}
           {erroConfirmar && (
@@ -593,6 +637,39 @@ export default function ComercialUploadPage() {
               <option value="Paraná">Paraná</option>
             </select>
           </div>
+        </div>
+
+        {/* ── Período (opcional — obrigatório para upload standalone de totais) ─ */}
+        <div style={{ marginBottom: 28 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.06em', color: 'var(--ink3)', textTransform: 'uppercase', marginBottom: 10 }}>
+            Período do relatório
+          </div>
+          <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+            <input
+              type="date"
+              value={periodoInicio}
+              onChange={e => setPeriodoInicio(e.target.value)}
+              style={{
+                fontSize: 13, padding: '7px 12px',
+                border: '1px solid var(--line2)', borderRadius: 4,
+                background: 'var(--cor-superficie)', color: 'var(--cor-texto)',
+              }}
+            />
+            <span style={{ fontSize: 13, color: 'var(--ink3)' }}>até</span>
+            <input
+              type="date"
+              value={periodoFim}
+              onChange={e => setPeriodoFim(e.target.value)}
+              style={{
+                fontSize: 13, padding: '7px 12px',
+                border: '1px solid var(--line2)', borderRadius: 4,
+                background: 'var(--cor-superficie)', color: 'var(--cor-texto)',
+              }}
+            />
+          </div>
+          <p style={{ fontSize: 11.5, color: 'var(--ink3)', marginTop: 8 }}>
+            Opcional para upload completo. Obrigatório para upload de totais/rentabilidade por vendedor sem o relatório de orçamentos.
+          </p>
         </div>
 
         {erroUpload && (

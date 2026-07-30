@@ -189,33 +189,96 @@ export function parsePedidosOrcamento(html: string): PedidoOrcamento[] {
   return resultado
 }
 
+// ─── Helper: detectar linha de cabeçalho e construir mapa nome→índice ─────────
+//
+// Percorre os <tr> procurando o primeiro que contenha ao menos `minMatches`
+// células cujo texto normalizado apareça em `labelsConhecidos`.
+// Preserva posições originais — NÃO filtra células vazias.
+// Retorna Map<label_normalizado → índice_na_linha> ou null se não encontrar.
+
+function detectarCabecalho(
+  $: ReturnType<typeof load>,
+  labelsConhecidos: string[],
+  minMatches = 2,
+): Map<string, number> | null {
+  const conhecidos = new Set(labelsConhecidos.map(l => l.toLowerCase().trim()))
+  let mapa: Map<string, number> | null = null
+  let encontrado = false
+
+  $('tr').each((_, tr) => {
+    if (encontrado) return
+    const cells = $(tr).find('td').map((__, td) => $(td).text().trim()).get()
+    let hits = 0
+    for (const c of cells) if (conhecidos.has(c.toLowerCase().trim())) hits++
+    if (hits >= minMatches) {
+      mapa = new Map()
+      cells.forEach((c, i) => { if (c) mapa!.set(c.toLowerCase().trim(), i) })
+      encontrado = true
+    }
+  })
+
+  return mapa
+}
+
+// Retorna o primeiro índice encontrado para qualquer dos candidatos no mapa.
+function resolverIdx(mapa: Map<string, number> | null, ...candidatos: string[]): number | null {
+  if (!mapa) return null
+  for (const c of candidatos) {
+    const idx = mapa.get(c.toLowerCase().trim())
+    if (idx !== undefined) return idx
+  }
+  return null
+}
+
 // ─── Parser: Totais por Vendedor ──────────────────────────────────────────────
 //
-// Estrutura: uma linha por vendedor com Nome do Vendedor + Total Prod.
-// Linhas de cabeçalho têm texto de label — detectadas e ignoradas.
-
-const CABECALHOS_TOTAIS = new Set([
-  'nome do vendedor', 'vendedor', 'funcionário', 'funcionario', 'nome',
-])
+// Relatório "Total de venda, margem de contribuição e lucro por vendedor".
+// Colunas confirmadas contra arquivos reais (SP e PR):
+//   Nome do Vendedor | Total Prod. | M.C. | %M.C. | Lucro | %Lucro
+//
+// O parser detecta o cabeçalho e resolve os índices pelo nome da coluna.
+// NÃO usa ultimoNaoVazio() — nos arquivos reais a última coluna é %Lucro,
+// não Total Prod.
 
 export function parseTotaisPorVendedor(html: string): TotaisVendedor[] {
   const $ = load(html)
   const resultado: TotaisVendedor[] = []
 
+  const LABELS_CAB = [
+    'nome do vendedor', 'total prod.', 'm.c.', '%m.c.', 'lucro', '%lucro',
+    'funcionário', 'funcionario', 'código', 'codigo',
+  ]
+
+  const cab    = detectarCabecalho($, LABELS_CAB)
+  const idxNome  = resolverIdx(cab, 'nome do vendedor', 'funcionário', 'funcionario')
+  const idxTotal = resolverIdx(cab, 'total prod.', 'total prod')
+
+  // Textos que identificam linhas de cabeçalho ou totais — a serem ignorados
+  const SKIP = new Set([
+    'nome do vendedor', 'funcionário', 'funcionario', 'nome', 'vendedor',
+    'total prod.', 'total prod', 'm.c.', '%m.c.', 'lucro', '%lucro',
+    'código', 'codigo',
+  ])
+
   $('tr').each((_, tr) => {
-    const cells = $(tr).find('td').map((_, td) => $(td).text().trim()).get().filter(Boolean)
-    if (cells.length < 2) return
+    // Preservar posições originais — NÃO filtrar células vazias
+    const cells = $(tr).find('td').map((__, td) => $(td).text().trim()).get()
+    const naoVazias = cells.filter(Boolean)
+    if (naoVazias.length < 2) return
 
-    const primeiraLower = cells[0].toLowerCase()
-    if (CABECALHOS_TOTAIS.has(primeiraLower)) return  // linha de cabeçalho
+    // Pular linhas de cabeçalho (qualquer célula que seja um label conhecido)
+    if (naoVazias.some(c => SKIP.has(c.toLowerCase()))) return
 
-    const vendedor = cells[0]
-    if (!vendedor) return
+    // Extrair nome do vendedor pelo índice detectado no cabeçalho
+    const vendedor = (idxNome !== null ? cells[idxNome] : naoVazias[0])?.trim() ?? ''
+    // Ignorar células numéricas puras (Código) e linhas de total
+    if (!vendedor || /^\d+$/.test(vendedor) || /^total/i.test(vendedor)) return
 
-    // "Total Prod." é o último campo com valor numérico
-    const valorStr = ultimoNaoVazio(cells)
-    const valorTotal = parseValorBR(valorStr)
-    if (valorTotal === 0 && valorStr && isNaN(parseValorBR(valorStr))) return
+    // Extrair "Total Prod." pelo índice detectado — nunca usar a última célula
+    const valorTotal = idxTotal !== null
+      ? parseValorBR(cells[idxTotal] ?? '')
+      : parseValorBR(naoVazias[1] ?? '')  // fallback posicional se não há cabeçalho
+    if (!valorTotal) return
 
     resultado.push({ vendedor, valorTotal })
   })
@@ -225,31 +288,51 @@ export function parseTotaisPorVendedor(html: string): TotaisVendedor[] {
 
 // ─── Parser: Rentabilidade por Vendedor ───────────────────────────────────────
 //
-// Estrutura: uma linha por vendedor com Funcionário, Vendas (contagem), Vlr. total.
-
-const CABECALHOS_RENT = new Set([
-  'funcionário', 'funcionario', 'vendedor', 'nome',
-])
+// Colunas confirmadas contra arquivos reais (SP e PR):
+//   Código | Funcionário | Vendas | Vlr. total | Custo total | Taxa cartão |
+//   % lucro bruto | Vlr. lucro bruto
+//
+// "Código" é o código numérico do funcionário — ignorado para fins de
+// identificação do vendedor. O nome vem sempre de "Funcionário".
 
 export function parseRentabilidadePorVendedor(html: string): RentabilidadeVendedor[] {
   const $ = load(html)
   const resultado: RentabilidadeVendedor[] = []
 
+  const LABELS_CAB = [
+    'código', 'codigo', 'funcionário', 'funcionario',
+    'vendas', 'vlr. total', 'vlr.total', 'custo total', '% lucro bruto', 'vlr. lucro bruto',
+  ]
+
+  const cab       = detectarCabecalho($, LABELS_CAB)
+  const idxNome   = resolverIdx(cab, 'funcionário', 'funcionario', 'nome do vendedor')
+  const idxVendas = resolverIdx(cab, 'vendas')
+  const idxTotal  = resolverIdx(cab, 'vlr. total', 'vlr.total')
+
+  const SKIP = new Set([
+    'código', 'codigo', 'funcionário', 'funcionario', 'nome', 'vendedor',
+    'vendas', 'vlr. total', 'vlr.total', 'custo total', '% lucro bruto', 'vlr. lucro bruto',
+    'taxa cartão', 'taxa cartao',
+  ])
+
   $('tr').each((_, tr) => {
-    const cells = $(tr).find('td').map((_, td) => $(td).text().trim()).get().filter(Boolean)
-    if (cells.length < 3) return
+    const cells = $(tr).find('td').map((__, td) => $(td).text().trim()).get()
+    const naoVazias = cells.filter(Boolean)
+    if (naoVazias.length < 3) return
 
-    const primeiraLower = cells[0].toLowerCase()
-    if (CABECALHOS_RENT.has(primeiraLower)) return  // cabeçalho
+    if (naoVazias.some(c => SKIP.has(c.toLowerCase()))) return
 
-    const vendedor = cells[0]
-    if (!vendedor) return
+    const vendedor = (idxNome !== null ? cells[idxNome] : naoVazias.find(c => !/^\d+$/.test(c)))?.trim() ?? ''
+    if (!vendedor || /^\d+$/.test(vendedor) || /^total/i.test(vendedor)) return
 
-    // Vendas = 2ª célula (contagem inteira)
-    const quantidadeVendas = parseInt(cells[1]) || 0
+    const quantidadeVendas = idxVendas !== null
+      ? parseInt(cells[idxVendas] ?? '') || 0
+      : parseInt(naoVazias.find(c => /^\d+$/.test(c)) ?? '') || 0
 
-    // Vlr. total = último campo numérico
-    const valorTotal = parseValorBR(ultimoNaoVazio(cells))
+    const valorTotal = idxTotal !== null
+      ? parseValorBR(cells[idxTotal] ?? '')
+      : 0  // sem cabeçalho não há como determinar a coluna correta com segurança
+    if (!valorTotal) return
 
     resultado.push({ vendedor, quantidadeVendas, valorTotal })
   })

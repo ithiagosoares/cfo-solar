@@ -4,12 +4,13 @@
 // FastReport 5.0 gera uma tabela por relatório onde:
 //   - Cada banda (header, detail, group header/footer) vira um <tr>
 //   - Cada campo da banda vira um <td> com classe CSS de estilo (ex: "s3", "s5")
-//   - A célula com classe "s3" contém o título centralizado (font-size 16px)
+//   - As classes CSS são renumeradas dinamicamente — NÃO confiar em nomes fixos
+//     (arquivos "TUDO" com coluna de logo extra deslocam a numeração)
 //   - Linhas de grupo com vendedor: texto "Nome do vendedor: X" em célula única (colspan)
 //   - Linhas de dado: <td>s com os campos em ordem fixa
 //
-// Se os nomes de coluna ou classes CSS mudarem no relatório, ajuste as constantes
-// TITULOS_TIPO e as funções de parse abaixo.
+// identificarTipoRelatorio() usa texto puro ($('body').text()), não seletores CSS.
+// Se os títulos dos relatórios mudarem, ajuste TITULOS_TIPO abaixo.
 
 import { load } from 'cheerio'
 
@@ -88,11 +89,22 @@ function ultimoNaoVazio(arr: string[]): string {
 }
 
 // ─── Identificação de tipo ────────────────────────────────────────────────────
+//
+// NÃO usa seletor de classe CSS (.s3, etc.) — o FastReport renumera as classes
+// dinamicamente conforme o número de estilos do documento (arquivos "TUDO" com
+// coluna de logo extra deslocam a numeração, quebrando seletores fixos).
+// Em vez disso, busca os títulos conhecidos no texto puro do documento.
+// Ordem do loop importa: "rentabilidade por vendedor" deve ser verificado antes
+// de "rentabilidade" para evitar false-positive do mais específico.
 
 export function identificarTipoRelatorio(html: string): TipoRelatorio {
   const $ = load(html)
-  const titulo = $('.s3').first().text().trim().toLowerCase()
-  return TITULOS_TIPO[titulo] ?? 'desconhecido'
+  const texto = $('body').text().toLowerCase()
+
+  for (const [titulo, tipo] of Object.entries(TITULOS_TIPO)) {
+    if (texto.includes(titulo)) return tipo
+  }
+  return 'desconhecido'
 }
 
 // ─── Origem do relatório (CNPJ e UF da filial emissora) ───────────────────────

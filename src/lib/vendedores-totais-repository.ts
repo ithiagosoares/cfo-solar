@@ -18,6 +18,7 @@ export interface TotalOficialInput {
   valorTotalOficial: number
   quantidadeVendas?: number | null
   fonte:             FonteTotalOficial
+  filial:            string | null
   importacaoId:      string | null
 }
 
@@ -36,7 +37,7 @@ export async function upsertTotaisOficiais(totais: TotalOficialInput[]): Promise
   if (totais.length === 0) return
 
   for (const t of totais) {
-    console.log(`[upsert-totais] vendedor_id: ${t.vendedorId} | fonte: ${t.fonte} | periodo: ${t.periodoInicio}→${t.periodoFim} | valor: ${t.valorTotalOficial}`)
+    console.log(`[upsert-totais] vendedor_id: ${t.vendedorId} | fonte: ${t.fonte} | filial: ${t.filial ?? 'null'} | periodo: ${t.periodoInicio}→${t.periodoFim} | valor: ${t.valorTotalOficial}`)
   }
 
   const { error } = await supabaseAdmin
@@ -49,9 +50,10 @@ export async function upsertTotaisOficiais(totais: TotalOficialInput[]): Promise
         valor_total_oficial: t.valorTotalOficial,
         quantidade_vendas:   t.quantidadeVendas ?? null,
         fonte:               t.fonte,
+        filial:              t.filial,
         importacao_id:       t.importacaoId,
       })),
-      { onConflict: 'vendedor_id,periodo_inicio,periodo_fim,fonte' },
+      { onConflict: 'vendedor_id,periodo_inicio,periodo_fim,fonte,filial' },
     )
 
   if (error) {

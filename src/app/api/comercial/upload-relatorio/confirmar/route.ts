@@ -80,9 +80,11 @@ export async function POST(request: Request) {
 
       const inputs: TotalOficialInput[] = []
 
+      const filial = importacao.filial
+
       for (const r of importacao.rentabilidadeVendedor) {
         const vendedorId = idPorNome.get(r.vendedor.toLowerCase().trim())
-        console.log(`[confirmar-totais] rentabilidade | nome: "${r.vendedor}" | id: ${vendedorId ?? 'NÃO RESOLVIDO'} | valor: ${r.valorTotal}`)
+        console.log(`[confirmar-totais] rentabilidade | nome: "${r.vendedor}" | id: ${vendedorId ?? 'NÃO RESOLVIDO'} | filial: ${filial ?? 'null'} | valor: ${r.valorTotal}`)
         if (!vendedorId) continue  // nome não resolvido — ignorar
 
         inputs.push({
@@ -92,13 +94,14 @@ export async function POST(request: Request) {
           valorTotalOficial: r.valorTotal,
           quantidadeVendas:  r.quantidadeVendas,
           fonte:             'rentabilidade_vendedor',
+          filial,
           importacaoId,
         })
       }
 
       for (const t of importacao.totaisVendedor) {
         const vendedorId = idPorNome.get(t.vendedor.toLowerCase().trim())
-        console.log(`[confirmar-totais] total_venda | nome: "${t.vendedor}" | id: ${vendedorId ?? 'NÃO RESOLVIDO'} | valor: ${t.valorTotal}`)
+        console.log(`[confirmar-totais] total_venda | nome: "${t.vendedor}" | id: ${vendedorId ?? 'NÃO RESOLVIDO'} | filial: ${filial ?? 'null'} | valor: ${t.valorTotal}`)
         if (!vendedorId) continue
 
         // Inserimos mesmo que o vendedor já tenha entrada em rentabilidade_vendedor —
@@ -110,6 +113,7 @@ export async function POST(request: Request) {
           valorTotalOficial: t.valorTotal,
           quantidadeVendas:  null,
           fonte:             'total_venda_vendedor',
+          filial,
           importacaoId,
         })
       }

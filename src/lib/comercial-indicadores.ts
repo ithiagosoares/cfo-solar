@@ -190,13 +190,42 @@ export async function calcularDesempenhoPorVendedor(
     subMapa.set(label, (subMapa.get(label) ?? 0) + (p.valor_vendido ?? 0))
   }
 
-  // Constrói mapa de totais oficiais por nome de vendedor.
-  // Quando existem duas fontes, prefere rentabilidade_vendedor (contém quantidadeVendas).
-  const oficialPorNome = new Map<string, TotalOficial>()
+  // Agrega totais oficiais por (vendedorNome, fonte) somando filiais.
+  // Um vendedor pode ter registros de SP e PR separados — o total real é a soma.
+  // Depois, prefere rentabilidade_vendedor quando ambas as fontes existirem.
+  type AgregadoOficial = {
+    valorTotalOficial: number
+    quantidadeVendas: number | null
+    fonte: FonteTotalOficial
+    vendedorId: string
+    vendedorNome: string
+  }
+
+  const agregadosPorNomeFonte = new Map<string, AgregadoOficial>()
   for (const t of totaisOficiais) {
-    const existing = oficialPorNome.get(t.vendedorNome)
-    if (!existing || t.fonte === 'rentabilidade_vendedor') {
-      oficialPorNome.set(t.vendedorNome, t)
+    const chave = `${t.vendedorNome}|||${t.fonte}`
+    const existing = agregadosPorNomeFonte.get(chave)
+    if (!existing) {
+      agregadosPorNomeFonte.set(chave, {
+        valorTotalOficial: t.valorTotalOficial,
+        quantidadeVendas:  t.quantidadeVendas,
+        fonte:             t.fonte,
+        vendedorId:        t.vendedorId,
+        vendedorNome:      t.vendedorNome,
+      })
+    } else {
+      existing.valorTotalOficial += t.valorTotalOficial
+      if (t.quantidadeVendas !== null) {
+        existing.quantidadeVendas = (existing.quantidadeVendas ?? 0) + t.quantidadeVendas
+      }
+    }
+  }
+
+  const oficialPorNome = new Map<string, AgregadoOficial>()
+  for (const [, ag] of agregadosPorNomeFonte) {
+    const existing = oficialPorNome.get(ag.vendedorNome)
+    if (!existing || ag.fonte === 'rentabilidade_vendedor') {
+      oficialPorNome.set(ag.vendedorNome, ag)
     }
   }
 

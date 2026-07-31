@@ -35,6 +35,10 @@ export interface TotalOficial {
 export async function upsertTotaisOficiais(totais: TotalOficialInput[]): Promise<void> {
   if (totais.length === 0) return
 
+  for (const t of totais) {
+    console.log(`[upsert-totais] vendedor_id: ${t.vendedorId} | fonte: ${t.fonte} | periodo: ${t.periodoInicio}→${t.periodoFim} | valor: ${t.valorTotalOficial}`)
+  }
+
   const { error } = await supabaseAdmin
     .from(TABELA)
     .upsert(

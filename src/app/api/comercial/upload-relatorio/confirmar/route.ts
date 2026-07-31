@@ -82,6 +82,7 @@ export async function POST(request: Request) {
 
       for (const r of importacao.rentabilidadeVendedor) {
         const vendedorId = idPorNome.get(r.vendedor.toLowerCase().trim())
+        console.log(`[confirmar-totais] rentabilidade | nome: "${r.vendedor}" | id: ${vendedorId ?? 'NÃO RESOLVIDO'} | valor: ${r.valorTotal}`)
         if (!vendedorId) continue  // nome não resolvido — ignorar
 
         inputs.push({
@@ -97,6 +98,7 @@ export async function POST(request: Request) {
 
       for (const t of importacao.totaisVendedor) {
         const vendedorId = idPorNome.get(t.vendedor.toLowerCase().trim())
+        console.log(`[confirmar-totais] total_venda | nome: "${t.vendedor}" | id: ${vendedorId ?? 'NÃO RESOLVIDO'} | valor: ${t.valorTotal}`)
         if (!vendedorId) continue
 
         // Inserimos mesmo que o vendedor já tenha entrada em rentabilidade_vendedor —

@@ -275,9 +275,9 @@ export function parseTotaisPorVendedor(html: string): TotaisVendedor[] {
     if (!vendedor || /^\d+$/.test(vendedor) || /^total/i.test(vendedor)) return
 
     // Extrair "Total Prod." pelo índice detectado — nunca usar a última célula
-    const valorTotal = idxTotal !== null
-      ? parseValorBR(cells[idxTotal] ?? '')
-      : parseValorBR(naoVazias[1] ?? '')  // fallback posicional se não há cabeçalho
+    const valorBruto = idxTotal !== null ? (cells[idxTotal] ?? '') : (naoVazias[1] ?? '')
+    const valorTotal = parseValorBR(valorBruto)
+    console.log(`[parse-totais] ${vendedor} | bruto: "${valorBruto}" | convertido: ${valorTotal}`)
     if (!valorTotal) return
 
     resultado.push({ vendedor, valorTotal })
@@ -329,9 +329,9 @@ export function parseRentabilidadePorVendedor(html: string): RentabilidadeVended
       ? parseInt(cells[idxVendas] ?? '') || 0
       : parseInt(naoVazias.find(c => /^\d+$/.test(c)) ?? '') || 0
 
-    const valorTotal = idxTotal !== null
-      ? parseValorBR(cells[idxTotal] ?? '')
-      : 0  // sem cabeçalho não há como determinar a coluna correta com segurança
+    const valorBrutoR = idxTotal !== null ? (cells[idxTotal] ?? '') : ''
+    const valorTotal = parseValorBR(valorBrutoR)
+    console.log(`[parse-rentab] ${vendedor} | bruto: "${valorBrutoR}" | convertido: ${valorTotal}`)
     if (!valorTotal) return
 
     resultado.push({ vendedor, quantidadeVendas, valorTotal })

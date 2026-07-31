@@ -278,6 +278,9 @@ export function parseTotaisPorVendedor(html: string): TotaisVendedor[] {
     const valorBruto = idxTotal !== null ? (cells[idxTotal] ?? '') : (naoVazias[1] ?? '')
     const valorTotal = parseValorBR(valorBruto)
     console.log(`[parse-totais] ${vendedor} | bruto: "${valorBruto}" | convertido: ${valorTotal}`)
+    if (vendedor.toUpperCase().includes('GENIVAL')) {
+      console.log(`[parse-totais:cells] idxNome=${idxNome} idxTotal=${idxTotal} | todas as células: ${JSON.stringify(cells)}`)
+    }
     if (!valorTotal) return
 
     resultado.push({ vendedor, valorTotal })
@@ -332,6 +335,9 @@ export function parseRentabilidadePorVendedor(html: string): RentabilidadeVended
     const valorBrutoR = idxTotal !== null ? (cells[idxTotal] ?? '') : ''
     const valorTotal = parseValorBR(valorBrutoR)
     console.log(`[parse-rentab] ${vendedor} | bruto: "${valorBrutoR}" | convertido: ${valorTotal}`)
+    if (vendedor.toUpperCase().includes('GENIVAL')) {
+      console.log(`[parse-rentab:cells] idxNome=${idxNome} idxVendas=${idxVendas} idxTotal=${idxTotal} | todas as células: ${JSON.stringify(cells)}`)
+    }
     if (!valorTotal) return
 
     resultado.push({ vendedor, quantidadeVendas, valorTotal })

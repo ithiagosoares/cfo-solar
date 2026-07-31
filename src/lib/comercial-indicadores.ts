@@ -242,10 +242,10 @@ export async function calcularDesempenhoPorVendedor(
       valor: subMapa.get(label) ?? 0,
     }))
     const total = valoresPorPeriodo.reduce((s, v) => s + v.valor, 0)
-    totalComercialAtualizado += total
 
     const oficial = oficialPorNome.get(vendedor) ?? null
     const totalOficial = oficial?.valorTotalOficial ?? null
+    totalComercialAtualizado += totalOficial ?? total
     const divergenciaOficial = totalOficial !== null && Math.abs(total - totalOficial) > 0.01
       ? Math.abs(total - totalOficial)
       : null

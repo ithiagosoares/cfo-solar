@@ -1,10 +1,10 @@
 // Server-only. Nunca importar de 'use client'.
 // Verifica os headers x-papel e x-comercial-role injetados pelo proxy.
 
-export type Papel = 'administrador' | 'gestor' | 'sdr' | 'vendedor'
+export type Papel = 'administrador' | 'gestor' | 'sdr' | 'vendedor' | 'sem_acesso'
 export type ComercialRole = 'diretor' | 'gestor'
 
-const PAPEIS_COMERCIAIS = new Set<string>(['administrador', 'gestor', 'sdr', 'vendedor'])
+const PAPEIS_COMERCIAIS = new Set<string>(['administrador', 'gestor', 'sdr', 'vendedor', 'sem_acesso'])
 const ROLES_VALIDAS = new Set<string>(['diretor', 'gestor'])
 
 export function getPapel(request: Request): Papel | null {
@@ -28,7 +28,8 @@ export function getComercialRole(request: Request): ComercialRole | null {
 //   const denied = requireComercialAccess(request)
 //   if (denied) return denied
 export function requireComercialAccess(request: Request): Response | null {
-  if (getPapel(request) !== null) return null
+  const papel = getPapel(request)
+  if (papel !== null && papel !== 'sem_acesso') return null
   if (getComercialRole(request) !== null) return null
   return Response.json({ ok: false, error: 'Acesso negado' }, { status: 403 })
 }

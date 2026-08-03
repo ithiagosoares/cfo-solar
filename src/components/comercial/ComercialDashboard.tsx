@@ -78,13 +78,17 @@ interface DadosDashboard {
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 
-function periodoParaDatas(period: '4s' | '3m') {
-  const hoje = new Date()
-  const fim = hoje.toISOString().slice(0, 10)
-  const ini = new Date(hoje)
-  if (period === '4s') ini.setDate(hoje.getDate() - 28)
-  else ini.setMonth(hoje.getMonth() - 3)
-  return { inicio: ini.toISOString().slice(0, 10), fim }
+// "2026-06" → "Junho/2026"
+const NOMES_MES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
+function formatMesOpcao(yyyyMM: string): string {
+  const [y, m] = yyyyMM.split('-').map(Number)
+  return `${NOMES_MES[m - 1]}/${y}`
+}
+
+// "YYYY-MM" → último dia do mês no formato "YYYY-MM-DD"
+function ultimoDia(yyyyMM: string): string {
+  const [y, m] = yyyyMM.split('-').map(Number)
+  return `${yyyyMM}-${String(new Date(y, m, 0).getDate()).padStart(2, '0')}`
 }
 
 function formatLabel(label: string): string {
@@ -164,18 +168,10 @@ const RANK_TABS: { id: RankTab; label: string }[] = [
 
 // ─── Componente principal ──────────────────────────────────────────────────────
 
-type TipoPeriodo = '4s' | '3m' | 'personalizado'
-
-const OPCOES_PERIODO: { id: TipoPeriodo; label: string }[] = [
-  { id: '4s',           label: 'Últimas 4 semanas' },
-  { id: '3m',           label: 'Últimos 3 meses' },
-  { id: 'personalizado', label: 'Personalizado' },
-]
-
 export function ComercialDashboard({ papel, vendedorId }: { papel: string; vendedorId: string | null }) {
-  const [tipoPeriodo, setTipoPeriodo] = useState<TipoPeriodo>('4s')
-  const [customInicio, setCustomInicio] = useState('')
-  const [customFim, setCustomFim]     = useState('')
+  const [mesesDisponiveis, setMesesDisponiveis] = useState<string[]>([])
+  const [mesInicio, setMesInicio] = useState<string>('')
+  const [mesFim, setMesFim]       = useState<string>('')
   const [rankTab, setRankTab] = useState<RankTab>('filial')
   const [dados, setDados] = useState<DadosDashboard | null>(null)
   const [carregando, setCarregando] = useState(true)
@@ -183,15 +179,35 @@ export function ComercialDashboard({ papel, vendedorId }: { papel: string; vende
   const [vendedoresSelecionados, setVendedoresSelecionados] = useState<Set<string>>(new Set())
   const [expandidoOpp, setExpandidoOpp] = useState(false)
 
-  // Período ativo como string estável — null quando personalizado ainda incompleto/inválido
+  // Carrega meses disponíveis e inicializa seleção a partir da URL ou padrão (tudo).
+  useEffect(() => {
+    fetch('/api/comercial/meses-disponiveis')
+      .then(r => r.json())
+      .then((d: { ok: boolean; meses: string[] }) => {
+        if (!d.ok || d.meses.length === 0) return
+        setMesesDisponiveis(d.meses)
+        const params = new URLSearchParams(window.location.search)
+        const urlDe  = params.get('de')
+        const urlAte = params.get('ate')
+        setMesInicio(urlDe  && d.meses.includes(urlDe)  ? urlDe  : d.meses[0])
+        setMesFim   (urlAte && d.meses.includes(urlAte) ? urlAte : d.meses[d.meses.length - 1])
+      })
+  }, [])
+
+  // Sincroniza meses selecionados para a URL (?de=YYYY-MM&ate=YYYY-MM).
+  useEffect(() => {
+    if (!mesInicio || !mesFim) return
+    const params = new URLSearchParams(window.location.search)
+    params.set('de', mesInicio)
+    params.set('ate', mesFim)
+    window.history.replaceState(null, '', `?${params.toString()}`)
+  }, [mesInicio, mesFim])
+
+  // Período como string estável — null enquanto meses ainda não carregaram.
   const periodoAtivo = useMemo<string | null>(() => {
-    if (tipoPeriodo === 'personalizado') {
-      if (!customInicio || !customFim || customInicio > customFim) return null
-      return `${customInicio}|${customFim}`
-    }
-    const p = periodoParaDatas(tipoPeriodo)
-    return `${p.inicio}|${p.fim}`
-  }, [tipoPeriodo, customInicio, customFim])
+    if (!mesInicio || !mesFim || mesInicio > mesFim) return null
+    return `${mesInicio}-01|${ultimoDia(mesFim)}`
+  }, [mesInicio, mesFim])
 
   useEffect(() => {
     if (!periodoAtivo) return
@@ -224,7 +240,8 @@ export function ComercialDashboard({ papel, vendedorId }: { papel: string; vende
   const vazio = !carregando && dados !== null && dados.desempenhoPorVendedor.length === 0
 
   const labels = (dados?.labels ?? []).map(formatLabel)
-  const expectedCols = (tipoPeriodo === '3m' ? 3 : 6) + 2  // estimativa para skeleton
+  const numMesesSel = mesesDisponiveis.filter(m => m >= mesInicio && m <= mesFim).length || 3
+  const expectedCols = numMesesSel + 2
 
   const seriesRows = (dados?.desempenhoPorVendedor ?? []).map(s => ({
     nome:                    s.vendedor,
@@ -270,43 +287,40 @@ export function ComercialDashboard({ papel, vendedorId }: { papel: string; vende
   return (
     <div className="flex flex-col animate-fadeIn">
 
-      {/* ── Filtro de período ─────────────────────────────────────────────── */}
+      {/* ── Filtro de período (meses inteiros) ───────────────────────────── */}
       <div className={styles.filtroBar} style={{ marginBottom: 36 }}>
-        {OPCOES_PERIODO.map(op => (
-          <button
-            key={op.id}
-            onClick={() => { setTipoPeriodo(op.id); if (op.id !== 'personalizado') { setCustomInicio(''); setCustomFim('') } }}
-            className={`${styles.pfiltro} ${tipoPeriodo === op.id ? styles.pfiltroOn : ''}`}
-            disabled={carregando && tipoPeriodo !== op.id}
-          >
-            {op.label}
-          </button>
-        ))}
-        {tipoPeriodo === 'personalizado' && (
+        {mesesDisponiveis.length === 0 ? (
+          <span style={{ fontSize: 13, color: 'var(--ink3)' }}>Carregando meses…</span>
+        ) : (
           <div className={styles.filtroCustom}>
             <span className={styles.filtroLbl}>De</span>
-            <input
-              type="date"
-              value={customInicio}
-              onChange={e => setCustomInicio(e.target.value)}
-              className={styles.filtroDate}
-            />
-            <span className={styles.filtroLbl}>Até</span>
-            <input
-              type="date"
-              value={customFim}
-              onChange={e => setCustomFim(e.target.value)}
-              className={styles.filtroDate}
-            />
-            {customInicio && customFim && customInicio > customFim && (
-              <span style={{ fontSize: 12, color: 'var(--critico)' }}>
-                Data início posterior ao fim
-              </span>
-            )}
-            {!periodoAtivo && (!customInicio || !customFim) && (
-              <span style={{ fontSize: 12, color: 'var(--ink3)' }}>
-                Preencha as duas datas para carregar
-              </span>
+            <select
+              value={mesInicio}
+              onChange={e => {
+                const v = e.target.value
+                setMesInicio(v)
+                if (v > mesFim) setMesFim(v)
+              }}
+              disabled={carregando}
+              style={selectStyle}
+            >
+              {mesesDisponiveis.map(m => (
+                <option key={m} value={m}>{formatMesOpcao(m)}</option>
+              ))}
+            </select>
+            <span className={styles.filtroLbl}>até</span>
+            <select
+              value={mesFim}
+              onChange={e => setMesFim(e.target.value)}
+              disabled={carregando}
+              style={selectStyle}
+            >
+              {mesesDisponiveis.filter(m => m >= mesInicio).map(m => (
+                <option key={m} value={m}>{formatMesOpcao(m)}</option>
+              ))}
+            </select>
+            {numMesesSel === 1 && mesInicio === mesFim && (
+              <span style={{ fontSize: 12, color: 'var(--ink3)' }}>{formatMesOpcao(mesInicio)}</span>
             )}
           </div>
         )}
@@ -682,6 +696,19 @@ export function ComercialDashboard({ papel, vendedorId }: { papel: string; vende
       </div>}
     </div>
   )
+}
+
+// ─── Estilos compartilhados ───────────────────────────────────────────────────
+
+const selectStyle: React.CSSProperties = {
+  fontSize: 13,
+  padding: '4px 8px',
+  borderRadius: 4,
+  border: '1px solid var(--line2)',
+  background: 'var(--bg)',
+  color: 'var(--cor-texto)',
+  cursor: 'pointer',
+  fontFamily: 'inherit',
 }
 
 // ─── Estilos de tabela compartilhados ─────────────────────────────────────────

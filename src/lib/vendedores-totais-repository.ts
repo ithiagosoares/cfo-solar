@@ -1,7 +1,6 @@
 // Server-only — usa supabaseAdmin (service_role key). Nunca importar de 'use client'.
 // Tabela: vendedores_totais_oficiais
 // Fonte de verdade para totais de venda por vendedor, extraída de relatórios ERP agregados.
-// Cobertura é por período exato — match requer periodo_inicio = X AND periodo_fim = Y.
 
 import { supabaseAdmin } from './supabase-admin'
 
@@ -25,6 +24,8 @@ export interface TotalOficialInput {
 export interface TotalOficial {
   vendedorId:        string
   vendedorNome:      string
+  periodoInicio:     string
+  periodoFim:        string
   valorTotalOficial: number
   quantidadeVendas:  number | null
   fonte:             FonteTotalOficial
@@ -32,7 +33,7 @@ export interface TotalOficial {
 
 // ─── CRUD ─────────────────────────────────────────────────────────────────────
 
-// Upserta totais. Conflito na constraint (vendedor_id, periodo_inicio, periodo_fim, fonte) → atualiza.
+// Upserta totais. Conflito na constraint (vendedor_id, periodo_inicio, periodo_fim, fonte, filial) → atualiza.
 export async function upsertTotaisOficiais(totais: TotalOficialInput[]): Promise<void> {
   if (totais.length === 0) return
 
@@ -62,26 +63,43 @@ export async function upsertTotaisOficiais(totais: TotalOficialInput[]): Promise
   }
 }
 
+// ─── Helpers de query ─────────────────────────────────────────────────────────
+
+type Row = {
+  vendedor_id:         string
+  periodo_inicio:      string
+  periodo_fim:         string
+  valor_total_oficial: number
+  quantidade_vendas:   number | null
+  fonte:               string
+  // Supabase pode retornar o join como objeto ou array dependendo da versão do client
+  vendedores:          { nome: string } | { nome: string }[] | null
+}
+
+function mapearRow(row: Row): TotalOficial {
+  return {
+    vendedorId:        row.vendedor_id,
+    vendedorNome:      Array.isArray(row.vendedores)
+                         ? (row.vendedores[0]?.nome ?? '')
+                         : (row.vendedores?.nome ?? ''),
+    periodoInicio:     row.periodo_inicio,
+    periodoFim:        row.periodo_fim,
+    valorTotalOficial: row.valor_total_oficial,
+    quantidadeVendas:  row.quantidade_vendas,
+    fonte:             row.fonte as FonteTotalOficial,
+  }
+}
+
 // Busca totais para um período EXATO (periodo_inicio = X AND periodo_fim = Y).
-// Faz join com vendedores para retornar o nome. Pode retornar mais de um registro por
-// vendedor quando existem múltiplas fontes (total_venda_vendedor + rentabilidade_vendedor).
+// Usado pela página de vendas e pela coluna TOTAL do Dashboard.
 export async function buscarTotaisOficiais(
   periodoInicio: string,
   periodoFim:    string,
   vendedorId?:   string,
 ): Promise<TotalOficial[]> {
-  type Row = {
-    vendedor_id:         string
-    valor_total_oficial: number
-    quantidade_vendas:   number | null
-    fonte:               string
-    // Supabase pode retornar o join como objeto ou array dependendo da versão do client
-    vendedores:          { nome: string } | { nome: string }[] | null
-  }
-
   let query = supabaseAdmin
     .from(TABELA)
-    .select('vendedor_id, valor_total_oficial, quantidade_vendas, fonte, vendedores(nome)')
+    .select('vendedor_id, periodo_inicio, periodo_fim, valor_total_oficial, quantidade_vendas, fonte, vendedores(nome)')
     .eq('periodo_inicio', periodoInicio)
     .eq('periodo_fim', periodoFim)
 
@@ -94,11 +112,31 @@ export async function buscarTotaisOficiais(
     throw new Error(`Falha ao buscar totais oficiais: ${error.message}`)
   }
 
-  return (data ?? []).map((row: Row) => ({
-    vendedorId:        row.vendedor_id,
-    vendedorNome:      Array.isArray(row.vendedores) ? (row.vendedores[0]?.nome ?? '') : (row.vendedores?.nome ?? ''),
-    valorTotalOficial: row.valor_total_oficial,
-    quantidadeVendas:  row.quantidade_vendas,
-    fonte:             row.fonte as FonteTotalOficial,
-  }))
+  return (data ?? []).map(row => mapearRow(row as Row))
+}
+
+// Busca TODOS os registros cujo período está CONTIDO dentro do range informado
+// (periodo_inicio >= X AND periodo_fim <= Y). Retorna tanto registros exatos como
+// sub-períodos mensais. Usado pelo Dashboard para enriquecer células mensais.
+export async function buscarTotaisOficiaisMensais(
+  periodoInicio: string,
+  periodoFim:    string,
+  vendedorId?:   string,
+): Promise<TotalOficial[]> {
+  let query = supabaseAdmin
+    .from(TABELA)
+    .select('vendedor_id, periodo_inicio, periodo_fim, valor_total_oficial, quantidade_vendas, fonte, vendedores(nome)')
+    .gte('periodo_inicio', periodoInicio)
+    .lte('periodo_fim', periodoFim)
+
+  if (vendedorId) query = query.eq('vendedor_id', vendedorId)
+
+  const { data, error } = await query
+
+  if (error) {
+    console.error('[vendedores-totais-repository] buscarMensais erro:', JSON.stringify(error, null, 2))
+    throw new Error(`Falha ao buscar totais oficiais mensais: ${error.message}`)
+  }
+
+  return (data ?? []).map(row => mapearRow(row as Row))
 }

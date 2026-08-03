@@ -9,7 +9,7 @@ import { MetricaComFormula } from '@/components/relatorio/MetricaComFormula'
 
 interface SerieVendedor {
   vendedor: string
-  valoresPorPeriodo: { label: string; valor: number }[]
+  valoresPorPeriodo: { label: string; valor: number; oficial: boolean }[]
   total: number
   totalOficial: number | null
   quantidadeVendasOficial: number | null
@@ -228,7 +228,7 @@ export function ComercialDashboard({ papel, vendedorId }: { papel: string; vende
 
   const seriesRows = (dados?.desempenhoPorVendedor ?? []).map(s => ({
     nome:                    s.vendedor,
-    periods:                 s.valoresPorPeriodo.map(v => formatMoeda(v.valor)),
+    periods:                 s.valoresPorPeriodo.map(v => ({ value: formatMoeda(v.valor), oficial: v.oficial })),
     total:                   formatMoeda(s.total),
     totalOficial:            s.totalOficial !== null ? formatMoeda(s.totalOficial) : null,
     quantidadeVendasOficial: s.quantidadeVendasOficial,
@@ -346,7 +346,16 @@ export function ComercialDashboard({ papel, vendedorId }: { papel: string; vende
                     <tr key={v.nome}>
                       <td style={tdStyle}>{v.nome}</td>
                       {v.periods.map((p, i) => (
-                        <td key={i} style={{ ...tdStyle, textAlign: 'right' }} className={styles.num}>{p}</td>
+                        <td key={i} style={{ ...tdStyle, textAlign: 'right' }}>
+                          {p.oficial ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 1 }}>
+                              <span className={styles.num}>{p.value}</span>
+                              <span style={{ fontSize: 8, color: 'var(--cor-destaque)', lineHeight: 1 }}>•</span>
+                            </div>
+                          ) : (
+                            <span className={styles.num}>{p.value}</span>
+                          )}
+                        </td>
                       ))}
                       <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 700 }}>
                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>

@@ -4,7 +4,7 @@
 // Filtros comuns: periodo { inicio, fim }, empresa?, filial?
 
 import { supabaseAdmin } from './supabase-admin'
-import { buscarTotaisOficiais, type TotalOficial, type FonteTotalOficial } from './vendedores-totais-repository'
+import { buscarTotaisOficiaisMensais, type TotalOficial, type FonteTotalOficial } from './vendedores-totais-repository'
 
 // ─── Tipos de filtro ──────────────────────────────────────────────────────────
 
@@ -145,7 +145,7 @@ function diasUteis(inicio: string, fim: string): number {
 
 export interface SerieVendedor {
   vendedor:          string
-  valoresPorPeriodo: { label: string; valor: number }[]
+  valoresPorPeriodo: { label: string; valor: number; oficial: boolean }[]
   total:             number
   // Totais oficiais (null quando sem cobertura para o período exato)
   totalOficial:            number | null
@@ -166,10 +166,16 @@ export async function calcularDesempenhoPorVendedor(
   periodo:  PeriodoFiltro,
   filtros:  FiltrosComerciais = {},
 ): Promise<ResultadoDesempenho> {
-  const [pedidos, totaisOficiais] = await Promise.all([
+  // Busca todos os registros contidos no período (exatos + mensais) em uma query só.
+  const [pedidos, todosMensais] = await Promise.all([
     buscarPedidos(periodo, filtros),
-    buscarTotaisOficiais(periodo.inicio, periodo.fim, filtros.vendedorId),
+    buscarTotaisOficiaisMensais(periodo.inicio, periodo.fim, filtros.vendedorId),
   ])
+
+  // Registros de período exato → usados para a coluna TOTAL (comportamento existente).
+  const totaisOficiais = todosMensais.filter(
+    t => t.periodoInicio === periodo.inicio && t.periodoFim === periodo.fim,
+  )
 
   const granularidade = granularidadePeriodo(periodo)
   const labels = gerarLabels(periodo, granularidade)
@@ -229,6 +235,39 @@ export async function calcularDesempenhoPorVendedor(
     }
   }
 
+  // ── Mapa de valores oficiais por célula mensal ────────────────────────────────
+  // Para granularidade 'mes': agrega registros de mês único por (vendedor, label, fonte),
+  // somando filiais, depois prefere rentabilidade_vendedor.
+  // Estrutura: vendedorNome → monthLabel → valor
+  const oficialPorMes = new Map<string, Map<string, number>>()
+
+  if (granularidade === 'mes') {
+    // Acumula por (vendedor, label, fonte) — permite somar filiais de um mesmo mês
+    const temp = new Map<string, Map<string, Map<string, number>>>()
+
+    for (const t of todosMensais) {
+      const labelI = labelSubPeriodo(t.periodoInicio, 'mes')
+      const labelF = labelSubPeriodo(t.periodoFim, 'mes')
+      if (labelI !== labelF) continue  // pula registros que abrangem mais de um mês
+
+      if (!temp.has(t.vendedorNome)) temp.set(t.vendedorNome, new Map())
+      const byLabel = temp.get(t.vendedorNome)!
+      if (!byLabel.has(labelI)) byLabel.set(labelI, new Map())
+      const byFonte = byLabel.get(labelI)!
+      byFonte.set(t.fonte, (byFonte.get(t.fonte) ?? 0) + t.valorTotalOficial)
+    }
+
+    // Para cada (vendedor, mês), escolhe fonte: rentabilidade_vendedor > total_venda_vendedor
+    for (const [nome, byLabel] of temp) {
+      oficialPorMes.set(nome, new Map())
+      const destMap = oficialPorMes.get(nome)!
+      for (const [label, byFonte] of byLabel) {
+        const valor = byFonte.get('rentabilidade_vendedor') ?? byFonte.get('total_venda_vendedor') ?? 0
+        destMap.set(label, valor)
+      }
+    }
+  }
+
   // Garante que vendedores com total oficial mas sem pedidos registrados apareçam.
   for (const [nome] of oficialPorNome) {
     if (!mapa.has(nome)) mapa.set(nome, new Map())
@@ -237,10 +276,16 @@ export async function calcularDesempenhoPorVendedor(
   let totalComercialAtualizado = 0
 
   const series: SerieVendedor[] = Array.from(mapa.entries()).map(([vendedor, subMapa]) => {
-    const valoresPorPeriodo = labels.map(label => ({
-      label,
-      valor: subMapa.get(label) ?? 0,
-    }))
+    const mesMapa = oficialPorMes.get(vendedor)
+    const valoresPorPeriodo = labels.map(label => {
+      const calculado = subMapa.get(label) ?? 0
+      const valorOficialMes = mesMapa?.get(label) ?? null
+      return {
+        label,
+        valor:   valorOficialMes !== null ? valorOficialMes : calculado,
+        oficial: valorOficialMes !== null,
+      }
+    })
     const total = valoresPorPeriodo.reduce((s, v) => s + v.valor, 0)
 
     const oficial = oficialPorNome.get(vendedor) ?? null

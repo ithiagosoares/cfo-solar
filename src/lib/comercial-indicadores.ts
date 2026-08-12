@@ -208,6 +208,7 @@ export async function calcularDesempenhoPorVendedor(
     vendedorNome: string
   }
 
+  // Step 1: soma por (vendedorNome, filial, fonte) — consolida uploads duplicados da mesma fonte
   const porVendFilialFonte = new Map<string, AgregadoOficial>()
   for (const t of todosMensais) {
     const chave = `${t.vendedorNome}|||${t.filial ?? ''}|||${t.fonte}`
@@ -228,16 +229,31 @@ export async function calcularDesempenhoPorVendedor(
     }
   }
 
-  const melhorPorFilial = new Map<string, AgregadoOficial>()
+  // Step 2: coleta todos os candidatos por (vendedorNome, filial) e escolhe a melhor fonte
+  // de forma determinística — rentabilidade_vendedor > total_venda_vendedor, sem depender
+  // de ordem de inserção ou timestamp.
+  const candidatosPorFilial = new Map<string, AgregadoOficial[]>()
   for (const [chave, ag] of porVendFilialFonte) {
-    const partes = chave.split('|||')
+    const partes    = chave.split('|||')
     const filialKey = `${partes[0]}|||${partes[1]}`
-    const existing = melhorPorFilial.get(filialKey)
-    if (!existing || ag.fonte === 'rentabilidade_vendedor') {
-      melhorPorFilial.set(filialKey, ag)
-    }
+    if (!candidatosPorFilial.has(filialKey)) candidatosPorFilial.set(filialKey, [])
+    candidatosPorFilial.get(filialKey)!.push(ag)
   }
 
+  const melhorPorFilial = new Map<string, AgregadoOficial>()
+  for (const [filialKey, candidatos] of candidatosPorFilial) {
+    if (candidatos.length > 1) {
+      // Mais de uma fonte para mesma (vendedor, filial) — só deveria acontecer quando
+      // ambos os relatórios (totais e rentabilidade) foram importados no mesmo período.
+      // Preferimos rentabilidade_vendedor; logamos para facilitar investigação futura.
+      const fontes = candidatos.map(c => c.fonte).join(', ')
+      console.warn(`[desempenho] múltiplas fontes para filial "${filialKey}": [${fontes}] — usando rentabilidade_vendedor`)
+    }
+    const rentab = candidatos.find(c => c.fonte === 'rentabilidade_vendedor')
+    melhorPorFilial.set(filialKey, rentab ?? candidatos[0])
+  }
+
+  // Step 3: soma os melhores valores de cada filial por vendedor
   const oficialPorNome = new Map<string, AgregadoOficial>()
   for (const [, ag] of melhorPorFilial) {
     const existing = oficialPorNome.get(ag.vendedorNome)
@@ -260,6 +276,7 @@ export async function calcularDesempenhoPorVendedor(
   const oficialPorMes = new Map<string, Map<string, number>>()
 
   if (granularidade === 'mes') {
+    // Step 1: soma por (vendedorNome, filial, label, fonte)
     const porFilialLabelFonte = new Map<string, number>()
     for (const t of todosMensais) {
       const labelI = labelSubPeriodo(t.periodoInicio, 'mes')
@@ -270,17 +287,27 @@ export async function calcularDesempenhoPorVendedor(
       porFilialLabelFonte.set(chave, (porFilialLabelFonte.get(chave) ?? 0) + t.valorTotalOficial)
     }
 
-    const melhorPorFilialLabel = new Map<string, { valor: number; fonte: string }>()
+    // Step 2: coleta candidatos por (vendedorNome, filial, label) e escolhe melhor fonte
+    const candidatosPorFilialLabel = new Map<string, { valor: number; fonte: string }[]>()
     for (const [chave, valor] of porFilialLabelFonte) {
       const partes = chave.split('|||')
       const filialLabelKey = `${partes[0]}|||${partes[1]}|||${partes[2]}`
       const fonte = partes[3]
-      const existing = melhorPorFilialLabel.get(filialLabelKey)
-      if (!existing || fonte === 'rentabilidade_vendedor') {
-        melhorPorFilialLabel.set(filialLabelKey, { valor, fonte })
-      }
+      if (!candidatosPorFilialLabel.has(filialLabelKey)) candidatosPorFilialLabel.set(filialLabelKey, [])
+      candidatosPorFilialLabel.get(filialLabelKey)!.push({ valor, fonte })
     }
 
+    const melhorPorFilialLabel = new Map<string, { valor: number; fonte: string }>()
+    for (const [filialLabelKey, candidatos] of candidatosPorFilialLabel) {
+      if (candidatos.length > 1) {
+        const fontes = candidatos.map(c => c.fonte).join(', ')
+        console.warn(`[desempenho:mes] múltiplas fontes para "${filialLabelKey}": [${fontes}] — usando rentabilidade_vendedor`)
+      }
+      const rentab = candidatos.find(c => c.fonte === 'rentabilidade_vendedor')
+      melhorPorFilialLabel.set(filialLabelKey, rentab ?? candidatos[0])
+    }
+
+    // Step 3: soma filiais por (vendedorNome, label)
     for (const [filialLabelKey, { valor }] of melhorPorFilialLabel) {
       const partes = filialLabelKey.split('|||')
       const nome  = partes[0]

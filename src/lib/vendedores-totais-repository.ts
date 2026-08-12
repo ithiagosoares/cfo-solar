@@ -29,6 +29,7 @@ export interface TotalOficial {
   valorTotalOficial: number
   quantidadeVendas:  number | null
   fonte:             FonteTotalOficial
+  filial:            string | null
 }
 
 // ─── CRUD ─────────────────────────────────────────────────────────────────────
@@ -72,6 +73,7 @@ type Row = {
   valor_total_oficial: number
   quantidade_vendas:   number | null
   fonte:               string
+  filial:              string | null
   // Supabase pode retornar o join como objeto ou array dependendo da versão do client
   vendedores:          { nome: string } | { nome: string }[] | null
 }
@@ -87,6 +89,7 @@ function mapearRow(row: Row): TotalOficial {
     valorTotalOficial: row.valor_total_oficial,
     quantidadeVendas:  row.quantidade_vendas,
     fonte:             row.fonte as FonteTotalOficial,
+    filial:            row.filial ?? null,
   }
 }
 
@@ -99,7 +102,7 @@ export async function buscarTotaisOficiais(
 ): Promise<TotalOficial[]> {
   let query = supabaseAdmin
     .from(TABELA)
-    .select('vendedor_id, periodo_inicio, periodo_fim, valor_total_oficial, quantidade_vendas, fonte, vendedores(nome)')
+    .select('vendedor_id, periodo_inicio, periodo_fim, valor_total_oficial, quantidade_vendas, fonte, filial, vendedores(nome)')
     .eq('periodo_inicio', periodoInicio)
     .eq('periodo_fim', periodoFim)
 
@@ -125,7 +128,7 @@ export async function buscarTotaisOficiaisMensais(
 ): Promise<TotalOficial[]> {
   let query = supabaseAdmin
     .from(TABELA)
-    .select('vendedor_id, periodo_inicio, periodo_fim, valor_total_oficial, quantidade_vendas, fonte, vendedores(nome)')
+    .select('vendedor_id, periodo_inicio, periodo_fim, valor_total_oficial, quantidade_vendas, fonte, filial, vendedores(nome)')
     .gte('periodo_inicio', periodoInicio)
     .lte('periodo_fim', periodoFim)
 

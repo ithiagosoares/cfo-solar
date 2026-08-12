@@ -4,7 +4,7 @@
 // Filtros comuns: periodo { inicio, fim }, empresa?, filial?
 
 import { supabaseAdmin } from './supabase-admin'
-import { buscarTotaisOficiaisMensais, type TotalOficial, type FonteTotalOficial } from './vendedores-totais-repository'
+import { buscarTotaisOficiaisMensais, type FonteTotalOficial } from './vendedores-totais-repository'
 
 // ─── Tipos de filtro ──────────────────────────────────────────────────────────
 
@@ -172,11 +172,6 @@ export async function calcularDesempenhoPorVendedor(
     buscarTotaisOficiaisMensais(periodo.inicio, periodo.fim, filtros.vendedorId),
   ])
 
-  // Registros de período exato → usados para a coluna TOTAL (comportamento existente).
-  const totaisOficiais = todosMensais.filter(
-    t => t.periodoInicio === periodo.inicio && t.periodoFim === periodo.fim,
-  )
-
   const granularidade = granularidadePeriodo(periodo)
   const labels = gerarLabels(periodo, granularidade)
 
@@ -196,9 +191,15 @@ export async function calcularDesempenhoPorVendedor(
     subMapa.set(label, (subMapa.get(label) ?? 0) + (p.valor_vendido ?? 0))
   }
 
-  // Agrega totais oficiais por (vendedorNome, fonte) somando filiais.
-  // Um vendedor pode ter registros de SP e PR separados — o total real é a soma.
-  // Depois, prefere rentabilidade_vendedor quando ambas as fontes existirem.
+  // ── Agrega totais oficiais para a coluna TOTAL ────────────────────────────────
+  // Usa todosMensais (todos os registros contidos no período) em vez de exigir
+  // correspondência exata de datas — permite incluir registros multi-mês como o
+  // do Fernando Gimenes Tejeda (01/01–30/07) que não batem data a data com o filtro.
+  //
+  // Algoritmo em 3 passos para evitar dupla contagem entre filiais com fontes diferentes:
+  //   1. Soma por (vendedorNome, filial, fonte) — consolida uploads duplicados
+  //   2. Por (vendedorNome, filial), escolhe rentabilidade_vendedor sobre total_venda_vendedor
+  //   3. Soma os melhores valores de cada filial por vendedor
   type AgregadoOficial = {
     valorTotalOficial: number
     quantidadeVendas: number | null
@@ -207,14 +208,14 @@ export async function calcularDesempenhoPorVendedor(
     vendedorNome: string
   }
 
-  const agregadosPorNomeFonte = new Map<string, AgregadoOficial>()
-  for (const t of totaisOficiais) {
-    const chave = `${t.vendedorNome}|||${t.fonte}`
-    const existing = agregadosPorNomeFonte.get(chave)
+  const porVendFilialFonte = new Map<string, AgregadoOficial>()
+  for (const t of todosMensais) {
+    const chave = `${t.vendedorNome}|||${t.filial ?? ''}|||${t.fonte}`
+    const existing = porVendFilialFonte.get(chave)
     if (!existing) {
-      agregadosPorNomeFonte.set(chave, {
+      porVendFilialFonte.set(chave, {
         valorTotalOficial: t.valorTotalOficial,
-        quantidadeVendas:  t.quantidadeVendas,
+        quantidadeVendas:  t.quantidadeVendas ?? null,
         fonte:             t.fonte,
         vendedorId:        t.vendedorId,
         vendedorNome:      t.vendedorNome,
@@ -227,48 +228,71 @@ export async function calcularDesempenhoPorVendedor(
     }
   }
 
-  const oficialPorNome = new Map<string, AgregadoOficial>()
-  for (const [, ag] of agregadosPorNomeFonte) {
-    const existing = oficialPorNome.get(ag.vendedorNome)
+  const melhorPorFilial = new Map<string, AgregadoOficial>()
+  for (const [chave, ag] of porVendFilialFonte) {
+    const partes = chave.split('|||')
+    const filialKey = `${partes[0]}|||${partes[1]}`
+    const existing = melhorPorFilial.get(filialKey)
     if (!existing || ag.fonte === 'rentabilidade_vendedor') {
-      oficialPorNome.set(ag.vendedorNome, ag)
+      melhorPorFilial.set(filialKey, ag)
+    }
+  }
+
+  const oficialPorNome = new Map<string, AgregadoOficial>()
+  for (const [, ag] of melhorPorFilial) {
+    const existing = oficialPorNome.get(ag.vendedorNome)
+    if (!existing) {
+      oficialPorNome.set(ag.vendedorNome, { ...ag })
+    } else {
+      existing.valorTotalOficial += ag.valorTotalOficial
+      if (ag.quantidadeVendas !== null) {
+        existing.quantidadeVendas = (existing.quantidadeVendas ?? 0) + ag.quantidadeVendas
+      }
+      if (ag.fonte === 'rentabilidade_vendedor') existing.fonte = 'rentabilidade_vendedor'
     }
   }
 
   // ── Mapa de valores oficiais por célula mensal ────────────────────────────────
-  // Para granularidade 'mes': agrega registros de mês único por (vendedor, label, fonte),
-  // somando filiais, depois prefere rentabilidade_vendedor.
-  // Estrutura: vendedorNome → monthLabel → valor
+  // Mesmo algoritmo de 3 passos, mas com dimensão de label (mês).
+  // Registros multi-mês (labelI !== labelF) são ignorados nas células — aparecem
+  // apenas no TOTAL via oficialPorNome.
+  // Estrutura final: vendedorNome → monthLabel → valor
   const oficialPorMes = new Map<string, Map<string, number>>()
 
   if (granularidade === 'mes') {
-    // Acumula por (vendedor, label, fonte) — permite somar filiais de um mesmo mês
-    const temp = new Map<string, Map<string, Map<string, number>>>()
-
+    const porFilialLabelFonte = new Map<string, number>()
     for (const t of todosMensais) {
       const labelI = labelSubPeriodo(t.periodoInicio, 'mes')
       const labelF = labelSubPeriodo(t.periodoFim, 'mes')
-      if (labelI !== labelF) continue  // pula registros que abrangem mais de um mês
+      if (labelI !== labelF) continue
 
-      if (!temp.has(t.vendedorNome)) temp.set(t.vendedorNome, new Map())
-      const byLabel = temp.get(t.vendedorNome)!
-      if (!byLabel.has(labelI)) byLabel.set(labelI, new Map())
-      const byFonte = byLabel.get(labelI)!
-      byFonte.set(t.fonte, (byFonte.get(t.fonte) ?? 0) + t.valorTotalOficial)
+      const chave = `${t.vendedorNome}|||${t.filial ?? ''}|||${labelI}|||${t.fonte}`
+      porFilialLabelFonte.set(chave, (porFilialLabelFonte.get(chave) ?? 0) + t.valorTotalOficial)
     }
 
-    // Para cada (vendedor, mês), escolhe fonte: rentabilidade_vendedor > total_venda_vendedor
-    for (const [nome, byLabel] of temp) {
-      oficialPorMes.set(nome, new Map())
-      const destMap = oficialPorMes.get(nome)!
-      for (const [label, byFonte] of byLabel) {
-        const valor = byFonte.get('rentabilidade_vendedor') ?? byFonte.get('total_venda_vendedor') ?? 0
-        destMap.set(label, valor)
+    const melhorPorFilialLabel = new Map<string, { valor: number; fonte: string }>()
+    for (const [chave, valor] of porFilialLabelFonte) {
+      const partes = chave.split('|||')
+      const filialLabelKey = `${partes[0]}|||${partes[1]}|||${partes[2]}`
+      const fonte = partes[3]
+      const existing = melhorPorFilialLabel.get(filialLabelKey)
+      if (!existing || fonte === 'rentabilidade_vendedor') {
+        melhorPorFilialLabel.set(filialLabelKey, { valor, fonte })
       }
+    }
+
+    for (const [filialLabelKey, { valor }] of melhorPorFilialLabel) {
+      const partes = filialLabelKey.split('|||')
+      const nome  = partes[0]
+      const label = partes[2]
+      if (!oficialPorMes.has(nome)) oficialPorMes.set(nome, new Map())
+      const destMap = oficialPorMes.get(nome)!
+      destMap.set(label, (destMap.get(label) ?? 0) + valor)
     }
   }
 
-  // Garante que vendedores com total oficial mas sem pedidos registrados apareçam.
+  // Garante que vendedores com total oficial mas sem pedidos registrados apareçam
+  // (ex.: Fernando Gimenes Tejeda, sem registros em comercial_pedidos).
   for (const [nome] of oficialPorNome) {
     if (!mapa.has(nome)) mapa.set(nome, new Map())
   }

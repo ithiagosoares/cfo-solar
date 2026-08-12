@@ -268,6 +268,32 @@ export async function calcularDesempenhoPorVendedor(
     }
   }
 
+  // ── Log de diagnóstico para DÉBORA em julho (remover após investigação) ──────
+  {
+    const alvo = 'DEBORA'
+    const raw = todosMensais.filter(t => t.vendedorNome.toUpperCase().includes(alvo))
+    if (raw.length > 0) {
+      console.log('[debug:debora] todosMensais:', JSON.stringify(raw.map(t => ({
+        nome: t.vendedorNome, filial: t.filial, fonte: t.fonte, valor: t.valorTotalOficial,
+        de: t.periodoInicio, ate: t.periodoFim,
+      }))))
+      const step1 = [...porVendFilialFonte.entries()]
+        .filter(([k]) => k.toUpperCase().includes(alvo))
+        .map(([k, ag]) => ({ chave: k, valor: ag.valorTotalOficial, fonte: ag.fonte }))
+      console.log('[debug:debora] porVendFilialFonte:', JSON.stringify(step1))
+      const step2 = [...candidatosPorFilial.entries()]
+        .filter(([k]) => k.toUpperCase().includes(alvo))
+        .map(([k, cands]) => ({ filialKey: k, candidatos: cands.map(c => ({ fonte: c.fonte, valor: c.valorTotalOficial })) }))
+      console.log('[debug:debora] candidatosPorFilial:', JSON.stringify(step2))
+      const step2b = [...melhorPorFilial.entries()]
+        .filter(([k]) => k.toUpperCase().includes(alvo))
+        .map(([k, ag]) => ({ filialKey: k, fonte: ag.fonte, valor: ag.valorTotalOficial }))
+      console.log('[debug:debora] melhorPorFilial:', JSON.stringify(step2b))
+      const step3 = oficialPorNome.get(raw[0].vendedorNome)
+      console.log('[debug:debora] oficialPorNome:', JSON.stringify({ nome: raw[0].vendedorNome, valor: step3?.valorTotalOficial, fonte: step3?.fonte }))
+    }
+  }
+
   // ── Mapa de valores oficiais por célula mensal ────────────────────────────────
   // Mesmo algoritmo de 3 passos, mas com dimensão de label (mês).
   // Registros multi-mês (labelI !== labelF) são ignorados nas células — aparecem

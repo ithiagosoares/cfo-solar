@@ -4,7 +4,7 @@
 // Filtros comuns: periodo { inicio, fim }, empresa?, filial?
 
 import { supabaseAdmin } from './supabase-admin'
-import { buscarTotaisOficiaisMensais, type FonteTotalOficial } from './vendedores-totais-repository'
+import { buscarTotaisOficiaisMensais, type FonteTotalOficial, type TotalOficial } from './vendedores-totais-repository'
 
 // ─── Tipos de filtro ──────────────────────────────────────────────────────────
 
@@ -141,6 +141,50 @@ function diasUteis(inicio: string, fim: string): number {
   return count
 }
 
+// ─── Deduplicação de totais oficiais ─────────────────────────────────────────
+
+// Remove registros sobrepostos causados por reimportações.
+// Para cada grupo (vendedorNome, filial, fonte), ordena pelo criadoEm mais recente
+// e descarta qualquer registro cujo período se sobreponha com um já mantido.
+// Períodos genuinamente complementares (jan + fev) nunca se sobrepõem e são mantidos.
+function deduplicarTotaisOficiais(registros: TotalOficial[]): TotalOficial[] {
+  const grupos = new Map<string, TotalOficial[]>()
+  for (const r of registros) {
+    const chave = `${r.vendedorNome}|||${r.filial ?? ''}|||${r.fonte}`
+    if (!grupos.has(chave)) grupos.set(chave, [])
+    grupos.get(chave)!.push(r)
+  }
+
+  const resultado: TotalOficial[] = []
+  for (const [chave, grupo] of grupos) {
+    if (grupo.length === 1) {
+      resultado.push(grupo[0])
+      continue
+    }
+
+    const ordenados = [...grupo].sort((a, b) => b.criadoEm.localeCompare(a.criadoEm))
+    const mantidos: TotalOficial[] = []
+
+    for (const rec of ordenados) {
+      const sobrepoem = mantidos.some(
+        m => m.periodoInicio <= rec.periodoFim && rec.periodoInicio <= m.periodoFim
+      )
+      if (sobrepoem) {
+        console.warn(
+          `[desempenho] sobreposição detectada e ignorada: "${chave}" | ` +
+          `${rec.periodoInicio}→${rec.periodoFim} (criadoEm: ${rec.criadoEm})`
+        )
+      } else {
+        mantidos.push(rec)
+      }
+    }
+
+    resultado.push(...mantidos)
+  }
+
+  return resultado
+}
+
 // ─── 1. Desempenho por vendedor (série temporal) ──────────────────────────────
 
 export interface SerieVendedor {
@@ -167,10 +211,11 @@ export async function calcularDesempenhoPorVendedor(
   filtros:  FiltrosComerciais = {},
 ): Promise<ResultadoDesempenho> {
   // Busca todos os registros contidos no período (exatos + mensais) em uma query só.
-  const [pedidos, todosMensais] = await Promise.all([
+  const [pedidos, todosMensaisRaw] = await Promise.all([
     buscarPedidos(periodo, filtros),
     buscarTotaisOficiaisMensais(periodo.inicio, periodo.fim, filtros.vendedorId),
   ])
+  const todosMensais = deduplicarTotaisOficiais(todosMensaisRaw)
 
   const granularidade = granularidadePeriodo(periodo)
   const labels = gerarLabels(periodo, granularidade)
@@ -265,32 +310,6 @@ export async function calcularDesempenhoPorVendedor(
         existing.quantidadeVendas = (existing.quantidadeVendas ?? 0) + ag.quantidadeVendas
       }
       if (ag.fonte === 'rentabilidade_vendedor') existing.fonte = 'rentabilidade_vendedor'
-    }
-  }
-
-  // ── Log de diagnóstico para DÉBORA em julho (remover após investigação) ──────
-  {
-    const alvo = 'DEBORA'
-    const raw = todosMensais.filter(t => t.vendedorNome.toUpperCase().includes(alvo))
-    if (raw.length > 0) {
-      console.log('[debug:debora] todosMensais:', JSON.stringify(raw.map(t => ({
-        nome: t.vendedorNome, filial: t.filial, fonte: t.fonte, valor: t.valorTotalOficial,
-        de: t.periodoInicio, ate: t.periodoFim,
-      }))))
-      const step1 = [...porVendFilialFonte.entries()]
-        .filter(([k]) => k.toUpperCase().includes(alvo))
-        .map(([k, ag]) => ({ chave: k, valor: ag.valorTotalOficial, fonte: ag.fonte }))
-      console.log('[debug:debora] porVendFilialFonte:', JSON.stringify(step1))
-      const step2 = [...candidatosPorFilial.entries()]
-        .filter(([k]) => k.toUpperCase().includes(alvo))
-        .map(([k, cands]) => ({ filialKey: k, candidatos: cands.map(c => ({ fonte: c.fonte, valor: c.valorTotalOficial })) }))
-      console.log('[debug:debora] candidatosPorFilial:', JSON.stringify(step2))
-      const step2b = [...melhorPorFilial.entries()]
-        .filter(([k]) => k.toUpperCase().includes(alvo))
-        .map(([k, ag]) => ({ filialKey: k, fonte: ag.fonte, valor: ag.valorTotalOficial }))
-      console.log('[debug:debora] melhorPorFilial:', JSON.stringify(step2b))
-      const step3 = oficialPorNome.get(raw[0].vendedorNome)
-      console.log('[debug:debora] oficialPorNome:', JSON.stringify({ nome: raw[0].vendedorNome, valor: step3?.valorTotalOficial, fonte: step3?.fonte }))
     }
   }
 

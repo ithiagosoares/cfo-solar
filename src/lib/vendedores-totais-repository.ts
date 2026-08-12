@@ -32,15 +32,30 @@ export interface TotalOficial {
   filial:            string | null
 }
 
+// ─── Normalização de filial ───────────────────────────────────────────────────
+
+// Mapeia variações e siglas para os dois valores canônicos aceitos pelo sistema.
+// Garante que 'PR', 'pr', 'Parana' → 'Paraná' e 'SP', 'sp', 'Sao Paulo' → 'São Paulo'.
+const FILIAL_NORMALIZACAO: Record<string, string> = {
+  'sp':        'São Paulo',
+  'sao paulo': 'São Paulo',
+  'são paulo': 'São Paulo',
+  'pr':        'Paraná',
+  'parana':    'Paraná',
+  'paraná':    'Paraná',
+}
+
+export function normalizarFilial(filial: string | null | undefined): string | null {
+  if (!filial) return null
+  const key = filial.toLowerCase().trim()
+  return FILIAL_NORMALIZACAO[key] ?? filial
+}
+
 // ─── CRUD ─────────────────────────────────────────────────────────────────────
 
 // Upserta totais. Conflito na constraint (vendedor_id, periodo_inicio, periodo_fim, fonte, filial) → atualiza.
 export async function upsertTotaisOficiais(totais: TotalOficialInput[]): Promise<void> {
   if (totais.length === 0) return
-
-  for (const t of totais) {
-    console.log(`[upsert-totais] vendedor_id: ${t.vendedorId} | fonte: ${t.fonte} | filial: ${t.filial ?? 'null'} | periodo: ${t.periodoInicio}→${t.periodoFim} | valor: ${t.valorTotalOficial}`)
-  }
 
   const { error } = await supabaseAdmin
     .from(TABELA)
@@ -52,7 +67,7 @@ export async function upsertTotaisOficiais(totais: TotalOficialInput[]): Promise
         valor_total_oficial: t.valorTotalOficial,
         quantidade_vendas:   t.quantidadeVendas ?? null,
         fonte:               t.fonte,
-        filial:              t.filial,
+        filial:              normalizarFilial(t.filial),
         importacao_id:       t.importacaoId,
       })),
       { onConflict: 'vendedor_id,periodo_inicio,periodo_fim,fonte,filial' },

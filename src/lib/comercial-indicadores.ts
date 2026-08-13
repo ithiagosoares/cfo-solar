@@ -4,7 +4,13 @@
 // Filtros comuns: periodo { inicio, fim }, empresa?, filial?
 
 import { supabaseAdmin } from './supabase-admin'
-import { buscarTotaisOficiaisMensais, type FonteTotalOficial, type TotalOficial } from './vendedores-totais-repository'
+import {
+  buscarTotaisOficiaisMensais,
+  deduplicarTotaisOficiais,
+  agregarTotaisOficiaisPorNome,
+  type AgregadoOficial,
+  type FonteTotalOficial,
+} from './vendedores-totais-repository'
 
 // ─── Tipos de filtro ──────────────────────────────────────────────────────────
 
@@ -141,50 +147,6 @@ function diasUteis(inicio: string, fim: string): number {
   return count
 }
 
-// ─── Deduplicação de totais oficiais ─────────────────────────────────────────
-
-// Remove registros sobrepostos causados por reimportações.
-// Para cada grupo (vendedorNome, filial, fonte), ordena pelo criadoEm mais recente
-// e descarta qualquer registro cujo período se sobreponha com um já mantido.
-// Períodos genuinamente complementares (jan + fev) nunca se sobrepõem e são mantidos.
-function deduplicarTotaisOficiais(registros: TotalOficial[]): TotalOficial[] {
-  const grupos = new Map<string, TotalOficial[]>()
-  for (const r of registros) {
-    const chave = `${r.vendedorNome}|||${r.filial ?? ''}|||${r.fonte}`
-    if (!grupos.has(chave)) grupos.set(chave, [])
-    grupos.get(chave)!.push(r)
-  }
-
-  const resultado: TotalOficial[] = []
-  for (const [chave, grupo] of grupos) {
-    if (grupo.length === 1) {
-      resultado.push(grupo[0])
-      continue
-    }
-
-    const ordenados = [...grupo].sort((a, b) => b.criadoEm.localeCompare(a.criadoEm))
-    const mantidos: TotalOficial[] = []
-
-    for (const rec of ordenados) {
-      const sobrepoem = mantidos.some(
-        m => m.periodoInicio <= rec.periodoFim && rec.periodoInicio <= m.periodoFim
-      )
-      if (sobrepoem) {
-        console.warn(
-          `[desempenho] sobreposição detectada e ignorada: "${chave}" | ` +
-          `${rec.periodoInicio}→${rec.periodoFim} (criadoEm: ${rec.criadoEm})`
-        )
-      } else {
-        mantidos.push(rec)
-      }
-    }
-
-    resultado.push(...mantidos)
-  }
-
-  return resultado
-}
-
 // ─── 1. Desempenho por vendedor (série temporal) ──────────────────────────────
 
 export interface SerieVendedor {
@@ -236,82 +198,9 @@ export async function calcularDesempenhoPorVendedor(
     subMapa.set(label, (subMapa.get(label) ?? 0) + (p.valor_vendido ?? 0))
   }
 
-  // ── Agrega totais oficiais para a coluna TOTAL ────────────────────────────────
-  // Usa todosMensais (todos os registros contidos no período) em vez de exigir
-  // correspondência exata de datas — permite incluir registros multi-mês como o
-  // do Fernando Gimenes Tejeda (01/01–30/07) que não batem data a data com o filtro.
-  //
-  // Algoritmo em 3 passos para evitar dupla contagem entre filiais com fontes diferentes:
-  //   1. Soma por (vendedorNome, filial, fonte) — consolida uploads duplicados
-  //   2. Por (vendedorNome, filial), escolhe rentabilidade_vendedor sobre total_venda_vendedor
-  //   3. Soma os melhores valores de cada filial por vendedor
-  type AgregadoOficial = {
-    valorTotalOficial: number
-    quantidadeVendas: number | null
-    fonte: FonteTotalOficial
-    vendedorId: string
-    vendedorNome: string
-  }
-
-  // Step 1: soma por (vendedorNome, filial, fonte) — consolida uploads duplicados da mesma fonte
-  const porVendFilialFonte = new Map<string, AgregadoOficial>()
-  for (const t of todosMensais) {
-    const chave = `${t.vendedorNome}|||${t.filial ?? ''}|||${t.fonte}`
-    const existing = porVendFilialFonte.get(chave)
-    if (!existing) {
-      porVendFilialFonte.set(chave, {
-        valorTotalOficial: t.valorTotalOficial,
-        quantidadeVendas:  t.quantidadeVendas ?? null,
-        fonte:             t.fonte,
-        vendedorId:        t.vendedorId,
-        vendedorNome:      t.vendedorNome,
-      })
-    } else {
-      existing.valorTotalOficial += t.valorTotalOficial
-      if (t.quantidadeVendas !== null) {
-        existing.quantidadeVendas = (existing.quantidadeVendas ?? 0) + t.quantidadeVendas
-      }
-    }
-  }
-
-  // Step 2: coleta todos os candidatos por (vendedorNome, filial) e escolhe a melhor fonte
-  // de forma determinística — rentabilidade_vendedor > total_venda_vendedor, sem depender
-  // de ordem de inserção ou timestamp.
-  const candidatosPorFilial = new Map<string, AgregadoOficial[]>()
-  for (const [chave, ag] of porVendFilialFonte) {
-    const partes    = chave.split('|||')
-    const filialKey = `${partes[0]}|||${partes[1]}`
-    if (!candidatosPorFilial.has(filialKey)) candidatosPorFilial.set(filialKey, [])
-    candidatosPorFilial.get(filialKey)!.push(ag)
-  }
-
-  const melhorPorFilial = new Map<string, AgregadoOficial>()
-  for (const [filialKey, candidatos] of candidatosPorFilial) {
-    if (candidatos.length > 1) {
-      // Mais de uma fonte para mesma (vendedor, filial) — só deveria acontecer quando
-      // ambos os relatórios (totais e rentabilidade) foram importados no mesmo período.
-      // Preferimos rentabilidade_vendedor; logamos para facilitar investigação futura.
-      const fontes = candidatos.map(c => c.fonte).join(', ')
-      console.warn(`[desempenho] múltiplas fontes para filial "${filialKey}": [${fontes}] — usando rentabilidade_vendedor`)
-    }
-    const rentab = candidatos.find(c => c.fonte === 'rentabilidade_vendedor')
-    melhorPorFilial.set(filialKey, rentab ?? candidatos[0])
-  }
-
-  // Step 3: soma os melhores valores de cada filial por vendedor
-  const oficialPorNome = new Map<string, AgregadoOficial>()
-  for (const [, ag] of melhorPorFilial) {
-    const existing = oficialPorNome.get(ag.vendedorNome)
-    if (!existing) {
-      oficialPorNome.set(ag.vendedorNome, { ...ag })
-    } else {
-      existing.valorTotalOficial += ag.valorTotalOficial
-      if (ag.quantidadeVendas !== null) {
-        existing.quantidadeVendas = (existing.quantidadeVendas ?? 0) + ag.quantidadeVendas
-      }
-      if (ag.fonte === 'rentabilidade_vendedor') existing.fonte = 'rentabilidade_vendedor'
-    }
-  }
+  // Agrega totais oficiais para a coluna TOTAL usando a função compartilhada:
+  // dedup de períodos sobrepostos + 3 passos (filial × fonte × soma entre filiais).
+  const oficialPorNome: Map<string, AgregadoOficial> = agregarTotaisOficiaisPorNome(todosMensais)
 
   // ── Mapa de valores oficiais por célula mensal ────────────────────────────────
   // Mesmo algoritmo de 3 passos, mas com dimensão de label (mês).

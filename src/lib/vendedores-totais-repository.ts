@@ -161,3 +161,119 @@ export async function buscarTotaisOficiaisMensais(
 
   return (data ?? []).map(row => mapearRow(row as Row))
 }
+
+// ─── Agregação compartilhada (usada pelo Dashboard e pela tela /vendas) ───────
+
+export interface AgregadoOficial {
+  valorTotalOficial: number
+  quantidadeVendas:  number | null
+  fonte:             FonteTotalOficial
+  vendedorId:        string
+  vendedorNome:      string
+}
+
+// Remove registros sobrepostos causados por reimportações.
+// Para cada grupo (vendedorNome, filial, fonte), ordena por criadoEm desc e descarta
+// registros cujo período se sobreponha com um já mantido.
+// Períodos genuinamente complementares (jan + fev) não se sobrepõem e são mantidos.
+export function deduplicarTotaisOficiais(registros: TotalOficial[]): TotalOficial[] {
+  const grupos = new Map<string, TotalOficial[]>()
+  for (const r of registros) {
+    const chave = `${r.vendedorNome}|||${r.filial ?? ''}|||${r.fonte}`
+    if (!grupos.has(chave)) grupos.set(chave, [])
+    grupos.get(chave)!.push(r)
+  }
+
+  const resultado: TotalOficial[] = []
+  for (const [chave, grupo] of grupos) {
+    if (grupo.length === 1) {
+      resultado.push(grupo[0])
+      continue
+    }
+
+    const ordenados = [...grupo].sort((a, b) => b.criadoEm.localeCompare(a.criadoEm))
+    const mantidos: TotalOficial[] = []
+
+    for (const rec of ordenados) {
+      const sobrepoem = mantidos.some(
+        m => m.periodoInicio <= rec.periodoFim && rec.periodoInicio <= m.periodoFim
+      )
+      if (sobrepoem) {
+        console.warn(
+          `[totais-oficiais] sobreposição detectada e ignorada: "${chave}" | ` +
+          `${rec.periodoInicio}→${rec.periodoFim} (criadoEm: ${rec.criadoEm})`
+        )
+      } else {
+        mantidos.push(rec)
+      }
+    }
+
+    resultado.push(...mantidos)
+  }
+
+  return resultado
+}
+
+// Agrega totais oficiais em 3 passos, eliminando dupla contagem entre filiais:
+//   1. Soma por (vendedorNome, filial, fonte)
+//   2. Por (vendedorNome, filial), escolhe rentabilidade_vendedor > total_venda_vendedor
+//   3. Soma os melhores valores de cada filial por vendedor
+// A entrada deve ter sido passada por deduplicarTotaisOficiais antes.
+export function agregarTotaisOficiaisPorNome(totais: TotalOficial[]): Map<string, AgregadoOficial> {
+  // Step 1
+  const porVendFilialFonte = new Map<string, AgregadoOficial>()
+  for (const t of totais) {
+    const chave = `${t.vendedorNome}|||${t.filial ?? ''}|||${t.fonte}`
+    const existing = porVendFilialFonte.get(chave)
+    if (!existing) {
+      porVendFilialFonte.set(chave, {
+        valorTotalOficial: t.valorTotalOficial,
+        quantidadeVendas:  t.quantidadeVendas ?? null,
+        fonte:             t.fonte,
+        vendedorId:        t.vendedorId,
+        vendedorNome:      t.vendedorNome,
+      })
+    } else {
+      existing.valorTotalOficial += t.valorTotalOficial
+      if (t.quantidadeVendas !== null) {
+        existing.quantidadeVendas = (existing.quantidadeVendas ?? 0) + t.quantidadeVendas
+      }
+    }
+  }
+
+  // Step 2
+  const candidatosPorFilial = new Map<string, AgregadoOficial[]>()
+  for (const [chave, ag] of porVendFilialFonte) {
+    const partes    = chave.split('|||')
+    const filialKey = `${partes[0]}|||${partes[1]}`
+    if (!candidatosPorFilial.has(filialKey)) candidatosPorFilial.set(filialKey, [])
+    candidatosPorFilial.get(filialKey)!.push(ag)
+  }
+
+  const melhorPorFilial = new Map<string, AgregadoOficial>()
+  for (const [filialKey, candidatos] of candidatosPorFilial) {
+    if (candidatos.length > 1) {
+      const fontes = candidatos.map(c => c.fonte).join(', ')
+      console.warn(`[totais-oficiais] múltiplas fontes para filial "${filialKey}": [${fontes}] — usando rentabilidade_vendedor`)
+    }
+    const rentab = candidatos.find(c => c.fonte === 'rentabilidade_vendedor')
+    melhorPorFilial.set(filialKey, rentab ?? candidatos[0])
+  }
+
+  // Step 3
+  const porNome = new Map<string, AgregadoOficial>()
+  for (const [, ag] of melhorPorFilial) {
+    const existing = porNome.get(ag.vendedorNome)
+    if (!existing) {
+      porNome.set(ag.vendedorNome, { ...ag })
+    } else {
+      existing.valorTotalOficial += ag.valorTotalOficial
+      if (ag.quantidadeVendas !== null) {
+        existing.quantidadeVendas = (existing.quantidadeVendas ?? 0) + ag.quantidadeVendas
+      }
+      if (ag.fonte === 'rentabilidade_vendedor') existing.fonte = 'rentabilidade_vendedor'
+    }
+  }
+
+  return porNome
+}

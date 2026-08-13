@@ -4,7 +4,11 @@
 import { type NextRequest } from 'next/server'
 import { requireComercialAccess, getPapel, getVendedorId } from '@/lib/comercial-auth'
 import { listarVendas } from '@/lib/comercial-pedidos-repository'
-import { buscarTotaisOficiais } from '@/lib/vendedores-totais-repository'
+import {
+  buscarTotaisOficiaisMensais,
+  deduplicarTotaisOficiais,
+  agregarTotaisOficiaisPorNome,
+} from '@/lib/vendedores-totais-repository'
 
 const POR_PAGINA = 20
 
@@ -34,35 +38,29 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const [{ vendas, total, totalVendido }, totaisOficiais] = await Promise.all([
+    const [{ vendas, total, totalVendido }, totaisOficiaisRaw] = await Promise.all([
       listarVendas(filtros),
-      // Busca total oficial apenas quando período completo for informado
+      // Busca totais apenas quando período completo for informado
       dataInicio && dataFim
-        ? buscarTotaisOficiais(dataInicio, dataFim, vendedorId ?? undefined)
+        ? buscarTotaisOficiaisMensais(dataInicio, dataFim, vendedorId ?? undefined)
         : Promise.resolve([]),
     ])
 
-    // Agrega total oficial por vendedor (preferindo rentabilidade quando ambas as fontes existem)
     let totalVendidoOficial: number | null = null
     let quantidadeVendasOficial: number | null = null
     let fonteOficial: string | null = null
     let divergenciaOficial: number | null = null
 
-    if (totaisOficiais.length > 0) {
-      // Para vendedor individual: soma todos os registros dele (pode ter duas fontes; preferir rentabilidade)
-      // Para visão geral: não aplicamos total oficial agregado (múltiplos vendedores)
-      if (vendedorId) {
-        const rentabilidade = totaisOficiais.find(t => t.fonte === 'rentabilidade_vendedor')
-        const totalVenda    = totaisOficiais.find(t => t.fonte === 'total_venda_vendedor')
-        const preferido     = rentabilidade ?? totalVenda
-
-        if (preferido) {
-          totalVendidoOficial      = preferido.valorTotalOficial
-          quantidadeVendasOficial  = preferido.quantidadeVendas
-          fonteOficial             = preferido.fonte
-          const diff = Math.abs(totalVendido - totalVendidoOficial)
-          divergenciaOficial       = diff > 0.01 ? diff : null
-        }
+    // Total oficial apenas para vendedor individual (agrega corretamente entre filiais)
+    if (vendedorId && totaisOficiaisRaw.length > 0) {
+      const agregados = agregarTotaisOficiaisPorNome(deduplicarTotaisOficiais(totaisOficiaisRaw))
+      const ag = [...agregados.values()][0]
+      if (ag) {
+        totalVendidoOficial     = ag.valorTotalOficial
+        quantidadeVendasOficial = ag.quantidadeVendas
+        fonteOficial            = ag.fonte
+        const diff = Math.abs(totalVendido - totalVendidoOficial)
+        divergenciaOficial = diff > 0.01 ? diff : null
       }
     }
 

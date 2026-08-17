@@ -1,13 +1,12 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { ArrowLeft } from 'lucide-react'
+import { useState, useEffect, useCallback } from 'react'
 import { formatMoeda } from '@/lib/utils'
+import AppLayout from '@/components/layout/AppLayout'
+import { FilterBar, FilterInput, FilterSelect, FilterMonth, FilterNumberRange } from '@/components/filters/FilterBar'
 import styles from '@/styles/editorial.module.css'
 
 const POR_PAGINA = 20
-
-type Periodo = '4s' | '3m' | 'personalizado'
 
 interface VendaResumo {
   vendedorId: string | null
@@ -31,13 +30,28 @@ interface VendasApiResponse {
   divergenciaOficial?: number | null
 }
 
-function periodoParaDatas(p: '4s' | '3m'): { inicio: string; fim: string } {
+function defaultPeriodo(): { inicio: string; fim: string } {
   const hoje = new Date()
   const fim  = hoje.toISOString().slice(0, 10)
   const ini  = new Date(hoje)
-  if (p === '4s') ini.setDate(hoje.getDate() - 28)
-  else ini.setMonth(hoje.getMonth() - 3)
+  ini.setMonth(hoje.getMonth() - 3)
   return { inicio: ini.toISOString().slice(0, 10), fim }
+}
+
+function mesParaRange(mes: string): { inicio: string; fim: string } {
+  // mes = 'YYYY-MM'
+  const [y, m] = mes.split('-').map(Number)
+  const inicio = `${y}-${String(m).padStart(2, '0')}-01`
+  const ultimo = new Date(y, m, 0).getDate()
+  const fim    = `${y}-${String(m).padStart(2, '0')}-${String(ultimo).padStart(2, '0')}`
+  return { inicio, fim }
+}
+
+type Filtros = { busca: string; mes: string; valorMin: string; valorMax: string; vendedorId: string }
+const FILTROS_ZERO: Filtros = { busca: '', mes: '', valorMin: '', valorMax: '', vendedorId: '' }
+
+function temFiltroAtivo(f: Filtros) {
+  return f.busca || f.mes || f.valorMin || f.valorMax || f.vendedorId
 }
 
 function fmtData(d: string): string {
@@ -48,14 +62,11 @@ function fmtData(d: string): string {
 
 export default function VendasPage() {
   const [papel, setPapel] = useState<string | null>(null)
+  const [vendedoresOpt, setVendedoresOpt] = useState<{ id: string; nome: string }[]>([])
   const [mapaVendedores, setMapaVendedores] = useState<Record<string, string>>({})
 
-  const [periodo, setPeriodo] = useState<Periodo>('3m')
-  const [customInicio, setCustomInicio] = useState('')
-  const [customFim, setCustomFim] = useState('')
-  const [filtroAtivo, setFiltroAtivo] = useState<{ inicio: string; fim: string }>(
-    () => periodoParaDatas('3m'),
-  )
+  const [filtro, setFiltro] = useState<Filtros>(FILTROS_ZERO)
+  const [filtroAtivo, setFiltroAtivo] = useState<Filtros>(FILTROS_ZERO)
 
   const [vendas, setVendas] = useState<VendaResumo[]>([])
   const [total, setTotal] = useState(0)
@@ -82,6 +93,7 @@ export default function VendasPage() {
       .then(r => r.json() as Promise<{ ok: boolean; vendedores?: { id: string; nome: string }[] }>)
       .then(json => {
         if (json.ok && json.vendedores) {
+          setVendedoresOpt(json.vendedores)
           const mapa: Record<string, string> = {}
           json.vendedores.forEach(v => { mapa[v.id] = v.nome })
           setMapaVendedores(mapa)
@@ -90,17 +102,19 @@ export default function VendasPage() {
       .catch(() => {})
   }, [papel])
 
-  useEffect(() => {
-    if (papel !== null) buscarVendas(1, true)
-  }, [papel, filtroAtivo.inicio, filtroAtivo.fim]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  async function buscarVendas(pagina: number, reset: boolean) {
+  const buscarVendas = useCallback(async (pagina: number, reset: boolean, fa: Filtros) => {
     if (reset) setCarregandoLista(true)
     else setCarregandoMais(true)
     try {
+      const periodo = fa.mes ? mesParaRange(fa.mes) : defaultPeriodo()
       const params = new URLSearchParams({ pagina: String(pagina), porPagina: String(POR_PAGINA) })
-      if (filtroAtivo.inicio) params.set('periodoInicio', filtroAtivo.inicio)
-      if (filtroAtivo.fim)    params.set('periodoFim',    filtroAtivo.fim)
+      params.set('periodoInicio', periodo.inicio)
+      params.set('periodoFim',    periodo.fim)
+      if (fa.busca)     params.set('busca',      fa.busca)
+      if (fa.valorMin)  params.set('valorMin',   fa.valorMin)
+      if (fa.valorMax)  params.set('valorMax',   fa.valorMax)
+      if (fa.vendedorId) params.set('vendedor_id', fa.vendedorId)
+      window.history.replaceState(null, '', `?${params}`)
 
       const res  = await fetch(`/api/vendas?${params}`)
       const json = await res.json() as VendasApiResponse
@@ -117,26 +131,25 @@ export default function VendasPage() {
       if (reset) setCarregandoLista(false)
       else setCarregandoMais(false)
     }
-  }
+  }, [])
 
-  function selecionarPreset(p: '4s' | '3m') {
-    setPeriodo(p)
-    setFiltroAtivo(periodoParaDatas(p))
-  }
+  useEffect(() => {
+    if (papel !== null) buscarVendas(1, true, filtroAtivo)
+  }, [papel, filtroAtivo]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  function aplicarPersonalizado() {
-    if (!customInicio || !customFim) return
-    setFiltroAtivo({ inicio: customInicio, fim: customFim })
-  }
+  function handleFiltrar() { setFiltroAtivo({ ...filtro }) }
+  function handleLimpar()  { setFiltro(FILTROS_ZERO); setFiltroAtivo(FILTROS_ZERO) }
 
   if (papel === null) {
     return (
-      <div className={styles.page} style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div
-          className="h-8 w-8 rounded-full border-2 animate-spin"
-          style={{ borderTopColor: 'var(--foreground)', borderRightColor: 'var(--line2)', borderBottomColor: 'var(--line2)', borderLeftColor: 'var(--line2)' }}
-        />
-      </div>
+      <AppLayout>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '80vh' }}>
+          <div
+            className="h-8 w-8 rounded-full border-2 animate-spin"
+            style={{ borderTopColor: 'var(--foreground)', borderRightColor: 'var(--line2)', borderBottomColor: 'var(--line2)', borderLeftColor: 'var(--line2)' }}
+          />
+        </div>
+      </AppLayout>
     )
   }
 
@@ -150,22 +163,7 @@ export default function VendasPage() {
   const usouOficial   = totalVendidoOficial !== null
 
   return (
-    <div className={styles.page} style={{ minHeight: '100vh' }}>
-
-      {/* Topo */}
-      <div style={{ borderBottom: '1px solid var(--line)', padding: '18px 0' }}>
-        <div className={styles.wrap} style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <a
-            href="/inicio"
-            style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--ink3)', textDecoration: 'none' }}
-          >
-            <ArrowLeft style={{ width: 14, height: 14 }} />
-            Início
-          </a>
-          <img src="/logo.png" alt="CFO.IA" style={{ height: 36, width: 'auto' }} />
-        </div>
-      </div>
-
+    <AppLayout>
       <main className={styles.wrap} style={{ paddingTop: 40, paddingBottom: 72 }}>
 
         {/* Cabeçalho */}
@@ -182,60 +180,43 @@ export default function VendasPage() {
           </div>
         </div>
 
-        {/* Seletor de período */}
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 28, alignItems: 'center' }}>
-          {(['4s', '3m'] as const).map(p => (
-            <button
-              key={p}
-              onClick={() => selecionarPreset(p)}
-              className={periodo === p ? styles.btnPrimary : styles.btn}
-              style={{ fontSize: 12, padding: '6px 14px' }}
-            >
-              {p === '4s' ? 'Últ. 4 semanas' : 'Últ. 3 meses'}
-            </button>
-          ))}
-          <button
-            onClick={() => setPeriodo('personalizado')}
-            className={periodo === 'personalizado' ? styles.btnPrimary : styles.btn}
-            style={{ fontSize: 12, padding: '6px 14px' }}
-          >
-            Personalizado
-          </button>
-
-          {periodo === 'personalizado' && (
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginLeft: 4 }}>
-              <input
-                type="date"
-                value={customInicio}
-                onChange={e => setCustomInicio(e.target.value)}
-                style={{
-                  fontSize: 12, padding: '5px 10px',
-                  border: '1px solid var(--line2)', borderRadius: 4,
-                  background: 'var(--cor-superficie)', color: 'var(--cor-texto)',
-                }}
-              />
-              <span style={{ fontSize: 12, color: 'var(--ink3)' }}>até</span>
-              <input
-                type="date"
-                value={customFim}
-                onChange={e => setCustomFim(e.target.value)}
-                style={{
-                  fontSize: 12, padding: '5px 10px',
-                  border: '1px solid var(--line2)', borderRadius: 4,
-                  background: 'var(--cor-superficie)', color: 'var(--cor-texto)',
-                }}
-              />
-              <button
-                onClick={aplicarPersonalizado}
-                disabled={!customInicio || !customFim}
-                className={styles.btnPrimary}
-                style={{ fontSize: 12, padding: '6px 14px' }}
-              >
-                Aplicar
-              </button>
-            </div>
+        {/* Filtros */}
+        <FilterBar
+          onFiltrar={handleFiltrar}
+          onLimpar={handleLimpar}
+          resultLabel={!carregandoLista && temFiltroAtivo(filtroAtivo)
+            ? `${total} resultado${total !== 1 ? 's' : ''} encontrado${total !== 1 ? 's' : ''}`
+            : undefined}
+        >
+          <FilterInput
+            label="Cliente"
+            value={filtro.busca}
+            onChange={v => setFiltro(f => ({ ...f, busca: v }))}
+            placeholder="Buscar cliente…"
+          />
+          <FilterMonth
+            label="Mês"
+            value={filtro.mes}
+            onChange={v => setFiltro(f => ({ ...f, mes: v }))}
+            width={165}
+          />
+          <FilterNumberRange
+            label="Valor vendido (R$)"
+            from={filtro.valorMin}
+            to={filtro.valorMax}
+            onFrom={v => setFiltro(f => ({ ...f, valorMin: v }))}
+            onTo={v => setFiltro(f => ({ ...f, valorMax: v }))}
+          />
+          {!eVendedor && vendedoresOpt.length > 0 && (
+            <FilterSelect
+              label="Vendedor"
+              value={filtro.vendedorId}
+              onChange={v => setFiltro(f => ({ ...f, vendedorId: v }))}
+              options={vendedoresOpt.map(v => ({ value: v.id, label: v.nome }))}
+              width={170}
+            />
           )}
-        </div>
+        </FilterBar>
 
         {/* Card de resumo */}
         {!carregandoLista && (
@@ -296,9 +277,11 @@ export default function VendasPage() {
           </p>
         ) : (
           <>
-            <div style={{ marginBottom: 8, display: 'flex', justifyContent: 'flex-end' }}>
-              <span className={styles.over}>{total} registros</span>
-            </div>
+            {!temFiltroAtivo(filtroAtivo) && (
+              <div style={{ marginBottom: 8, display: 'flex', justifyContent: 'flex-end' }}>
+                <span className={styles.over}>{total} registros</span>
+              </div>
+            )}
             <div style={{ overflowX: 'auto' }}>
               {/* Cabeçalho da tabela */}
               <div
@@ -363,7 +346,7 @@ export default function VendasPage() {
             {temMais && (
               <div style={{ marginTop: 24 }}>
                 <button
-                  onClick={() => buscarVendas(paginaAtual + 1, false)}
+                  onClick={() => buscarVendas(paginaAtual + 1, false, filtroAtivo)}
                   disabled={carregandoMais}
                   className={styles.btn}
                   style={{ fontSize: 13 }}
@@ -375,6 +358,6 @@ export default function VendasPage() {
           </>
         )}
       </main>
-    </div>
+    </AppLayout>
   )
 }

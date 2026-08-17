@@ -1,9 +1,11 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { ArrowLeft } from 'lucide-react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { ComboboxBusca, type OpcaoCombobox } from '@/components/ui/ComboboxBusca'
+import Modal from '@/components/ui/Modal'
+import AppLayout from '@/components/layout/AppLayout'
+import { FilterBar, FilterInput, FilterSelect, FilterCheckbox } from '@/components/filters/FilterBar'
 import styles from '@/styles/editorial.module.css'
 
 // ─── CNPJ helpers (client-side) ──────────────────────────────────────────────
@@ -85,6 +87,22 @@ const CRM_ARROW = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/
 
 const POR_PAGINA = 20
 
+const STATUS_CRM_OPTS = [
+  { value: 'novo_lead',     label: 'Novo Lead' },
+  { value: 'em_contato',   label: 'Em Contato' },
+  { value: 'negociando',   label: 'Negociando' },
+  { value: 'cliente_ativo', label: 'Cliente Ativo' },
+  { value: 'inativo',      label: 'Inativo' },
+  { value: 'perdido',      label: 'Perdido' },
+]
+
+type FiltroCliente = { busca: string; statusCrm: string; vendedorId: string; mostrarArquivados: boolean }
+const FILTRO_ZERO: FiltroCliente = { busca: '', statusCrm: '', vendedorId: '', mostrarArquivados: false }
+
+function temFiltroAtivo(f: FiltroCliente) {
+  return f.busca || f.statusCrm || f.vendedorId
+}
+
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 
 interface ClienteResumo {
@@ -97,6 +115,7 @@ interface ClienteResumo {
   dataUltimaCompra: string | null
   statusCrm: string
   origem: string
+  arquivado?: boolean
 }
 
 // ─── Página ──────────────────────────────────────────────────────────────────
@@ -109,6 +128,9 @@ export default function CadastroClientePage() {
   const [meEmail, setMeEmail] = useState<string | null>(null)
   const [meVendedorId, setMeVendedorId] = useState<string | null>(null)
   const eVendedor = papel === 'vendedor'
+
+  // Modal
+  const [modalAberto, setModalAberto] = useState(false)
 
   // Formulário
   const [cnpj, setCnpj] = useState('')
@@ -131,6 +153,10 @@ export default function CadastroClientePage() {
   const [vendedoresOpt, setVendedoresOpt] = useState<OpcaoCombobox[]>([])
   const [mapaVendedores, setMapaVendedores] = useState<Record<string, string>>({})
   const [carregandoVend, setCarregandoVend] = useState(true)
+
+  // Filtros da lista
+  const [filtro, setFiltro] = useState<FiltroCliente>(FILTRO_ZERO)
+  const [filtroAtivo, setFiltroAtivo] = useState<FiltroCliente>(FILTRO_ZERO)
 
   // Lista paginada
   const [listaVersion, setListaVersion] = useState(0)
@@ -178,20 +204,22 @@ export default function CadastroClientePage() {
 
   // Efeito 3: carga inicial e reload após submit
   useEffect(() => {
-    if (papel !== null) buscarClientes(1, true)
-  }, [papel, listaVersion]) // eslint-disable-line react-hooks/exhaustive-deps
+    if (papel !== null) buscarClientes(1, true, filtroAtivo)
+  }, [papel, listaVersion, filtroAtivo]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  async function buscarClientes(pagina: number, reset: boolean) {
+  const buscarClientes = useCallback(async (pagina: number, reset: boolean, fa: FiltroCliente) => {
     if (reset) setCarregandoLista(true)
     else setCarregandoMais(true)
     try {
-      const base = (papel === 'vendedor' || papel === 'sdr')
-        ? '/api/clientes'
-        : '/api/clientes?meus=1'
-      const sep = base.includes('?') ? '&' : '?'
-      const url = `${base}${sep}pagina=${pagina}&porPagina=${POR_PAGINA}`
+      const params = new URLSearchParams({ pagina: String(pagina), porPagina: String(POR_PAGINA) })
+      if (papel !== 'vendedor' && papel !== 'sdr') params.set('meus', '1')
+      if (fa.busca)               params.set('busca',       fa.busca)
+      if (fa.statusCrm)           params.set('statusCrm',   fa.statusCrm)
+      if (fa.vendedorId)          params.set('vendedor_id', fa.vendedorId)
+      if (fa.mostrarArquivados)   params.set('arquivados',  '1')
+      window.history.replaceState(null, '', `?${params}`)
 
-      const res = await fetch(url)
+      const res = await fetch(`/api/clientes?${params}`)
       const json = await res.json() as { ok: boolean; clientes?: ClienteResumo[]; total?: number }
       if (!json.ok) return
 
@@ -209,6 +237,18 @@ export default function CadastroClientePage() {
       if (reset) setCarregandoLista(false)
       else setCarregandoMais(false)
     }
+  }, [papel])
+
+  function handleFiltrar() { setFiltroAtivo({ ...filtro }) }
+  function handleLimpar()  { setFiltro(FILTRO_ZERO); setFiltroAtivo(FILTRO_ZERO) }
+
+  async function arquivarClienteInLinha(cnpj: string, arquivar: boolean) {
+    const res = await fetch(`/api/clientes/${cnpj}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ arquivar }),
+    })
+    if (res.ok) setListaVersion(v => v + 1)
   }
 
   async function handleStatusCrmChange(cnpj: string, novoStatus: string) {
@@ -258,6 +298,12 @@ export default function CadastroClientePage() {
     if (!validarCNPJ(digits)) setErroCnpj('CNPJ inválido — verifique os dígitos verificadores.')
   }
 
+  function fecharModal() {
+    setModalAberto(false)
+    setFeedback(null)
+    setErroCnpj(null)
+  }
+
   async function handleSubmit(e: { preventDefault(): void }) {
     e.preventDefault()
     setFeedback(null)
@@ -298,7 +344,7 @@ export default function CadastroClientePage() {
       if (res.status === 409) { setFeedback({ tipo: 'erro', msg: 'Este CNPJ já está cadastrado.' }); return }
       if (!res.ok) { setFeedback({ tipo: 'erro', msg: json.error ?? 'Erro ao cadastrar cliente.' }); return }
 
-      setFeedback({ tipo: 'ok', msg: `Cliente ${razaoSocial.trim()} cadastrado com sucesso.` })
+      // Sucesso: limpar form e fechar modal
       setCnpj('')
       setRazaoSocial('')
       setTipo('integrador')
@@ -310,6 +356,8 @@ export default function CadastroClientePage() {
       setVendedorId(null)
       setVendedorLabel('')
       setErroCnpj(null)
+      setFeedback(null)
+      setModalAberto(false)
       setListaVersion(v => v + 1)
     } finally {
       setSalvando(false)
@@ -318,49 +366,34 @@ export default function CadastroClientePage() {
 
   if (papel === null) {
     return (
-      <div className={styles.page} style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div
-          className="h-8 w-8 rounded-full border-2 animate-spin"
-          style={{ borderTopColor: 'var(--foreground)', borderRightColor: 'var(--line2)', borderBottomColor: 'var(--line2)', borderLeftColor: 'var(--line2)' }}
-        />
-      </div>
+      <AppLayout>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '80vh' }}>
+          <div
+            className="h-8 w-8 rounded-full border-2 animate-spin"
+            style={{ borderTopColor: 'var(--foreground)', borderRightColor: 'var(--line2)', borderBottomColor: 'var(--line2)', borderLeftColor: 'var(--line2)' }}
+          />
+        </div>
+      </AppLayout>
     )
   }
 
-  const listaTitulo = eVendedor ? 'Minha carteira' : 'Meus cadastros recentes'
+  const listaTitulo = eVendedor ? 'Minha carteira' : 'Clientes'
   const listaVazia = eVendedor
     ? 'Nenhum cliente na sua carteira ainda.'
     : 'Nenhum cliente cadastrado por você ainda.'
   const temMais = lista.length < total
-  const colGrid = '140px 1fr 88px 100px 164px 90px 32px'
+  const colGrid = '140px 1fr 88px 100px 164px 90px auto'
 
   return (
-    <div className={styles.page} style={{ minHeight: '100vh' }}>
-
-      {/* Topo */}
-      <div style={{ borderBottom: '1px solid var(--line)', padding: '18px 0' }}>
-        <div className={styles.wrap} style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <a
-            href="/inicio"
-            style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--ink3)', textDecoration: 'none' }}
-          >
-            <ArrowLeft style={{ width: 14, height: 14 }} />
-            Início
-          </a>
-          <img src="/logo.png" alt="CFO.IA" style={{ height: 36, width: 'auto' }} />
-        </div>
-      </div>
-
-      <main className={styles.wrap} style={{ paddingTop: 40, paddingBottom: 72 }}>
-        <div className={`${styles.stitle} ${styles.serif}`}>Cadastro de Cliente</div>
-        <div className={styles.scap}>
-          {eVendedor
-            ? 'Cadastre um cliente CNPJ — ele será atribuído automaticamente à sua carteira.'
-            : 'Preencha o CNPJ e os dados do cliente para adicionar à carteira comercial.'}
-        </div>
-
-        {/* ── Formulário ──────────────────────────────────────────────── */}
-        <form onSubmit={handleSubmit} style={{ maxWidth: 460, display: 'flex', flexDirection: 'column', gap: 20, marginTop: 32 }}>
+    <AppLayout>
+      {/* ── Modal de cadastro ─────────────────────────────────────────── */}
+      <Modal
+        aberto={modalAberto}
+        onFechar={fecharModal}
+        titulo={eVendedor ? 'Novo Cliente' : 'Cadastrar Cliente'}
+        largura={500}
+      >
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
 
           {/* CNPJ */}
           <div className={styles.field}>
@@ -516,185 +549,244 @@ export default function CadastroClientePage() {
             </div>
           )}
 
-          <button
-            type="submit"
-            className={styles.btnPrimary}
-            disabled={salvando || !!erroCnpj}
-            style={{ alignSelf: 'flex-start', marginTop: 4 }}
-          >
-            {salvando ? 'Salvando…' : 'Cadastrar Cliente'}
-          </button>
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 4 }}>
+            <button type="button" className={styles.btn} onClick={fecharModal}>
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              className={styles.btnPrimary}
+              disabled={salvando || !!erroCnpj}
+            >
+              {salvando ? 'Salvando…' : 'Cadastrar Cliente'}
+            </button>
+          </div>
         </form>
+      </Modal>
 
-        {/* ── Lista de clientes ────────────────────────────────────────── */}
-        <div style={{ marginTop: 56 }}>
-          <div className={styles.shead} style={{ marginBottom: 12 }}>
-            <div className={`${styles.stitle} ${styles.serif}`} style={{ fontSize: 18 }}>
-              {listaTitulo}
-            </div>
-            {!carregandoLista && (
+      {/* ── Lista ─────────────────────────────────────────────────────── */}
+      <main className={styles.wrap} style={{ paddingTop: 40, paddingBottom: 72 }}>
+        <div className={styles.shead} style={{ marginBottom: 16, alignItems: 'center' }}>
+          <div className={`${styles.stitle} ${styles.serif}`}>
+            {listaTitulo}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+            {!carregandoLista && !temFiltroAtivo(filtroAtivo) && (
               <div className={styles.over}>{total} registros</div>
             )}
+            <button
+              type="button"
+              onClick={() => setModalAberto(true)}
+              className={styles.btnPrimary}
+              style={{ fontSize: 13 }}
+            >
+              + Novo Cliente
+            </button>
           </div>
+        </div>
 
-          {carregandoLista ? (
-            <p style={{ fontSize: 13, color: 'var(--ink3)', marginTop: 16 }}>Carregando…</p>
-          ) : lista.length === 0 ? (
-            <p style={{ fontSize: 13, color: 'var(--ink3)', marginTop: 16 }}>{listaVazia}</p>
-          ) : (
-            <>
-              <div style={{ overflowX: 'auto' }}>
-                {/* Cabeçalho */}
-                <div
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: colGrid,
-                    gap: '0 12px',
-                    padding: '8px 0',
-                    borderBottom: '1px solid var(--line2)',
-                    fontSize: 10.5,
-                    fontWeight: 600,
-                    letterSpacing: '.1em',
-                    textTransform: 'uppercase',
-                    color: 'var(--ink3)',
-                    minWidth: 720,
-                  }}
-                >
-                  <div>CNPJ</div>
-                  <div>Razão Social</div>
-                  <div>Cadastrado</div>
-                  <div>Última Compra</div>
-                  <div>Status CRM</div>
-                  <div>Origem</div>
-                  <div />
-                </div>
+        <FilterBar
+          onFiltrar={handleFiltrar}
+          onLimpar={handleLimpar}
+          resultLabel={!carregandoLista && temFiltroAtivo(filtroAtivo)
+            ? `${total} resultado${total !== 1 ? 's' : ''} encontrado${total !== 1 ? 's' : ''}`
+            : undefined}
+        >
+          <FilterInput
+            label="Empresa"
+            value={filtro.busca}
+            onChange={v => setFiltro(f => ({ ...f, busca: v }))}
+            placeholder="Buscar razão social…"
+          />
+          <FilterSelect
+            label="Status CRM"
+            value={filtro.statusCrm}
+            onChange={v => setFiltro(f => ({ ...f, statusCrm: v }))}
+            options={STATUS_CRM_OPTS}
+            width={150}
+          />
+          {!eVendedor && vendedoresOpt.length > 0 && (
+            <FilterSelect
+              label="Responsável"
+              value={filtro.vendedorId}
+              onChange={v => setFiltro(f => ({ ...f, vendedorId: v }))}
+              options={vendedoresOpt.map(v => ({ value: v.id, label: v.label }))}
+              width={170}
+            />
+          )}
+          <FilterCheckbox
+            label="Mostrar arquivados"
+            checked={filtro.mostrarArquivados}
+            onChange={v => {
+              setFiltro(f => ({ ...f, mostrarArquivados: v }))
+              setFiltroAtivo(f => ({ ...f, mostrarArquivados: v }))
+            }}
+          />
+        </FilterBar>
 
-                {lista.map(c => {
-                  const statusAtual = crmLocal[c.cnpj] ?? c.statusCrm
-                  const cor = STATUS_CRM_COR[statusAtual] ?? STATUS_CRM_COR.inativo
-                  const editavel = podeEditar(c)
-
-                  return (
-                    <div
-                      key={c.cnpj}
-                      onClick={() => { if (editavel) router.push(`/clientes/${c.cnpj}/editar`) }}
-                      style={{
-                        display: 'grid',
-                        gridTemplateColumns: colGrid,
-                        gap: '0 12px',
-                        padding: '10px 0',
-                        borderBottom: '1px solid var(--line)',
-                        fontSize: 13,
-                        alignItems: 'center',
-                        cursor: editavel ? 'pointer' : 'default',
-                        minWidth: 720,
-                      }}
-                      onMouseEnter={e => { if (editavel) (e.currentTarget as HTMLElement).style.background = 'var(--paper)' }}
-                      onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent' }}
-                    >
-                      {/* CNPJ */}
-                      <div className={styles.num} style={{ fontSize: 12, color: 'var(--ink2)' }}>
-                        {mascaraCNPJ(c.cnpj)}
-                      </div>
-
-                      {/* Razão Social */}
-                      <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 500 }}>
-                        {c.razaoSocial}
-                      </div>
-
-                      {/* Cadastrado em */}
-                      <div className={styles.num} style={{ fontSize: 12, color: 'var(--ink3)' }}>
-                        {fmtData(c.criadoEm)}
-                      </div>
-
-                      {/* Última Compra */}
-                      <div className={styles.num} style={{ fontSize: 12, color: c.dataUltimaCompra ? 'var(--ink2)' : 'var(--ink3)' }}>
-                        {fmtData(c.dataUltimaCompra)}
-                      </div>
-
-                      {/* Status CRM — select inline auto-save */}
-                      <div
-                        style={{ display: 'flex', alignItems: 'center', gap: 5 }}
-                        onClick={e => e.stopPropagation()}
-                      >
-                        <select
-                          value={statusAtual}
-                          onChange={e => handleStatusCrmChange(c.cnpj, e.target.value)}
-                          disabled={crmSaving.has(c.cnpj)}
-                          style={{
-                            appearance: 'none',
-                            WebkitAppearance: 'none',
-                            border: 'none',
-                            borderRadius: 999,
-                            padding: '3px 22px 3px 9px',
-                            fontSize: 11,
-                            fontWeight: 700,
-                            letterSpacing: '.03em',
-                            cursor: 'pointer',
-                            backgroundImage: CRM_ARROW,
-                            backgroundRepeat: 'no-repeat',
-                            backgroundPosition: 'right 6px center',
-                            backgroundSize: '8px',
-                            backgroundColor: cor.bg,
-                            color: cor.fg,
-                            fontFamily: 'inherit',
-                            outline: 'none',
-                            opacity: crmSaving.has(c.cnpj) ? 0.6 : 1,
-                            transition: 'opacity .15s',
-                          }}
-                        >
-                          {Object.entries(STATUS_CRM_LABEL).map(([v, l]) => (
-                            <option key={v} value={v}>{l}</option>
-                          ))}
-                        </select>
-                        {crmSaved.has(c.cnpj) && (
-                          <span style={{ color: '#15803d', fontSize: 13, fontWeight: 700, lineHeight: 1 }}>✓</span>
-                        )}
-                      </div>
-
-                      {/* Origem */}
-                      <div style={{ fontSize: 12, color: 'var(--ink2)' }}>
-                        {ORIGEM_LABEL[c.origem] ?? c.origem}
-                      </div>
-
-                      {/* Editar */}
-                      <div>
-                        {editavel && (
-                          <span
-                            style={{
-                              fontSize: 10.5,
-                              fontWeight: 700,
-                              letterSpacing: '.05em',
-                              textTransform: 'uppercase',
-                              color: 'var(--marca)',
-                            }}
-                          >
-                            ›
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  )
-                })}
+        {carregandoLista ? (
+          <p style={{ fontSize: 13, color: 'var(--ink3)', marginTop: 16 }}>Carregando…</p>
+        ) : lista.length === 0 ? (
+          <p style={{ fontSize: 13, color: 'var(--ink3)', marginTop: 16 }}>{listaVazia}</p>
+        ) : (
+          <>
+            <div style={{ overflowX: 'auto' }}>
+              {/* Cabeçalho */}
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: colGrid,
+                  gap: '0 12px',
+                  padding: '8px 0',
+                  borderBottom: '1px solid var(--line2)',
+                  fontSize: 10.5,
+                  fontWeight: 600,
+                  letterSpacing: '.1em',
+                  textTransform: 'uppercase',
+                  color: 'var(--ink3)',
+                  minWidth: 720,
+                }}
+              >
+                <div>CNPJ</div>
+                <div>Razão Social</div>
+                <div>Cadastrado</div>
+                <div>Última Compra</div>
+                <div>Status CRM</div>
+                <div>Origem</div>
+                <div />
               </div>
 
-              {/* Carregar mais */}
-              {temMais && (
-                <div style={{ marginTop: 24, display: 'flex', alignItems: 'center', gap: 16 }}>
-                  <button
-                    onClick={() => buscarClientes(paginaAtual + 1, false)}
-                    disabled={carregandoMais}
-                    className={styles.btn}
-                    style={{ fontSize: 13 }}
+              {lista.map(c => {
+                const statusAtual = crmLocal[c.cnpj] ?? c.statusCrm
+                const cor = STATUS_CRM_COR[statusAtual] ?? STATUS_CRM_COR.inativo
+                const editavel = podeEditar(c)
+
+                return (
+                  <div
+                    key={c.cnpj}
+                    onClick={() => { if (editavel) router.push(`/clientes/${c.cnpj}/editar`) }}
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: colGrid,
+                      gap: '0 12px',
+                      padding: '10px 0',
+                      borderBottom: '1px solid var(--line)',
+                      fontSize: 13,
+                      alignItems: 'center',
+                      cursor: editavel ? 'pointer' : 'default',
+                      minWidth: 720,
+                    }}
+                    onMouseEnter={e => { if (editavel) (e.currentTarget as HTMLElement).style.background = 'var(--paper)' }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent' }}
                   >
-                    {carregandoMais ? 'Carregando…' : `Carregar mais (${total - lista.length} restantes)`}
-                  </button>
-                </div>
-              )}
-            </>
-          )}
-        </div>
+                    {/* CNPJ */}
+                    <div className={styles.num} style={{ fontSize: 12, color: 'var(--ink2)' }}>
+                      {mascaraCNPJ(c.cnpj)}
+                    </div>
+
+                    {/* Razão Social */}
+                    <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 500 }}>
+                      {c.razaoSocial}
+                    </div>
+
+                    {/* Cadastrado em */}
+                    <div className={styles.num} style={{ fontSize: 12, color: 'var(--ink3)' }}>
+                      {fmtData(c.criadoEm)}
+                    </div>
+
+                    {/* Última Compra */}
+                    <div className={styles.num} style={{ fontSize: 12, color: c.dataUltimaCompra ? 'var(--ink2)' : 'var(--ink3)' }}>
+                      {fmtData(c.dataUltimaCompra)}
+                    </div>
+
+                    {/* Status CRM — select inline auto-save */}
+                    <div
+                      style={{ display: 'flex', alignItems: 'center', gap: 5 }}
+                      onClick={e => e.stopPropagation()}
+                    >
+                      <select
+                        value={statusAtual}
+                        onChange={e => handleStatusCrmChange(c.cnpj, e.target.value)}
+                        disabled={crmSaving.has(c.cnpj)}
+                        style={{
+                          appearance: 'none',
+                          WebkitAppearance: 'none',
+                          border: 'none',
+                          borderRadius: 999,
+                          padding: '3px 22px 3px 9px',
+                          fontSize: 11,
+                          fontWeight: 700,
+                          letterSpacing: '.03em',
+                          cursor: 'pointer',
+                          backgroundImage: CRM_ARROW,
+                          backgroundRepeat: 'no-repeat',
+                          backgroundPosition: 'right 6px center',
+                          backgroundSize: '8px',
+                          backgroundColor: cor.bg,
+                          color: cor.fg,
+                          fontFamily: 'inherit',
+                          outline: 'none',
+                          opacity: crmSaving.has(c.cnpj) ? 0.6 : 1,
+                          transition: 'opacity .15s',
+                        }}
+                      >
+                        {Object.entries(STATUS_CRM_LABEL).map(([v, l]) => (
+                          <option key={v} value={v}>{l}</option>
+                        ))}
+                      </select>
+                      {crmSaved.has(c.cnpj) && (
+                        <span style={{ color: '#15803d', fontSize: 13, fontWeight: 700, lineHeight: 1 }}>✓</span>
+                      )}
+                    </div>
+
+                    {/* Origem */}
+                    <div style={{ fontSize: 12, color: 'var(--ink2)' }}>
+                      {ORIGEM_LABEL[c.origem] ?? c.origem}
+                    </div>
+
+                    {/* Ação de arquivamento */}
+                    <div onClick={e => e.stopPropagation()}>
+                      {editavel && (
+                        <button
+                          type="button"
+                          onClick={() => void arquivarClienteInLinha(c.cnpj, !(c.arquivado ?? false))}
+                          style={{
+                            background: 'none',
+                            border: '1px solid var(--cor-borda-sutil)',
+                            borderRadius: 6,
+                            padding: '3px 8px',
+                            fontSize: 11,
+                            color: 'var(--cor-texto-suave)',
+                            cursor: 'pointer',
+                            fontFamily: 'inherit',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          {filtroAtivo.mostrarArquivados ? 'Restaurar' : 'Arquivar'}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* Carregar mais */}
+            {temMais && (
+              <div style={{ marginTop: 24, display: 'flex', alignItems: 'center', gap: 16 }}>
+                <button
+                  onClick={() => buscarClientes(paginaAtual + 1, false, filtroAtivo)}
+                  disabled={carregandoMais}
+                  className={styles.btn}
+                  style={{ fontSize: 13 }}
+                >
+                  {carregandoMais ? 'Carregando…' : `Carregar mais (${total - lista.length} restantes)`}
+                </button>
+              </div>
+            )}
+          </>
+        )}
       </main>
-    </div>
+    </AppLayout>
   )
 }

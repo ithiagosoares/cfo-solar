@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import AppLayout from '@/components/layout/AppLayout'
 import styles from '@/styles/editorial.module.css'
 
 type Papel = 'administrador' | 'gestor' | 'sdr' | 'vendedor' | 'sem_acesso'
@@ -173,21 +174,7 @@ export default function AdminUsuariosPage() {
   }
 
   return (
-    <div className={styles.page} style={{ minHeight: '100vh' }}>
-      <div className={`${styles.hdr} ${styles.htop}`}>
-        <div className={styles.wrap}>
-          <div className={styles.brand} style={{ alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
-            <div className="flex items-center gap-3">
-              <img src="/logo.png" alt="CFO.IA" style={{ height: 52, width: 'auto', margin: '-9px 0' }} />
-              <span className={styles.bsub}>Administração · Usuários</span>
-            </div>
-            <a href="/" className={styles.btn} style={{ fontSize: 12, padding: '5px 12px', textDecoration: 'none' }}>
-              ← Dashboard
-            </a>
-          </div>
-        </div>
-      </div>
-
+    <AppLayout>
       <div className={styles.wrap} style={{ paddingTop: 40, paddingBottom: 60 }}>
         <div className={styles.shead} style={{ marginBottom: 24 }}>
           <h1 className={styles.stitle}>Usuários autorizados</h1>
@@ -432,6 +419,6 @@ export default function AdminUsuariosPage() {
           </div>
         )}
       </div>
-    </div>
+    </AppLayout>
   )
 }

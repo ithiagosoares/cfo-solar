@@ -8,13 +8,15 @@ const TABELA = 'comercial_pedidos'
 
 // ─── Tipos públicos ───────────────────────────────────────────────────────────
 
-export type StatusPedido = 'orcado' | 'vendido'
+export type StatusPedido = 'orcado' | 'vendido' | 'perdido'
 
 export interface PedidoResumo {
+  id: string
   vendedorId: string | null
   empresa: string
   filial: string
   cliente: string
+  clienteCnpj: string | null
   valorOrcado: number
   dataOrcamento: string | null
   status: StatusPedido
@@ -23,6 +25,11 @@ export interface PedidoResumo {
   origem: string
   numeroPedido: string | null
   criadoEm: string
+  arquivado: boolean
+}
+
+export interface PedidoCompleto extends PedidoResumo {
+  importacaoId: string | null
 }
 
 export interface DadosPedidoManual {
@@ -186,6 +193,11 @@ export interface VendaResumo {
 // Ordena por data de criação decrescente (mais recente primeiro).
 export async function listarPedidos(filtros: {
   vendedorId?: string
+  busca?: string
+  status?: StatusPedido
+  dataInicio?: string
+  dataFim?: string
+  mostrarArquivados?: boolean
   pagina?: number
   porPagina?: number
 } = {}): Promise<{ pedidos: PedidoResumo[]; total: number }> {
@@ -195,10 +207,12 @@ export async function listarPedidos(filtros: {
   const to        = from + porPagina - 1
 
   type Row = {
+    id: string
     vendedor_id: string | null
     empresa: string
     filial: string
     cliente: string
+    cliente_cnpj: string | null
     valor_orcado: number
     data_orcamento: string | null
     status: StatusPedido
@@ -207,18 +221,24 @@ export async function listarPedidos(filtros: {
     origem: string
     numero_pedido: string | null
     created_at: string
+    arquivado: boolean
   }
 
   let query = supabaseAdmin
     .from(TABELA)
     .select(
-      'vendedor_id, empresa, filial, cliente, valor_orcado, data_orcamento, status, valor_vendido, data_venda, origem, numero_pedido, created_at',
+      'id, vendedor_id, empresa, filial, cliente, cliente_cnpj, valor_orcado, data_orcamento, status, valor_vendido, data_venda, origem, numero_pedido, created_at, arquivado',
       { count: 'exact' },
     )
     .order('created_at', { ascending: false })
     .range(from, to)
 
-  if (filtros.vendedorId) query = query.eq('vendedor_id', filtros.vendedorId)
+  if (filtros.vendedorId)  query = query.eq('vendedor_id', filtros.vendedorId)
+  if (filtros.busca)      query = query.ilike('empresa', `%${filtros.busca}%`)
+  if (filtros.status)     query = query.eq('status', filtros.status)
+  if (filtros.dataInicio) query = query.gte('data_orcamento', filtros.dataInicio)
+  if (filtros.dataFim)    query = query.lte('data_orcamento', filtros.dataFim)
+  query = query.eq('arquivado', filtros.mostrarArquivados === true)
 
   const { data, error, count } = await query
 
@@ -226,10 +246,12 @@ export async function listarPedidos(filtros: {
 
   return {
     pedidos: (data ?? []).map((row: Row) => ({
+      id:            row.id,
       vendedorId:    row.vendedor_id,
       empresa:       row.empresa,
       filial:        row.filial,
       cliente:       row.cliente,
+      clienteCnpj:   row.cliente_cnpj,
       valorOrcado:   row.valor_orcado,
       dataOrcamento: row.data_orcamento,
       status:        row.status,
@@ -238,9 +260,97 @@ export async function listarPedidos(filtros: {
       origem:        row.origem,
       numeroPedido:  row.numero_pedido,
       criadoEm:      row.created_at,
+      arquivado:     row.arquivado,
     })),
     total: count ?? 0,
   }
+}
+
+// Busca um único pedido pelo id (UUID). Retorna null se não encontrado.
+export async function buscarPedidoPorId(id: string): Promise<PedidoCompleto | null> {
+  type Row = {
+    id: string
+    vendedor_id: string | null
+    empresa: string
+    filial: string
+    cliente: string
+    cliente_cnpj: string | null
+    valor_orcado: number
+    data_orcamento: string | null
+    status: StatusPedido
+    valor_vendido: number | null
+    data_venda: string | null
+    origem: string
+    numero_pedido: string | null
+    importacao_id: string | null
+    created_at: string
+    arquivado: boolean
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from(TABELA)
+    .select('id, vendedor_id, empresa, filial, cliente, cliente_cnpj, valor_orcado, data_orcamento, status, valor_vendido, data_venda, origem, numero_pedido, importacao_id, created_at, arquivado')
+    .eq('id', id)
+    .single()
+
+  if (error || !data) return null
+
+  const row = data as Row
+  return {
+    id:            row.id,
+    vendedorId:    row.vendedor_id,
+    empresa:       row.empresa,
+    filial:        row.filial,
+    cliente:       row.cliente,
+    clienteCnpj:   row.cliente_cnpj,
+    valorOrcado:   row.valor_orcado,
+    dataOrcamento: row.data_orcamento,
+    status:        row.status,
+    valorVendido:  row.valor_vendido,
+    dataVenda:     row.data_venda,
+    origem:        row.origem,
+    numeroPedido:  row.numero_pedido,
+    importacaoId:  row.importacao_id,
+    criadoEm:      row.created_at,
+    arquivado:     row.arquivado,
+  }
+}
+
+export interface DadosAtualizacaoPedido {
+  empresa?: string
+  filial?: string
+  cliente?: string
+  status?: StatusPedido
+  valorOrcado?: number
+  dataOrcamento?: string | null
+  valorVendido?: number | null
+  dataVenda?: string | null
+}
+
+// Atualiza campos editáveis de um pedido. Retorna true se atualizado com sucesso.
+export async function atualizarPedido(id: string, dados: DadosAtualizacaoPedido): Promise<void> {
+  const patch: Record<string, unknown> = {}
+  if (dados.empresa       !== undefined) patch.empresa       = dados.empresa
+  if (dados.filial        !== undefined) patch.filial        = dados.filial
+  if (dados.cliente       !== undefined) patch.cliente       = dados.cliente
+  if (dados.status        !== undefined) patch.status        = dados.status
+  if (dados.valorOrcado   !== undefined) patch.valor_orcado  = dados.valorOrcado
+  if (dados.dataOrcamento !== undefined) patch.data_orcamento = dados.dataOrcamento
+  if (dados.valorVendido  !== undefined) patch.valor_vendido = dados.valorVendido
+  if (dados.dataVenda     !== undefined) patch.data_venda    = dados.dataVenda
+
+  // Se status mudou para orcado ou perdido, limpa campos de venda
+  if (dados.status === 'orcado' || dados.status === 'perdido') {
+    patch.valor_vendido = null
+    patch.data_venda    = null
+  }
+
+  const { error } = await supabaseAdmin
+    .from(TABELA)
+    .update(patch)
+    .eq('id', id)
+
+  if (error) throw new Error(`Falha ao atualizar pedido: ${error.message}`)
 }
 
 // Lista registros com status='vendido', filtrados por período e vendedor.
@@ -248,6 +358,9 @@ export async function listarPedidos(filtros: {
 // Ordena por data_venda decrescente.
 export async function listarVendas(filtros: {
   vendedorId?: string
+  busca?: string
+  valorMin?: number
+  valorMax?: number
   dataInicio?: string
   dataFim?: string
   pagina?: number
@@ -276,6 +389,7 @@ export async function listarVendas(filtros: {
       { count: 'exact' },
     )
     .eq('status', 'vendido')
+    .eq('arquivado', false)
     .order('data_venda', { ascending: false })
     .range(from, to)
 
@@ -283,10 +397,23 @@ export async function listarVendas(filtros: {
     .from(TABELA)
     .select('valor_vendido')
     .eq('status', 'vendido')
+    .eq('arquivado', false)
 
   if (filtros.vendedorId) {
     dataQuery = dataQuery.eq('vendedor_id', filtros.vendedorId)
     sumQuery  = sumQuery.eq('vendedor_id', filtros.vendedorId)
+  }
+  if (filtros.busca) {
+    dataQuery = dataQuery.ilike('cliente', `%${filtros.busca}%`)
+    sumQuery  = sumQuery.ilike('cliente', `%${filtros.busca}%`)
+  }
+  if (filtros.valorMin !== undefined) {
+    dataQuery = dataQuery.gte('valor_vendido', filtros.valorMin)
+    sumQuery  = sumQuery.gte('valor_vendido', filtros.valorMin)
+  }
+  if (filtros.valorMax !== undefined) {
+    dataQuery = dataQuery.lte('valor_vendido', filtros.valorMax)
+    sumQuery  = sumQuery.lte('valor_vendido', filtros.valorMax)
   }
   if (filtros.dataInicio) {
     dataQuery = dataQuery.gte('data_venda', filtros.dataInicio)
@@ -321,4 +448,16 @@ export async function listarVendas(filtros: {
     total:        dataResult.count ?? 0,
     totalVendido,
   }
+}
+
+export async function arquivarPedido(id: string, arquivar: boolean): Promise<void> {
+  const patch: Record<string, unknown> = {
+    arquivado:    arquivar,
+    arquivado_em: arquivar ? new Date().toISOString() : null,
+  }
+  const { error } = await supabaseAdmin
+    .from(TABELA)
+    .update(patch)
+    .eq('id', id)
+  if (error) throw new Error(`Falha ao arquivar pedido: ${error.message}`)
 }

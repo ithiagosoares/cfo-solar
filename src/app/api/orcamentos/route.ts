@@ -14,7 +14,7 @@ export async function GET(request: Request) {
   const pagina    = Math.max(1, parseInt(searchParams.get('pagina')    ?? '1',  10))
   const porPagina = Math.max(1, parseInt(searchParams.get('porPagina') ?? '20', 10))
 
-  const filtros: { vendedorId?: string; pagina: number; porPagina: number } = { pagina, porPagina }
+  const filtros: Parameters<typeof listarPedidos>[0] = { pagina, porPagina }
 
   // vendedor vê apenas a própria carteira — nunca aceita vendedor_id da query string
   if (papel === 'vendedor') {
@@ -26,6 +26,12 @@ export async function GET(request: Request) {
   } else if (searchParams.get('vendedor_id')) {
     filtros.vendedorId = searchParams.get('vendedor_id')!
   }
+
+  if (searchParams.get('busca'))          filtros.busca             = searchParams.get('busca')!
+  if (searchParams.get('status'))         filtros.status            = searchParams.get('status') as StatusPedido
+  if (searchParams.get('dataInicio'))     filtros.dataInicio        = searchParams.get('dataInicio')!
+  if (searchParams.get('dataFim'))        filtros.dataFim           = searchParams.get('dataFim')!
+  if (searchParams.get('arquivados') === '1') filtros.mostrarArquivados = true
 
   try {
     const result = await listarPedidos(filtros)

@@ -61,6 +61,8 @@ interface ClienteRow {
   criado_por: string
   created_at: string
   updated_at: string
+  arquivado: boolean
+  arquivado_em: string | null
 }
 
 export interface Cliente {
@@ -89,6 +91,8 @@ export interface Cliente {
   criadoPor: string
   criadoEm: string
   atualizadoEm: string
+  arquivado: boolean
+  arquivadoEm: string | null
 }
 
 export interface DadosNovoCliente {
@@ -107,10 +111,13 @@ export interface DadosNovoCliente {
 
 export interface FiltrosCliente {
   status?: StatusCliente
+  statusCrm?: StatusCrm
   vendedorId?: string
   tipo?: TipoCliente
   origem?: OrigemCliente
   criadoPor?: string
+  busca?: string
+  mostrarArquivados?: boolean
   pagina?: number
   porPagina?: number
 }
@@ -163,6 +170,8 @@ function mapearLinha(row: ClienteRow): Cliente {
     criadoPor:          row.criado_por,
     criadoEm:           row.created_at,
     atualizadoEm:       row.updated_at,
+    arquivado:          row.arquivado,
+    arquivadoEm:        row.arquivado_em,
   }
 }
 
@@ -224,11 +233,14 @@ export async function listarClientes(filtros: FiltrosCliente = {}): Promise<{ cl
     .order('created_at', { ascending: false })
     .range(from, to)
 
-  if (filtros.status)     query = query.eq('status',     filtros.status)
+  if (filtros.status)     query = query.eq('status',      filtros.status)
+  if (filtros.statusCrm)  query = query.eq('status_crm',  filtros.statusCrm)
   if (filtros.vendedorId) query = query.eq('vendedor_id', filtros.vendedorId)
-  if (filtros.tipo)       query = query.eq('tipo',       filtros.tipo)
-  if (filtros.origem)     query = query.eq('origem',     filtros.origem)
-  if (filtros.criadoPor)  query = query.eq('criado_por', filtros.criadoPor)
+  if (filtros.tipo)       query = query.eq('tipo',        filtros.tipo)
+  if (filtros.origem)     query = query.eq('origem',      filtros.origem)
+  if (filtros.criadoPor)  query = query.eq('criado_por',  filtros.criadoPor)
+  if (filtros.busca)      query = query.ilike('razao_social', `%${filtros.busca}%`)
+  query = query.eq('arquivado', filtros.mostrarArquivados === true)
 
   const { data, error, count } = await query
   if (error) throw new Error(`Falha ao listar clientes: ${error.message}`)
@@ -308,6 +320,18 @@ export async function atribuirVendedor(cnpj: string, vendedorId: string | null):
   }
 
   return mapearLinha(data as ClienteRow)
+}
+
+export async function arquivarCliente(cnpj: string, arquivar: boolean): Promise<void> {
+  const patch: Record<string, unknown> = {
+    arquivado:    arquivar,
+    arquivado_em: arquivar ? new Date().toISOString() : null,
+  }
+  const { error } = await supabaseAdmin
+    .from(TABELA)
+    .update(patch)
+    .eq('cnpj', normalizarCNPJ(cnpj))
+  if (error) throw new Error(`Falha ao arquivar cliente: ${error.message}`)
 }
 
 // Retorna a data mais recente entre data_orcamento e data_venda de qualquer pedido

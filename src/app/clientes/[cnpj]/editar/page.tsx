@@ -1,8 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { ArrowLeft } from 'lucide-react'
 import { useParams, useRouter } from 'next/navigation'
+import AppLayout from '@/components/layout/AppLayout'
 import styles from '@/styles/editorial.module.css'
 
 // ─── Constantes ──────────────────────────────────────────────────────────────
@@ -70,6 +70,7 @@ interface ClienteCompleto {
   criadoPor: string
   criadoEm: string
   atualizadoEm: string
+  arquivado?: boolean
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -136,6 +137,8 @@ export default function EditarClientePage() {
   const [carregando, setCarregando] = useState(true)
   const [erro, setErro] = useState<string | null>(null)
   const [salvando, setSalvando] = useState(false)
+  const [arquivando, setArquivando] = useState(false)
+  const [arquivado, setArquivado] = useState(false)
   const [feedback, setFeedback] = useState<{ tipo: 'ok' | 'erro'; msg: string } | null>(null)
 
   // Mapa de vendedores para exibir o nome do responsável
@@ -195,6 +198,7 @@ export default function EditarClientePage() {
         setObservacoes(c.observacoes ?? '')
         setCanalPreferido(c.canalPreferido ?? '')
         setProdutoInteresse(c.produtoInteresse ?? '')
+        setArquivado(c.arquivado ?? false)
         setClienteRO({
           cnpj:             c.cnpj,
           vendedorId:       c.vendedorId,
@@ -260,36 +264,53 @@ export default function EditarClientePage() {
     }
   }
 
+  async function handleArquivar() {
+    setArquivando(true)
+    setFeedback(null)
+    try {
+      const res = await fetch(`/api/clientes/${cnpj}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ arquivar: !arquivado }),
+      })
+      const json = await res.json() as { ok: boolean; error?: string }
+      if (!res.ok) {
+        setFeedback({ tipo: 'erro', msg: json.error ?? 'Erro ao arquivar.' })
+      } else {
+        setArquivado(!arquivado)
+        setFeedback({ tipo: 'ok', msg: arquivado ? 'Cliente restaurado.' : 'Cliente arquivado.' })
+      }
+    } catch {
+      setFeedback({ tipo: 'erro', msg: 'Erro de rede.' })
+    } finally {
+      setArquivando(false)
+    }
+  }
+
   // ── Renderização de estados especiais ────────────────────────────────────
 
   if (carregando) {
     return (
-      <div className={styles.page} style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div
-          className="h-8 w-8 rounded-full border-2 animate-spin"
-          style={{ borderTopColor: 'var(--foreground)', borderRightColor: 'var(--line2)', borderBottomColor: 'var(--line2)', borderLeftColor: 'var(--line2)' }}
-        />
-      </div>
+      <AppLayout>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '80vh' }}>
+          <div
+            className="h-8 w-8 rounded-full border-2 animate-spin"
+            style={{ borderTopColor: 'var(--foreground)', borderRightColor: 'var(--line2)', borderBottomColor: 'var(--line2)', borderLeftColor: 'var(--line2)' }}
+          />
+        </div>
+      </AppLayout>
     )
   }
 
   if (erro) {
     return (
-      <div className={styles.page} style={{ minHeight: '100vh' }}>
-        <div style={{ borderBottom: '1px solid var(--line)', padding: '18px 0' }}>
-          <div className={styles.wrap} style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-            <a href="/clientes/cadastro" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--ink3)', textDecoration: 'none' }}>
-              <ArrowLeft style={{ width: 14, height: 14 }} />
-              Voltar
-            </a>
-          </div>
-        </div>
+      <AppLayout>
         <main className={styles.wrap} style={{ paddingTop: 40 }}>
           <div className={`${styles.notice} ${styles.alertaDanger}`}>
             <span>{erro}</span>
           </div>
         </main>
-      </div>
+      </AppLayout>
     )
   }
 
@@ -300,22 +321,7 @@ export default function EditarClientePage() {
     : '—'
 
   return (
-    <div className={styles.page} style={{ minHeight: '100vh' }}>
-
-      {/* Topo */}
-      <div style={{ borderBottom: '1px solid var(--line)', padding: '18px 0' }}>
-        <div className={styles.wrap} style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <a
-            href="/clientes/cadastro"
-            style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--ink3)', textDecoration: 'none' }}
-          >
-            <ArrowLeft style={{ width: 14, height: 14 }} />
-            Clientes
-          </a>
-          <img src="/logo.png" alt="CFO.IA" style={{ height: 36, width: 'auto' }} />
-        </div>
-      </div>
-
+    <AppLayout>
       <main className={styles.wrap} style={{ paddingTop: 40, paddingBottom: 80 }}>
         <div className={`${styles.stitle} ${styles.serif}`}>Editar Cliente</div>
         <div className={styles.scap} style={{ fontFamily: 'var(--font-serif)', fontStyle: 'italic' }}>
@@ -489,20 +495,20 @@ export default function EditarClientePage() {
                   rows={3}
                   placeholder="Notas livres sobre o cliente"
                   style={{
-                    border: 'none',
-                    borderBottom: '1px solid var(--line2)',
-                    background: 'none',
+                    border: '1px solid var(--cor-borda-sutil)',
+                    borderRadius: 8,
+                    background: 'var(--cor-superficie)',
                     color: 'var(--foreground)',
                     fontFamily: 'inherit',
                     fontSize: 13.5,
-                    padding: '6px 2px',
+                    padding: '9px 12px',
                     outline: 'none',
                     resize: 'vertical',
                     width: '100%',
                     transition: 'border-color .15s',
                   }}
-                  onFocus={e => { (e.target as HTMLTextAreaElement).style.borderBottomColor = 'var(--marca)' }}
-                  onBlur={e => { (e.target as HTMLTextAreaElement).style.borderBottomColor = 'var(--line2)' }}
+                  onFocus={e => { (e.target as HTMLTextAreaElement).style.borderColor = 'var(--cor-destaque)' }}
+                  onBlur={e => { (e.target as HTMLTextAreaElement).style.borderColor = 'var(--cor-borda-sutil)' }}
                 />
               </Campo>
 
@@ -540,7 +546,7 @@ export default function EditarClientePage() {
               </div>
             )}
 
-            <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+            <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
               <button
                 type="submit"
                 className={styles.btnPrimary}
@@ -554,11 +560,32 @@ export default function EditarClientePage() {
               >
                 Cancelar
               </a>
+              <button
+                type="button"
+                onClick={handleArquivar}
+                disabled={arquivando}
+                style={{
+                  marginLeft: 'auto',
+                  padding: '9px 16px',
+                  borderRadius: 10,
+                  border: '1px solid var(--cor-borda-sutil)',
+                  background: 'none',
+                  color: arquivado ? 'var(--ink2)' : 'var(--cor-texto-suave)',
+                  fontFamily: 'inherit',
+                  fontSize: 13,
+                  cursor: arquivando ? 'not-allowed' : 'pointer',
+                  transition: 'border-color .15s',
+                }}
+                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--cor-destaque)' }}
+                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--cor-borda-sutil)' }}
+              >
+                {arquivando ? '…' : arquivado ? 'Restaurar' : 'Arquivar'}
+              </button>
             </div>
           </div>
 
         </form>
       </main>
-    </div>
+    </AppLayout>
   )
 }

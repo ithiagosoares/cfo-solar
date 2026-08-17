@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import AppLayout from '@/components/layout/AppLayout'
 import styles from '@/styles/editorial.module.css'
 
 interface Vendedor {
@@ -93,13 +94,8 @@ export default function AdminVendedoresPage() {
   const inativos = vendedores.filter(v => !v.ativo)
 
   return (
-    <div className={styles.page}>
+    <AppLayout>
       <div className={styles.wrap} style={{ maxWidth: 680, paddingTop: 40, paddingBottom: 60 }}>
-        <div style={{ marginBottom: 32 }}>
-          <a href="/" style={{ fontSize: 13, color: 'var(--ink3)', textDecoration: 'none' }}>
-            ← Voltar
-          </a>
-        </div>
 
         <div className={`${styles.stitle} ${styles.serif}`} style={{ marginBottom: 6 }}>
           Gestão de Vendedores
@@ -195,7 +191,7 @@ export default function AdminVendedoresPage() {
           </>
         )}
       </div>
-    </div>
+    </AppLayout>
   )
 }
 

@@ -2,6 +2,7 @@ import { getPapel, getVendedorId, requireComercialAccess } from '@/lib/comercial
 import {
   buscarCliente,
   atualizarCliente,
+  arquivarCliente,
   normalizarCNPJ,
 } from '@/lib/clientes-repository'
 import type { DadosAtualizacaoCliente, StatusCrm, CanalPreferido, TipoCliente, OrigemCliente } from '@/lib/clientes-repository'
@@ -75,6 +76,18 @@ export async function PATCH(
     body = await request.json() as Record<string, unknown>
   } catch {
     return Response.json({ ok: false, error: 'JSON inválido' }, { status: 400 })
+  }
+
+  // Ação de arquivamento
+  if (body.arquivar !== undefined) {
+    try {
+      await arquivarCliente(cnpjNorm, body.arquivar === true)
+      const atualizado = await buscarCliente(cnpjNorm)
+      return Response.json({ ok: true, cliente: atualizado })
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Erro desconhecido'
+      return Response.json({ ok: false, error: msg }, { status: 500 })
+    }
   }
 
   const dados: DadosAtualizacaoCliente = {}

@@ -141,6 +141,7 @@ export async function proxy(request: NextRequest) {
   const PAPEIS_POR_ROTA: Record<string, readonly string[]> = {
     '/orcamentos/cadastro': ['administrador', 'gestor', 'vendedor'],
     '/clientes/cadastro':   ['administrador', 'gestor', 'sdr', 'vendedor'],
+    '/clientes/kanban':     ['administrador', 'gestor', 'sdr', 'vendedor'],
     '/admin/vendedores':    ['administrador'],
     '/admin/usuarios':      ['administrador'],
     '/comercial/upload':    ['administrador', 'gestor'],

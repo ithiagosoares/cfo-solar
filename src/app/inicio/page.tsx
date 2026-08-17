@@ -1,207 +1,141 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { BarChart2, Upload, UserPlus, FilePlus, Users, FileText, LogOut, UserCheck, TrendingUp } from 'lucide-react'
-import { createSupabaseBrowserClient } from '@/lib/supabase-client'
+import Link from 'next/link'
 import styles from '@/styles/editorial.module.css'
 
 type Papel = 'administrador' | 'gestor' | 'sdr' | 'vendedor' | 'sem_acesso'
 
-interface MeResponse {
-  papel: Papel
-  nome: string | null
-  email: string
-}
-
-interface Modulo {
-  titulo: string
-  descricao: string
+interface Card {
   href: string
-  icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }>
+  titulo: string
+  desc: string
   papeis: Papel[]
 }
 
-const MODULOS: Modulo[] = [
+const CARDS: Card[] = [
   {
-    titulo: 'Dashboard Comercial',
-    descricao: 'Visão geral de orçamentos, vendas e indicadores de performance.',
     href: '/dashboard',
-    icon: BarChart2,
+    titulo: 'Dashboard',
+    desc: 'Indicadores financeiros, margens e resultados consolidados.',
     papeis: ['administrador', 'gestor', 'vendedor'],
   },
   {
-    titulo: 'Orçamentos',
-    descricao: 'Lista de orçamentos e pedidos da carteira comercial.',
-    href: '/orcamentos',
-    icon: FileText,
-    papeis: ['administrador', 'gestor', 'vendedor'],
-  },
-  {
-    titulo: 'Vendas',
-    descricao: 'Orçamentos convertidos em venda, com total e filtro por período.',
-    href: '/vendas',
-    icon: TrendingUp,
-    papeis: ['administrador', 'gestor', 'vendedor'],
-  },
-  {
-    titulo: 'Upload de Relatório',
-    descricao: 'Importar relatório de orçamentos do sistema Upper.',
-    href: '/comercial/upload',
-    icon: Upload,
-    papeis: ['administrador', 'gestor'],
-  },
-  {
-    titulo: 'Cadastro de Cliente',
-    descricao: 'Cadastrar novo cliente CNPJ na carteira comercial.',
-    href: '/clientes/cadastro',
-    icon: UserPlus,
+    href: '/clientes/kanban',
+    titulo: 'Kanban de Clientes',
+    desc: 'Visualize e mova clientes entre estágios do funil de CRM.',
     papeis: ['administrador', 'gestor', 'sdr', 'vendedor'],
   },
   {
-    titulo: 'Cadastro de Orçamento',
-    descricao: 'Registrar orçamento manualmente sem upload de relatório.',
-    href: '/orcamentos/cadastro',
-    icon: FilePlus,
+    href: '/clientes/cadastro',
+    titulo: 'Clientes',
+    desc: 'Cadastro, busca e edição da carteira de clientes.',
+    papeis: ['administrador', 'gestor', 'sdr', 'vendedor'],
+  },
+  {
+    href: '/orcamentos',
+    titulo: 'Orçamentos',
+    desc: 'Acompanhe orçamentos ativos, vendas e status de cada pedido.',
     papeis: ['administrador', 'gestor', 'vendedor'],
   },
   {
-    titulo: 'Gerenciar Vendedores',
-    descricao: 'Cadastrar e gerenciar vendedores ativos no sistema.',
+    href: '/vendas',
+    titulo: 'Vendas',
+    desc: 'Relatório de vendas realizadas com totais por vendedor.',
+    papeis: ['administrador', 'gestor', 'vendedor'],
+  },
+  {
+    href: '/comercial/upload',
+    titulo: 'Upload Comercial',
+    desc: 'Importação de planilhas de orçamentos e pedidos.',
+    papeis: ['administrador', 'gestor'],
+  },
+  {
     href: '/admin/vendedores',
-    icon: UserCheck,
+    titulo: 'Vendedores',
+    desc: 'Gestão de vendedores e suas filiais.',
     papeis: ['administrador'],
   },
   {
-    titulo: 'Usuários do Sistema',
-    descricao: 'Gerenciar usuários, papéis e permissões de acesso.',
     href: '/admin/usuarios',
-    icon: Users,
+    titulo: 'Usuários',
+    desc: 'Controle de acesso e papéis de cada usuário.',
     papeis: ['administrador'],
   },
 ]
 
-const LABEL_PAPEL: Record<Papel, string> = {
-  administrador: 'Administrador',
-  gestor: 'Gestor',
-  sdr: 'SDR',
-  vendedor: 'Vendedor',
-  sem_acesso: 'Sem acesso',
-}
-
 export default function InicioPage() {
-  const router = useRouter()
-  const [me, setMe] = useState<MeResponse | null>(null)
-  const [carregando, setCarregando] = useState(true)
+  const [papel, setPapel] = useState<Papel | null>(null)
 
   useEffect(() => {
     fetch('/api/me')
       .then(r => r.json())
-      .then((d: MeResponse) => {
+      .then((d: { papel?: Papel }) => {
         if (d.papel === 'sem_acesso') {
-          router.replace('/acesso-negado')
-          return
+          window.location.replace('/acesso-negado')
+        } else {
+          setPapel(d.papel ?? null)
         }
-        setMe(d)
-        setCarregando(false)
       })
-      .catch(() => setCarregando(false))
-  }, [router])
+      .catch(() => setPapel('administrador'))
+  }, [])
 
-  async function handleSair() {
-    const supabase = createSupabaseBrowserClient()
-    await supabase.auth.signOut()
-    router.push('/login')
-  }
-
-  if (carregando) {
+  if (!papel) {
     return (
       <div className={styles.page} style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div
-          className="h-8 w-8 rounded-full border-2 animate-spin"
-          style={{ borderTopColor: 'var(--foreground)', borderRightColor: 'var(--line2)', borderBottomColor: 'var(--line2)', borderLeftColor: 'var(--line2)' }}
-        />
+        <div className="h-8 w-8 rounded-full border-2 animate-spin"
+          style={{ borderTopColor: 'var(--foreground)', borderRightColor: 'var(--line2)', borderBottomColor: 'var(--line2)', borderLeftColor: 'var(--line2)' }} />
       </div>
     )
   }
 
-  if (!me) return null
-
-  const modulosVisiveis = MODULOS.filter(m => m.papeis.includes(me.papel))
-  const nomeExibicao = me.nome ?? me.email
+  const cardsVisiveis = CARDS.filter(c => c.papeis.includes(papel))
 
   return (
-    <div className={styles.page} style={{ minHeight: '100vh' }}>
-      {/* Topo */}
-      <div style={{ borderBottom: '1px solid var(--line)', padding: '18px 0' }}>
-        <div className={styles.wrap} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <img src="/logo.png" alt="CFO.IA" style={{ height: 40, width: 'auto' }} />
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-            <div style={{ textAlign: 'right' }}>
-              <p style={{ fontSize: 13, fontWeight: 600 }}>{nomeExibicao}</p>
-              <p style={{ fontSize: 11, color: 'var(--ink3)', marginTop: 1 }}>
-                {LABEL_PAPEL[me.papel]}
-              </p>
-            </div>
-            <button
-              onClick={handleSair}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 6,
-                fontSize: 12, color: 'var(--ink3)', background: 'none', border: 'none',
-                cursor: 'pointer', padding: '6px 0',
-              }}
-              aria-label="Sair"
-            >
-              <LogOut style={{ width: 14, height: 14 }} />
-              Sair
-            </button>
+    <div className={styles.page}>
+      <div className={styles.htop}>
+        <div className={styles.wrap}>
+          <div className={styles.brand} style={{ paddingBottom: 22 }}>
+            <span className={styles.bname}>CFO Solar</span>
+            <span className={styles.bsub}>Grupo Solar System</span>
           </div>
         </div>
       </div>
 
-      {/* Conteúdo */}
-      <main className={styles.wrap} style={{ paddingTop: 48, paddingBottom: 72 }}>
-        <h1 className={styles.serif} style={{ fontSize: 26, fontWeight: 600, marginBottom: 6 }}>
-          Gestor Comercial
-        </h1>
-        <p style={{ fontSize: 14, color: 'var(--ink2)', marginBottom: 40 }}>
-          Selecione um módulo para continuar.
-        </p>
-
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
-          gap: 20,
-        }}>
-          {modulosVisiveis.map(modulo => {
-            const Icon = modulo.icon
-            return (
-              <a
-                key={modulo.href}
-                href={modulo.href}
-                style={{ textDecoration: 'none', color: 'inherit', display: 'block', height: '100%' }}
-              >
-                <div
-                  className={`${styles.panel} ${styles.hubCard}`}
-                  style={{
-                    cursor: 'pointer',
-                    height: '100%',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: 12,
+      <div className={styles.wrap}>
+        <div className={styles.sect}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 16 }}>
+            {cardsVisiveis.map(card => (
+              <Link key={card.href} href={card.href} style={{ textDecoration: 'none', color: 'inherit' }}>
+                <div style={{
+                  background: 'var(--paper)',
+                  border: '1px solid var(--line)',
+                  borderRadius: 10,
+                  padding: '20px 20px 18px',
+                  cursor: 'pointer',
+                  transition: 'border-color .15s, box-shadow .15s',
+                }}
+                  onMouseEnter={e => {
+                    ;(e.currentTarget as HTMLDivElement).style.borderColor = 'var(--marca)'
+                    ;(e.currentTarget as HTMLDivElement).style.boxShadow = '0 2px 12px rgba(0,0,0,.07)'
+                  }}
+                  onMouseLeave={e => {
+                    ;(e.currentTarget as HTMLDivElement).style.borderColor = 'var(--line)'
+                    ;(e.currentTarget as HTMLDivElement).style.boxShadow = 'none'
                   }}
                 >
-                  <Icon className={styles.hubIcon} style={{ width: 22, height: 22 }} />
-                  <div>
-                    <p style={{ fontSize: 15, fontWeight: 600, marginBottom: 4 }}>{modulo.titulo}</p>
-                    <p style={{ fontSize: 13, color: 'var(--ink2)', lineHeight: 1.5 }}>{modulo.descricao}</p>
+                  <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--foreground)', marginBottom: 7 }}>
+                    {card.titulo}
+                  </div>
+                  <div style={{ fontSize: 12.5, color: 'var(--ink2)', lineHeight: 1.5 }}>
+                    {card.desc}
                   </div>
                 </div>
-              </a>
-            )
-          })}
+              </Link>
+            ))}
+          </div>
         </div>
-      </main>
+      </div>
     </div>
   )
 }

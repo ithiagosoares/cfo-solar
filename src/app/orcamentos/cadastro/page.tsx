@@ -1,9 +1,11 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { ArrowLeft } from 'lucide-react'
+import { useState, useEffect, useCallback } from 'react'
 import { ComboboxBusca, type OpcaoCombobox } from '@/components/ui/ComboboxBusca'
+import Modal from '@/components/ui/Modal'
 import { formatMoeda } from '@/lib/utils'
+import AppLayout from '@/components/layout/AppLayout'
+import { FilterCheckbox } from '@/components/filters/FilterBar'
 import styles from '@/styles/editorial.module.css'
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
@@ -20,9 +22,10 @@ const POR_PAGINA = 20
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 
-type StatusPedido = 'orcado' | 'vendido'
+type StatusPedido = 'orcado' | 'vendido' | 'perdido'
 
 interface PedidoResumo {
+  id: string
   vendedorId: string | null
   empresa: string
   filial: string
@@ -35,6 +38,7 @@ interface PedidoResumo {
   origem: string
   numeroPedido: string | null
   criadoEm: string
+  arquivado?: boolean
 }
 
 type FormState = {
@@ -72,9 +76,11 @@ function fmtData(d: string | null): string {
 // ─── Página ──────────────────────────────────────────────────────────────────
 
 export default function OrcamentosCadastroPage() {
-  // Papel do usuário — determina o comportamento da tela
   const [papel, setPapel] = useState<string | null>(null)
   const eVendedor = papel === 'vendedor'
+
+  // Modal
+  const [modalAberto, setModalAberto] = useState(false)
 
   // Formulário
   const [form, setForm] = useState<FormState>(FORM_INICIAL)
@@ -92,6 +98,7 @@ export default function OrcamentosCadastroPage() {
   const [paginaAtual, setPaginaAtual] = useState(1)
   const [carregandoLista, setCarregandoLista] = useState(true)
   const [carregandoMais, setCarregandoMais] = useState(false)
+  const [mostrarArquivados, setMostrarArquivados] = useState(false)
 
   // Efeito 1: descobrir o papel do usuário
   useEffect(() => {
@@ -120,16 +127,18 @@ export default function OrcamentosCadastroPage() {
       .finally(() => setCarregandoVend(false))
   }, [papel])
 
-  // Efeito 3: carga inicial da lista quando papel é conhecido
+  // Efeito 3: carga inicial da lista quando papel ou mostrarArquivados muda
   useEffect(() => {
-    if (papel !== null) buscarPedidos(1, true)
-  }, [papel]) // eslint-disable-line react-hooks/exhaustive-deps
+    if (papel !== null) buscarPedidos(1, true, mostrarArquivados)
+  }, [papel, mostrarArquivados]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  async function buscarPedidos(pagina: number, reset: boolean) {
+  const buscarPedidos = useCallback(async (pagina: number, reset: boolean, arq: boolean) => {
     if (reset) setCarregandoLista(true)
     else setCarregandoMais(true)
     try {
-      const res = await fetch(`/api/orcamentos?pagina=${pagina}&porPagina=${POR_PAGINA}`)
+      const params = new URLSearchParams({ pagina: String(pagina), porPagina: String(POR_PAGINA) })
+      if (arq) params.set('arquivados', '1')
+      const res = await fetch(`/api/orcamentos?${params}`)
       const json = await res.json() as { ok: boolean; pedidos?: PedidoResumo[]; total?: number }
       if (!json.ok) return
       const novos = json.pedidos ?? []
@@ -140,10 +149,24 @@ export default function OrcamentosCadastroPage() {
       if (reset) setCarregandoLista(false)
       else setCarregandoMais(false)
     }
+  }, [])
+
+  async function arquivarInLinha(id: string, arquivar: boolean) {
+    const res = await fetch(`/api/orcamentos/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ arquivar }),
+    })
+    if (res.ok) buscarPedidos(1, true, mostrarArquivados)
   }
 
   function upd(patch: Partial<FormState>) {
     setForm(f => ({ ...f, ...patch }))
+    setFeedback(null)
+  }
+
+  function fecharModal() {
+    setModalAberto(false)
     setFeedback(null)
   }
 
@@ -167,7 +190,6 @@ export default function OrcamentosCadastroPage() {
       valorVendido:  form.status === 'vendido' ? (parseFloat(form.valorVendido) || null) : null,
       dataVenda:     form.status === 'vendido' ? (form.dataVenda || null) : null,
     }
-    // vendedor: servidor usa x-vendedor-id do header; admin/gestor: envia do formulário
     if (!eVendedor) body.vendedorId = form.vendedorId
 
     setSalvando(true)
@@ -184,9 +206,11 @@ export default function OrcamentosCadastroPage() {
         return
       }
 
-      setFeedback({ tipo: 'ok', msg: `Orçamento de ${form.cliente.trim()} cadastrado com sucesso.` })
+      // Sucesso: limpar form e fechar modal
       setForm(FORM_INICIAL)
-      buscarPedidos(1, true) // recarrega do início
+      setFeedback(null)
+      setModalAberto(false)
+      buscarPedidos(1, true, mostrarArquivados)
     } finally {
       setSalvando(false)
     }
@@ -206,53 +230,34 @@ export default function OrcamentosCadastroPage() {
     return nova
   }
 
-  // Aguarda papel ser carregado
   if (papel === null) {
     return (
-      <div className={styles.page} style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div
-          className="h-8 w-8 rounded-full border-2 animate-spin"
-          style={{ borderTopColor: 'var(--foreground)', borderRightColor: 'var(--line2)', borderBottomColor: 'var(--line2)', borderLeftColor: 'var(--line2)' }}
-        />
-      </div>
+      <AppLayout>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '80vh' }}>
+          <div
+            className="h-8 w-8 rounded-full border-2 animate-spin"
+            style={{ borderTopColor: 'var(--foreground)', borderRightColor: 'var(--line2)', borderBottomColor: 'var(--line2)', borderLeftColor: 'var(--line2)' }}
+          />
+        </div>
+      </AppLayout>
     )
   }
 
   const temMais = pedidos.length < total
-
-  // Colunas da lista variam por papel
   const colGrid = eVendedor
-    ? '2fr 1.3fr .9fr .9fr .65fr'
-    : '2fr .9fr 1.3fr .9fr .9fr .65fr'
+    ? '2fr 1.3fr .9fr .9fr .65fr auto'
+    : '2fr .9fr 1.3fr .9fr .9fr .65fr auto'
 
   return (
-    <div className={styles.page} style={{ minHeight: '100vh' }}>
-
-      {/* Topo */}
-      <div style={{ borderBottom: '1px solid var(--line)', padding: '18px 0' }}>
-        <div className={styles.wrap} style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <a
-            href="/inicio"
-            style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--ink3)', textDecoration: 'none' }}
-          >
-            <ArrowLeft style={{ width: 14, height: 14 }} />
-            Início
-          </a>
-          <img src="/logo.png" alt="CFO.IA" style={{ height: 36, width: 'auto' }} />
-        </div>
-      </div>
-
-      <main className={styles.wrap} style={{ paddingTop: 40, paddingBottom: 72 }}>
-
-        {/* ── Formulário ──────────────────────────────────────────────── */}
-        <div className={`${styles.stitle} ${styles.serif}`}>Cadastro de Orçamento</div>
-        <div className={styles.scap}>
-          {eVendedor
-            ? 'Registre um novo orçamento ou pedido — será associado à sua carteira automaticamente.'
-            : 'Registre um novo orçamento ou pedido comercial.'}
-        </div>
-
-        <form onSubmit={handleSubmit} style={{ maxWidth: 460, display: 'flex', flexDirection: 'column', gap: 20, marginTop: 32 }}>
+    <AppLayout>
+      {/* ── Modal de cadastro ─────────────────────────────────────────── */}
+      <Modal
+        aberto={modalAberto}
+        onFechar={fecharModal}
+        titulo={eVendedor ? 'Novo Orçamento' : 'Cadastrar Orçamento'}
+        largura={480}
+      >
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
 
           {/* Vendedor (apenas para admin/gestor) */}
           {!eVendedor && (
@@ -389,119 +394,165 @@ export default function OrcamentosCadastroPage() {
             </div>
           )}
 
-          <button
-            type="submit"
-            className={styles.btnPrimary}
-            disabled={salvando}
-            style={{ alignSelf: 'flex-start', marginTop: 4 }}
-          >
-            {salvando ? 'Salvando…' : 'Cadastrar Orçamento'}
-          </button>
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 4 }}>
+            <button type="button" className={styles.btn} onClick={fecharModal}>
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              className={styles.btnPrimary}
+              disabled={salvando}
+            >
+              {salvando ? 'Salvando…' : 'Cadastrar Orçamento'}
+            </button>
+          </div>
         </form>
+      </Modal>
 
-        {/* ── Lista de orçamentos ──────────────────────────────────────── */}
-        <div style={{ marginTop: 56 }}>
-          <div className={styles.shead} style={{ marginBottom: 12 }}>
-            <div className={`${styles.stitle} ${styles.serif}`} style={{ fontSize: 18 }}>
-              {eVendedor ? 'Minha carteira' : 'Orçamentos'}
-            </div>
+      {/* ── Lista de orçamentos ───────────────────────────────────────── */}
+      <main className={styles.wrap} style={{ paddingTop: 40, paddingBottom: 72 }}>
+        <div className={styles.shead} style={{ marginBottom: 12, alignItems: 'center' }}>
+          <div className={`${styles.stitle} ${styles.serif}`}>
+            {eVendedor ? 'Minha carteira' : 'Orçamentos'}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+            <FilterCheckbox
+              label="Mostrar arquivados"
+              checked={mostrarArquivados}
+              onChange={v => setMostrarArquivados(v)}
+            />
             {!carregandoLista && (
               <div className={styles.over}>{total} registros</div>
             )}
+            <button
+              type="button"
+              onClick={() => setModalAberto(true)}
+              className={styles.btnPrimary}
+              style={{ fontSize: 13 }}
+            >
+              + Novo Orçamento
+            </button>
           </div>
+        </div>
 
-          {carregandoLista ? (
-            <p style={{ fontSize: 13, color: 'var(--ink3)', marginTop: 16 }}>Carregando…</p>
-          ) : pedidos.length === 0 ? (
-            <p style={{ fontSize: 13, color: 'var(--ink3)', marginTop: 16 }}>
-              {eVendedor ? 'Nenhum orçamento na sua carteira ainda.' : 'Nenhum orçamento cadastrado ainda.'}
-            </p>
-          ) : (
-            <>
-              <div style={{ overflowX: 'auto' }}>
-                {/* Cabeçalho */}
-                <div
+        {carregandoLista ? (
+          <p style={{ fontSize: 13, color: 'var(--ink3)', marginTop: 16 }}>Carregando…</p>
+        ) : pedidos.length === 0 ? (
+          <p style={{ fontSize: 13, color: 'var(--ink3)', marginTop: 16 }}>
+            {eVendedor ? 'Nenhum orçamento na sua carteira ainda.' : 'Nenhum orçamento cadastrado ainda.'}
+          </p>
+        ) : (
+          <>
+            <div style={{ overflowX: 'auto' }}>
+              {/* Cabeçalho */}
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: colGrid,
+                  gap: '0 16px',
+                  padding: '8px 0',
+                  borderBottom: '1px solid var(--line2)',
+                  fontSize: 10.5,
+                  fontWeight: 600,
+                  letterSpacing: '.1em',
+                  textTransform: 'uppercase',
+                  color: 'var(--ink3)',
+                  minWidth: 560,
+                }}
+              >
+                <div>Cliente</div>
+                {!eVendedor && <div>Vendedor</div>}
+                <div>Empresa / Filial</div>
+                <div style={{ textAlign: 'right' }}>Valor Orçado</div>
+                <div>Data</div>
+                <div>Status</div>
+                <div />
+              </div>
+
+              {/* Linhas */}
+              {pedidos.map((p) => (
+                <a
+                  key={p.id}
+                  href={`/orcamentos/${p.id}/editar`}
                   style={{
                     display: 'grid',
                     gridTemplateColumns: colGrid,
                     gap: '0 16px',
-                    padding: '8px 0',
-                    borderBottom: '1px solid var(--line2)',
-                    fontSize: 10.5,
-                    fontWeight: 600,
-                    letterSpacing: '.1em',
-                    textTransform: 'uppercase',
-                    color: 'var(--ink3)',
+                    padding: '12px 0',
+                    borderBottom: '1px solid var(--line)',
+                    fontSize: 13,
+                    alignItems: 'center',
                     minWidth: 560,
+                    textDecoration: 'none',
+                    color: 'inherit',
+                    cursor: 'pointer',
+                    transition: 'background .1s',
                   }}
+                  onMouseEnter={e => (e.currentTarget.style.background = 'var(--cor-destaque-suave)')}
+                  onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                 >
-                  <div>Cliente</div>
-                  {!eVendedor && <div>Vendedor</div>}
-                  <div>Empresa / Filial</div>
-                  <div style={{ textAlign: 'right' }}>Valor Orçado</div>
-                  <div>Data</div>
-                  <div>Status</div>
-                </div>
-
-                {/* Linhas */}
-                {pedidos.map((p, i) => (
-                  <div
-                    key={i}
-                    style={{
-                      display: 'grid',
-                      gridTemplateColumns: colGrid,
-                      gap: '0 16px',
-                      padding: '12px 0',
-                      borderBottom: '1px solid var(--line)',
-                      fontSize: 13,
-                      alignItems: 'center',
-                      minWidth: 560,
-                    }}
-                  >
-                    <div style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {p.cliente}
-                    </div>
-                    {!eVendedor && (
-                      <div style={{ color: 'var(--ink2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {p.vendedorId ? (mapaVendedores[p.vendedorId] ?? '—') : '—'}
-                      </div>
-                    )}
-                    <div>
-                      <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.empresa}</div>
-                      <div style={{ fontSize: 11.5, color: 'var(--ink3)', marginTop: 1 }}>{p.filial}</div>
-                    </div>
-                    <div className={styles.num} style={{ textAlign: 'right', fontSize: 13 }}>
-                      {formatMoeda(p.valorOrcado)}
-                    </div>
-                    <div className={styles.num} style={{ fontSize: 12.5, color: 'var(--ink2)' }}>
-                      {fmtData(p.dataOrcamento)}
-                    </div>
-                    <div>
-                      <span className={p.status === 'vendido' ? styles.badgeVen : styles.badgeOrc}>
-                        {p.status === 'vendido' ? 'Vendido' : 'Orçado'}
-                      </span>
-                    </div>
+                  <div style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {p.cliente}
                   </div>
-                ))}
-              </div>
+                  {!eVendedor && (
+                    <div style={{ color: 'var(--ink2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {p.vendedorId ? (mapaVendedores[p.vendedorId] ?? '—') : '—'}
+                    </div>
+                  )}
+                  <div>
+                    <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.empresa}</div>
+                    <div style={{ fontSize: 11.5, color: 'var(--ink3)', marginTop: 1 }}>{p.filial}</div>
+                  </div>
+                  <div className={styles.num} style={{ textAlign: 'right', fontSize: 13 }}>
+                    {formatMoeda(p.valorOrcado)}
+                  </div>
+                  <div className={styles.num} style={{ fontSize: 12.5, color: 'var(--ink2)' }}>
+                    {fmtData(p.dataOrcamento)}
+                  </div>
+                  <div>
+                    <span className={p.status === 'vendido' ? styles.badgeVen : p.status === 'perdido' ? styles.badgePer : styles.badgeOrc}>
+                      {p.status === 'vendido' ? 'Vendido' : p.status === 'perdido' ? 'Perdido' : 'Orçado'}
+                    </span>
+                  </div>
+                  <div>
+                    <button
+                      type="button"
+                      onClick={e => { e.preventDefault(); e.stopPropagation(); void arquivarInLinha(p.id, !mostrarArquivados) }}
+                      style={{
+                        background: 'none',
+                        border: '1px solid var(--cor-borda-sutil)',
+                        borderRadius: 6,
+                        padding: '3px 8px',
+                        fontSize: 11,
+                        color: 'var(--cor-texto-suave)',
+                        cursor: 'pointer',
+                        fontFamily: 'inherit',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {mostrarArquivados ? 'Restaurar' : 'Arquivar'}
+                    </button>
+                  </div>
+                </a>
+              ))}
+            </div>
 
-              {/* Carregar mais */}
-              {temMais && (
-                <div style={{ marginTop: 24, display: 'flex', alignItems: 'center', gap: 16 }}>
-                  <button
-                    onClick={() => buscarPedidos(paginaAtual + 1, false)}
-                    disabled={carregandoMais}
-                    className={styles.btn}
-                    style={{ fontSize: 13 }}
-                  >
-                    {carregandoMais ? 'Carregando…' : `Carregar mais (${total - pedidos.length} restantes)`}
-                  </button>
-                </div>
-              )}
-            </>
-          )}
-        </div>
+            {/* Carregar mais */}
+            {temMais && (
+              <div style={{ marginTop: 24, display: 'flex', alignItems: 'center', gap: 16 }}>
+                <button
+                  onClick={() => buscarPedidos(paginaAtual + 1, false, mostrarArquivados)}
+                  disabled={carregandoMais}
+                  className={styles.btn}
+                  style={{ fontSize: 13 }}
+                >
+                  {carregandoMais ? 'Carregando…' : `Carregar mais (${total - pedidos.length} restantes)`}
+                </button>
+              </div>
+            )}
+          </>
+        )}
       </main>
-    </div>
+    </AppLayout>
   )
 }

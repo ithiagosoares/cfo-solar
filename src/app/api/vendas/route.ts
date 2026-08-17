@@ -28,6 +28,12 @@ export async function GET(request: NextRequest) {
   if (dataInicio) filtros.dataInicio = dataInicio
   if (dataFim)    filtros.dataFim    = dataFim
 
+  if (searchParams.get('busca'))    filtros.busca    = searchParams.get('busca')!
+  const valorMinStr = searchParams.get('valorMin')
+  const valorMaxStr = searchParams.get('valorMax')
+  if (valorMinStr) { const n = parseFloat(valorMinStr); if (!isNaN(n)) filtros.valorMin = n }
+  if (valorMaxStr) { const n = parseFloat(valorMaxStr); if (!isNaN(n)) filtros.valorMax = n }
+
   let vendedorId: string | null = null
   if (papel === 'vendedor') {
     vendedorId = getVendedorId(request)
@@ -35,6 +41,10 @@ export async function GET(request: NextRequest) {
       return Response.json({ ok: false, error: 'Vendedor não identificado' }, { status: 403 })
     }
     filtros.vendedorId = vendedorId
+  } else if (searchParams.get('vendedor_id')) {
+    // admin/gestor podem filtrar por vendedor via query param
+    filtros.vendedorId = searchParams.get('vendedor_id')!
+    vendedorId = filtros.vendedorId
   }
 
   try {

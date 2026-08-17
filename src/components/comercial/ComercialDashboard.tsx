@@ -702,13 +702,14 @@ export function ComercialDashboard({ papel, vendedorId }: { papel: string; vende
 
 const selectStyle: React.CSSProperties = {
   fontSize: 13,
-  padding: '4px 8px',
-  borderRadius: 4,
-  border: '1px solid var(--line2)',
-  background: 'var(--bg)',
+  padding: '7px 12px',
+  borderRadius: 8,
+  border: '1px solid var(--cor-borda-sutil)',
+  background: 'var(--cor-superficie)',
   color: 'var(--cor-texto)',
   cursor: 'pointer',
   fontFamily: 'inherit',
+  outline: 'none',
 }
 
 // ─── Estilos de tabela compartilhados ─────────────────────────────────────────

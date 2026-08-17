@@ -4,16 +4,18 @@
 /* Fonte única de cor e tipografia do app. Mudanças de estilo começam aqui.   */
 
 :root {
-  /* Paleta nova */
+  /* Paleta */
   --cor-fundo: #EFEDE8;
-  --cor-superficie: #F7F6F3;
-  --cor-superficie-alt: #FFFFFF;
+  --cor-superficie: #FFFFFF;
   --cor-texto: #1C1C1A;
+  --cor-texto-suave: #5C5752;
   --cor-texto-secundario: #8A857C;
+  --cor-label: #8A857C;
   --cor-borda: #E4E0D8;
   --cor-borda-sutil: #DCD8D0;
   --cor-destaque: #C78A2E;
   --cor-destaque-hover: #8C5A1D;
+  --cor-destaque-suave: #F3E4CC;
   --cor-sucesso: #3E6B63;
   --cor-sucesso-bg: #EDF3F1;
   --cor-erro: #A8452F;
@@ -25,7 +27,7 @@
   --background: var(--cor-fundo);
   --paper: var(--cor-superficie);
   --foreground: var(--cor-texto);
-  --ink2: #5C5752;
+  --ink2: var(--cor-texto-suave);
   --ink3: var(--cor-texto-secundario);
   --line: var(--cor-borda);
   --line2: var(--cor-borda-sutil);
@@ -86,6 +88,14 @@ body {
 
 ::-webkit-scrollbar-thumb:hover {
   background: var(--cor-texto-secundario);
+}
+
+dialog {
+  margin: auto;
+}
+
+dialog::backdrop {
+  background: rgba(0, 0, 0, 0.4);
 }
 
 @keyframes fadeIn {

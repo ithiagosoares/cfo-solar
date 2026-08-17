@@ -1,15 +1,18 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { ArrowLeft, Plus } from 'lucide-react'
+import { useState, useEffect, useCallback } from 'react'
+import { Plus } from 'lucide-react'
 import { formatMoeda } from '@/lib/utils'
+import AppLayout from '@/components/layout/AppLayout'
+import { FilterBar, FilterInput, FilterSelect, FilterDateRange, FilterCheckbox } from '@/components/filters/FilterBar'
 import styles from '@/styles/editorial.module.css'
 
 const POR_PAGINA = 20
 
-type StatusPedido = 'orcado' | 'vendido'
+type StatusPedido = 'orcado' | 'vendido' | 'perdido'
 
 interface PedidoResumo {
+  id: string
   vendedorId: string | null
   empresa: string
   filial: string
@@ -30,9 +33,37 @@ function fmtData(d: string | null): string {
   return `${dd}/${m}/${y}`
 }
 
+const STATUS_OPTS = [
+  { value: 'orcado',  label: 'Aberto' },
+  { value: 'vendido', label: 'Ganho' },
+  { value: 'perdido', label: 'Perdido' },
+]
+
+type Filtros = { busca: string; status: string; dataInicio: string; dataFim: string; vendedorId: string; mostrarArquivados: boolean }
+const FILTROS_ZERO: Filtros = { busca: '', status: '', dataInicio: '', dataFim: '', vendedorId: '', mostrarArquivados: false }
+
+function filtrosParaUrl(f: Filtros, pagina: number): URLSearchParams {
+  const p = new URLSearchParams({ pagina: String(pagina), porPagina: String(POR_PAGINA) })
+  if (f.busca)       p.set('busca',      f.busca)
+  if (f.status)      p.set('status',     f.status)
+  if (f.dataInicio)  p.set('dataInicio', f.dataInicio)
+  if (f.dataFim)     p.set('dataFim',    f.dataFim)
+  if (f.vendedorId)          p.set('vendedor_id', f.vendedorId)
+  if (f.mostrarArquivados)   p.set('arquivados', '1')
+  return p
+}
+
+function temFiltroAtivo(f: Filtros) {
+  return f.busca || f.status || f.dataInicio || f.dataFim || f.vendedorId
+}
+
 export default function OrcamentosPage() {
   const [papel, setPapel] = useState<string | null>(null)
+  const [vendedoresOpt, setVendedoresOpt] = useState<{ id: string; nome: string }[]>([])
   const [mapaVendedores, setMapaVendedores] = useState<Record<string, string>>({})
+
+  const [filtro, setFiltro] = useState<Filtros>(FILTROS_ZERO)
+  const [filtroAtivo, setFiltroAtivo] = useState<Filtros>(FILTROS_ZERO)
 
   const [pedidos, setPedidos] = useState<PedidoResumo[]>([])
   const [total, setTotal] = useState(0)
@@ -55,6 +86,7 @@ export default function OrcamentosPage() {
       .then(r => r.json() as Promise<{ ok: boolean; vendedores?: { id: string; nome: string }[] }>)
       .then(json => {
         if (json.ok && json.vendedores) {
+          setVendedoresOpt(json.vendedores)
           const mapa: Record<string, string> = {}
           json.vendedores.forEach(v => { mapa[v.id] = v.nome })
           setMapaVendedores(mapa)
@@ -63,15 +95,14 @@ export default function OrcamentosPage() {
       .catch(() => {})
   }, [papel])
 
-  useEffect(() => {
-    if (papel !== null) buscarPedidos(1, true)
-  }, [papel]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  async function buscarPedidos(pagina: number, reset: boolean) {
+  const buscarPedidos = useCallback(async (pagina: number, reset: boolean, fa: Filtros) => {
     if (reset) setCarregandoLista(true)
     else setCarregandoMais(true)
     try {
-      const res = await fetch(`/api/orcamentos?pagina=${pagina}&porPagina=${POR_PAGINA}`)
+      const params = filtrosParaUrl(fa, pagina)
+      // Update URL without re-render
+      window.history.replaceState(null, '', `?${params}`)
+      const res = await fetch(`/api/orcamentos?${params}`)
       const json = await res.json() as { ok: boolean; pedidos?: PedidoResumo[]; total?: number }
       if (!json.ok) return
       const novos = json.pedidos ?? []
@@ -82,47 +113,55 @@ export default function OrcamentosPage() {
       if (reset) setCarregandoLista(false)
       else setCarregandoMais(false)
     }
+  }, [])
+
+  useEffect(() => {
+    if (papel !== null) buscarPedidos(1, true, filtroAtivo)
+  }, [papel, filtroAtivo]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  function handleFiltrar() {
+    setFiltroAtivo({ ...filtro })
+  }
+
+  function handleLimpar() {
+    setFiltro(FILTROS_ZERO)
+    setFiltroAtivo(FILTROS_ZERO)
+  }
+
+  async function arquivarInLinha(id: string, arquivar: boolean) {
+    const res = await fetch(`/api/orcamentos/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ arquivar }),
+    })
+    if (res.ok) buscarPedidos(1, true, filtroAtivo)
   }
 
   if (papel === null) {
     return (
-      <div className={styles.page} style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div
-          className="h-8 w-8 rounded-full border-2 animate-spin"
-          style={{ borderTopColor: 'var(--foreground)', borderRightColor: 'var(--line2)', borderBottomColor: 'var(--line2)', borderLeftColor: 'var(--line2)' }}
-        />
-      </div>
+      <AppLayout>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '80vh' }}>
+          <div
+            className="h-8 w-8 rounded-full border-2 animate-spin"
+            style={{ borderTopColor: 'var(--foreground)', borderRightColor: 'var(--line2)', borderBottomColor: 'var(--line2)', borderLeftColor: 'var(--line2)' }}
+          />
+        </div>
+      </AppLayout>
     )
   }
 
   const temMais = pedidos.length < total
   const colGrid = eVendedor
-    ? '2fr 1.3fr .9fr .9fr .65fr'
-    : '2fr .9fr 1.3fr .9fr .9fr .65fr'
+    ? '2fr 1.3fr .9fr .9fr .65fr auto'
+    : '2fr .9fr 1.3fr .9fr .9fr .65fr auto'
 
   return (
-    <div className={styles.page} style={{ minHeight: '100vh' }}>
-
-      {/* Topo */}
-      <div style={{ borderBottom: '1px solid var(--line)', padding: '18px 0' }}>
-        <div className={styles.wrap} style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <a
-            href="/inicio"
-            style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--ink3)', textDecoration: 'none' }}
-          >
-            <ArrowLeft style={{ width: 14, height: 14 }} />
-            Início
-          </a>
-          <img src="/logo.png" alt="CFO.IA" style={{ height: 36, width: 'auto' }} />
-        </div>
-      </div>
-
+    <AppLayout>
       <main className={styles.wrap} style={{ paddingTop: 40, paddingBottom: 72 }}>
 
-        {/* Cabeçalho da seção */}
-        <div className={styles.shead} style={{ marginBottom: 28, alignItems: 'flex-end' }}>
+        <div className={styles.shead} style={{ marginBottom: 24, alignItems: 'flex-end' }}>
           <div>
-            <h1 className={`${styles.serif}`} style={{ fontSize: 22, fontWeight: 600, marginBottom: 4 }}>
+            <h1 className={styles.serif} style={{ fontSize: 22, fontWeight: 600, marginBottom: 4 }}>
               {eVendedor ? 'Minha carteira' : 'Orçamentos'}
             </h1>
             <p style={{ fontSize: 13, color: 'var(--ink2)' }}>
@@ -141,6 +180,52 @@ export default function OrcamentosPage() {
           </a>
         </div>
 
+        <FilterBar
+          onFiltrar={handleFiltrar}
+          onLimpar={handleLimpar}
+          resultLabel={!carregandoLista && temFiltroAtivo(filtroAtivo)
+            ? `${total} resultado${total !== 1 ? 's' : ''} encontrado${total !== 1 ? 's' : ''}`
+            : undefined}
+        >
+          <FilterInput
+            label="Empresa"
+            value={filtro.busca}
+            onChange={v => setFiltro(f => ({ ...f, busca: v }))}
+            placeholder="Buscar empresa…"
+          />
+          <FilterSelect
+            label="Status"
+            value={filtro.status}
+            onChange={v => setFiltro(f => ({ ...f, status: v }))}
+            options={STATUS_OPTS}
+            width={130}
+          />
+          <FilterDateRange
+            label="Data do orçamento"
+            from={filtro.dataInicio}
+            to={filtro.dataFim}
+            onFrom={v => setFiltro(f => ({ ...f, dataInicio: v }))}
+            onTo={v => setFiltro(f => ({ ...f, dataFim: v }))}
+          />
+          {!eVendedor && vendedoresOpt.length > 0 && (
+            <FilterSelect
+              label="Vendedor"
+              value={filtro.vendedorId}
+              onChange={v => setFiltro(f => ({ ...f, vendedorId: v }))}
+              options={vendedoresOpt.map(v => ({ value: v.id, label: v.nome }))}
+              width={170}
+            />
+          )}
+          <FilterCheckbox
+            label="Mostrar arquivados"
+            checked={filtro.mostrarArquivados}
+            onChange={v => {
+              setFiltro(f => ({ ...f, mostrarArquivados: v }))
+              setFiltroAtivo(f => ({ ...f, mostrarArquivados: v }))
+            }}
+          />
+        </FilterBar>
+
         {carregandoLista ? (
           <p style={{ fontSize: 13, color: 'var(--ink3)' }}>Carregando…</p>
         ) : pedidos.length === 0 ? (
@@ -149,11 +234,12 @@ export default function OrcamentosPage() {
           </p>
         ) : (
           <>
-            <div style={{ marginBottom: 8, display: 'flex', justifyContent: 'flex-end' }}>
-              <span className={styles.over}>{total} registros</span>
-            </div>
+            {!temFiltroAtivo(filtroAtivo) && (
+              <div style={{ marginBottom: 8, display: 'flex', justifyContent: 'flex-end' }}>
+                <span className={styles.over}>{total} registros</span>
+              </div>
+            )}
             <div style={{ overflowX: 'auto' }}>
-              {/* Cabeçalho */}
               <div
                 style={{
                   display: 'grid',
@@ -175,12 +261,13 @@ export default function OrcamentosPage() {
                 <div style={{ textAlign: 'right' }}>Valor Orçado</div>
                 <div>Data</div>
                 <div>Status</div>
+                <div />
               </div>
 
-              {/* Linhas */}
-              {pedidos.map((p, i) => (
-                <div
-                  key={i}
+              {pedidos.map((p) => (
+                <a
+                  key={p.id}
+                  href={`/orcamentos/${p.id}/editar`}
                   style={{
                     display: 'grid',
                     gridTemplateColumns: colGrid,
@@ -190,7 +277,13 @@ export default function OrcamentosPage() {
                     fontSize: 13,
                     alignItems: 'center',
                     minWidth: 560,
+                    textDecoration: 'none',
+                    color: 'inherit',
+                    cursor: 'pointer',
+                    transition: 'background .1s',
                   }}
+                  onMouseEnter={e => (e.currentTarget.style.background = 'var(--cor-destaque-suave)')}
+                  onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                 >
                   <div style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {p.cliente}
@@ -211,18 +304,37 @@ export default function OrcamentosPage() {
                     {fmtData(p.dataOrcamento)}
                   </div>
                   <div>
-                    <span className={p.status === 'vendido' ? styles.badgeVen : styles.badgeOrc}>
-                      {p.status === 'vendido' ? 'Vendido' : 'Orçado'}
+                    <span className={p.status === 'vendido' ? styles.badgeVen : p.status === 'perdido' ? styles.badgePer : styles.badgeOrc}>
+                      {p.status === 'vendido' ? 'Vendido' : p.status === 'perdido' ? 'Perdido' : 'Orçado'}
                     </span>
                   </div>
-                </div>
+                  <div>
+                    <button
+                      type="button"
+                      onClick={e => { e.preventDefault(); e.stopPropagation(); void arquivarInLinha(p.id, !filtroAtivo.mostrarArquivados) }}
+                      style={{
+                        background: 'none',
+                        border: '1px solid var(--cor-borda-sutil)',
+                        borderRadius: 6,
+                        padding: '3px 8px',
+                        fontSize: 11,
+                        color: 'var(--cor-texto-suave)',
+                        cursor: 'pointer',
+                        fontFamily: 'inherit',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {filtroAtivo.mostrarArquivados ? 'Restaurar' : 'Arquivar'}
+                    </button>
+                  </div>
+                </a>
               ))}
             </div>
 
             {temMais && (
               <div style={{ marginTop: 24 }}>
                 <button
-                  onClick={() => buscarPedidos(paginaAtual + 1, false)}
+                  onClick={() => buscarPedidos(paginaAtual + 1, false, filtroAtivo)}
                   disabled={carregandoMais}
                   className={styles.btn}
                   style={{ fontSize: 13 }}
@@ -234,6 +346,6 @@ export default function OrcamentosPage() {
           </>
         )}
       </main>
-    </div>
+    </AppLayout>
   )
 }

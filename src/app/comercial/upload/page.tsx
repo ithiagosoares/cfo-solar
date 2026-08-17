@@ -2,6 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import AppLayout from '@/components/layout/AppLayout'
 import styles from '@/styles/editorial.module.css'
 import { formatMoeda } from '@/lib/utils'
 
@@ -86,7 +87,7 @@ export default function ComercialUploadPage() {
       .then(r => r.json())
       .then((d: { papel?: string }) => {
         if (d.papel !== 'administrador' && d.papel !== 'gestor') {
-          router.replace('/inicio')
+          router.replace('/dashboard')
         }
       })
       .catch(() => {})
@@ -248,7 +249,7 @@ export default function ComercialUploadPage() {
   if (concluido) {
     const standalone = concluido.total === 0 && concluido.totaisOficiais > 0
     return (
-      <div className={styles.page}>
+      <AppLayout>
         <div className={styles.wrap} style={{ maxWidth: 560, paddingTop: 80, paddingBottom: 60, textAlign: 'center' }}>
           <div style={{ fontSize: 44, marginBottom: 20, color: 'var(--marca)' }}>✓</div>
           <div className={`${styles.stitle} ${styles.serif}`} style={{ marginBottom: 8 }}>
@@ -270,14 +271,14 @@ export default function ComercialUploadPage() {
               Nova importação
             </button>
             <button
-              onClick={() => router.push('/inicio')}
+              onClick={() => router.push('/dashboard')}
               style={btnGhostStyle}
             >
-              ← Início
+              ← Dashboard
             </button>
           </div>
         </div>
-      </div>
+      </AppLayout>
     )
   }
 
@@ -285,7 +286,7 @@ export default function ComercialUploadPage() {
 
   if (preview) {
     return (
-      <div className={styles.page}>
+      <AppLayout>
         <div className={styles.wrap} style={{ paddingTop: 40, paddingBottom: 80 }}>
           {/* Navegação */}
           <button onClick={descartar} disabled={descartando} style={btnGhostStyle}>
@@ -521,17 +522,17 @@ export default function ComercialUploadPage() {
             )}
           </div>
         </div>
-      </div>
+      </AppLayout>
     )
   }
 
   // ─── Estado: upload ───────────────────────────────────────────────────────────
 
   return (
-    <div className={styles.page}>
+    <AppLayout>
       <div className={styles.wrap} style={{ maxWidth: 680, paddingTop: 40, paddingBottom: 60 }}>
-        <button onClick={() => router.push('/inicio')} style={btnGhostStyle}>
-          ← Início
+        <button onClick={() => router.push('/dashboard')} style={btnGhostStyle}>
+          ← Dashboard
         </button>
 
         <div className={`${styles.stitle} ${styles.serif}`} style={{ marginTop: 24, marginBottom: 6 }}>
@@ -686,7 +687,7 @@ export default function ComercialUploadPage() {
           {processando ? 'Processando…' : 'Processar e revisar'}
         </button>
       </div>
-    </div>
+    </AppLayout>
   )
 }
 

@@ -16,7 +16,7 @@
 .serif { font-family: var(--font-serif); }
 /* IBM Plex Mono em TODOS os números — valores, datas, quantidades, KPIs */
 .num { font-variant-numeric: tabular-nums lining-nums; letter-spacing: 0; font-family: var(--font-plex-mono), 'IBM Plex Mono', monospace; }
-.wrap { max-width: 1440px; margin: 0 auto; padding: 0 32px; }
+.wrap { max-width: 1100px; margin: 0 auto; padding: 0 32px; }
 
 /* ─── Item de menu dropdown ──────────────────────────────────────────────── */
 
@@ -64,10 +64,10 @@
 
 .panel {
   border: 1px solid var(--cor-borda);
-  padding: 24px 28px;
-  border-radius: 24px;
-  background: var(--cor-superficie-alt);
-  box-shadow: 0 1px 2px rgba(28,28,26,.04);
+  padding: 24px 26px;
+  border-radius: 20px;
+  background: var(--cor-superficie);
+  box-shadow: 0 1px 3px rgba(28,28,26,.05);
   transition: transform 0.25s ease-out, box-shadow 0.25s ease-out, border-color 0.25s ease-out;
 }
 .panelTitulo { font-size: 10.5px; font-weight: 600; letter-spacing: .11em; text-transform: uppercase; color: var(--ink3); margin-bottom: 16px; }
@@ -90,7 +90,7 @@
 .kpis { display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1px solid var(--line2); border-bottom: 1px solid var(--line2); margin-bottom: 52px; }
 .kpi { padding: 24px 28px 26px; border-right: 1px solid var(--line); transition: background 0.2s ease; }
 .kpi:last-child { border-right: none; }
-.kpi:hover { background: var(--cor-superficie-alt); }
+.kpi:hover { background: var(--cor-superficie); }
 .kl { font-size: 10.5px; font-weight: 600; letter-spacing: .11em; text-transform: uppercase; color: var(--ink3); }
 .kv { font-size: 46px; line-height: 1; font-weight: 400; margin-top: 16px; }
 .kvSmall { font-size: 28px; line-height: 1; font-weight: 400; margin-top: 12px; }
@@ -186,14 +186,14 @@
 
 /* ─── Botões / formulário ───────────────────────────────────────────────── */
 
-.btn { border: 1px solid var(--line2); background: none; color: var(--ink2); font-family: inherit; font-size: 13px; padding: 8px 16px; cursor: pointer; transition: border-color .15s, color .15s; border-radius: 8px; }
-.btn:hover { border-color: var(--marca); color: var(--marca); }
+.btn { border: 1px solid var(--cor-borda-sutil); background: none; color: var(--ink2); font-family: inherit; font-size: 13px; padding: 9px 16px; cursor: pointer; transition: border-color .15s, color .15s; border-radius: 10px; }
+.btn:hover { border-color: var(--cor-destaque); color: var(--cor-destaque); }
 .btn:disabled { opacity: .4; cursor: default; }
-.btnOn { background: var(--marca); border-color: var(--marca); color: var(--background); }
-.btnOn:hover { color: var(--background); opacity: .9; }
-.btnPrimary { border: 1px solid var(--marca); background: var(--marca); color: var(--background); font-family: inherit; font-size: 13px; padding: 9px 18px; cursor: pointer; border-radius: 8px; transition: background 0.2s ease, transform 0.15s ease; }
-.btnPrimary:hover { background: var(--cor-destaque-hover); border-color: var(--cor-destaque-hover); transform: scale(1.02); }
-.btnPrimary:disabled { opacity: .35; cursor: default; transform: none; }
+.btnOn { background: var(--cor-destaque); border-color: var(--cor-destaque); color: #fff; }
+.btnOn:hover { color: #fff; background: var(--cor-destaque-hover); border-color: var(--cor-destaque-hover); }
+.btnPrimary { border: 1px solid var(--cor-destaque); background: var(--cor-destaque); color: #fff; font-family: inherit; font-size: 13px; padding: 10px 20px; cursor: pointer; border-radius: 10px; transition: background 0.18s ease, border-color 0.18s ease; }
+.btnPrimary:hover { background: var(--cor-destaque-hover); border-color: var(--cor-destaque-hover); }
+.btnPrimary:disabled { opacity: .35; cursor: default; }
 
 .toggleGroup { display: inline-flex; border: 1px solid var(--line2); }
 .toggleItem { padding: 6px 16px; font-size: 12.5px; color: var(--ink2); background: none; border: none; cursor: pointer; font-family: inherit; border-right: 1px solid var(--line2); transition: background .12s, color .12s; }
@@ -202,10 +202,10 @@
 .toggleItemOn { background: var(--marca); color: var(--background); }
 .toggleItemOn:hover { color: var(--background); opacity: .9; }
 
-.field { display: flex; flex-direction: column; gap: 5px; }
-.fieldLabel { font-size: 10.5px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--ink3); }
-.select, .input { border: none; border-bottom: 1px solid var(--line2); background: none; color: var(--foreground); font-family: inherit; font-size: 13.5px; padding: 6px 2px; outline: none; transition: border-color .15s; }
-.select:focus, .input:focus { border-bottom-color: var(--marca); }
+.field { display: flex; flex-direction: column; gap: 6px; }
+.fieldLabel { font-size: 10.5px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--cor-label); }
+.select, .input { border: 1px solid var(--cor-borda-sutil); border-radius: 8px; background: var(--cor-superficie); color: var(--foreground); font-family: inherit; font-size: 13.5px; padding: 9px 12px; outline: none; transition: border-color .15s; }
+.select:focus, .input:focus { border-color: var(--cor-destaque); }
 
 /* ─── Barra de progresso fina ───────────────────────────────────────────── */
 
@@ -236,8 +236,8 @@
 .pfiltroOn { color: var(--marca); border-bottom-color: var(--marca); }
 .filtroCustom { display: flex; align-items: center; gap: 10px; padding-bottom: 11px; }
 .filtroLbl { font-size: 10px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--ink3); }
-.filtroDate { border: none; border-bottom: 1px solid var(--line2); background: none; color: var(--foreground); font-family: inherit; font-size: 12px; padding: 0 2px 2px; outline: none; width: 112px; cursor: pointer; }
-.filtroDate:focus { border-bottom-color: var(--marca); }
+.filtroDate { border: 1px solid var(--cor-borda-sutil); border-radius: 8px; background: var(--cor-superficie); color: var(--foreground); font-family: inherit; font-size: 12px; padding: 6px 10px; outline: none; width: 120px; cursor: pointer; transition: border-color .15s; }
+.filtroDate:focus { border-color: var(--cor-destaque); }
 
 /* ─── Seletor de área (Financeiro / Comercial) ──────────────────────────── */
 
@@ -296,14 +296,15 @@
 
 .badgeOrc { font-size: 10.5px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--baixo); }
 .badgeVen { font-size: 10.5px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--positivo); }
+.badgePer { font-size: 10.5px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--cor-texto-suave); }
 
 /* ─── Edit panel inline ──────────────────────────────────────────────── */
 
-.editPanel { background: var(--paper); display: flex; gap: 20px; align-items: flex-end; padding: 16px 20px; flex-wrap: wrap; border-bottom: 1px solid var(--line); }
+.editPanel { background: var(--cor-superficie); display: flex; gap: 20px; align-items: flex-end; padding: 16px 20px; flex-wrap: wrap; border-bottom: 1px solid var(--line); border-radius: 8px; margin-bottom: 8px; }
 .editField { display: flex; flex-direction: column; gap: 6px; }
-.editLabel { font-size: 10px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--ink3); }
-.editInput { border: none; border-bottom: 1px solid var(--line2); padding: 6px 2px; font-size: 13.5px; font-family: inherit; background: transparent; color: var(--foreground); outline: none; }
-.editInput:focus { border-bottom-color: var(--accentCom); }
+.editLabel { font-size: 10.5px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--cor-label); }
+.editInput { border: 1px solid var(--cor-borda-sutil); border-radius: 8px; padding: 8px 10px; font-size: 13.5px; font-family: inherit; background: var(--cor-superficie); color: var(--foreground); outline: none; transition: border-color .15s; }
+.editInput:focus { border-color: var(--cor-destaque); }
 .actBtn { font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; cursor: pointer; background: none; border: none; font-family: inherit; padding: 0; }
 .actOk { color: var(--positivo); }
 .actNo { color: var(--critico); }
@@ -333,15 +334,15 @@
 
 /* ─── Upload de Relatório (IA) drop zone ────────────────────────────── */
 
-.dropCom { margin-top: 32px; border: 1px dashed var(--line2); padding: 70px 24px; text-align: center; cursor: pointer; }
-.dropCom:hover { border-color: var(--accentCom); }
+.dropCom { margin-top: 32px; border: 2px dashed var(--cor-borda-sutil); border-radius: 20px; padding: 70px 24px; text-align: center; cursor: pointer; background: var(--cor-superficie); transition: border-color .2s; }
+.dropCom:hover { border-color: var(--cor-destaque); }
 .dropTitle { font-size: 15.5px; font-weight: 500; }
 .dropCaption { font-size: 12.5px; color: var(--ink3); margin-top: 6px; }
 
 /* ─── Tabela de período com selector  ──────────────────────────────── */
 
-.periodSel { border: 1px solid var(--line2); background: transparent; font-size: 12.5px; padding: 8px 12px; color: var(--foreground); font-family: inherit; cursor: pointer; outline: none; }
-.periodSel:focus { border-color: var(--accentCom); }
+.periodSel { border: 1px solid var(--cor-borda-sutil); border-radius: 8px; background: var(--cor-superficie); font-size: 12.5px; padding: 8px 12px; color: var(--foreground); font-family: inherit; cursor: pointer; outline: none; transition: border-color .15s; }
+.periodSel:focus { border-color: var(--cor-destaque); }
 .totalLine { margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--line2); }
 .totalVal { font-size: 34px; margin-top: 6px; }
 
@@ -350,4 +351,138 @@
   .kpi:nth-child(2) { border-right: none; }
   .pgrid { grid-template-columns: 1fr; }
   .wrap { padding: 0 20px; }
+}
+
+/* ─── Sidebar + AppLayout ───────────────────────────────────────────────── */
+
+.sidebar {
+  width: 232px;
+  flex-shrink: 0;
+  background: var(--cor-fundo);
+  border-right: 1px solid var(--cor-borda);
+  min-height: 100vh;
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  z-index: 30;
+  overflow: hidden;
+}
+
+.sidebarLogo {
+  padding: 18px 20px 16px;
+  border-bottom: 1px solid var(--cor-borda);
+  flex-shrink: 0;
+}
+
+.sidebarLogoText {
+  font-family: var(--font-serif);
+  font-size: 20px;
+  font-weight: 500;
+  color: var(--cor-destaque);
+  letter-spacing: .01em;
+}
+
+.sidebarNav {
+  flex: 1;
+  padding: 14px 10px;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+.sidebarNav::-webkit-scrollbar { display: none; }
+
+.sidebarSection { margin-bottom: 22px; }
+
+.sidebarSectionLabel {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--cor-texto-secundario);
+  padding: 0 10px;
+  margin-bottom: 4px;
+  display: block;
+}
+
+.sidebarItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  border-radius: 10px;
+  font-size: 13px;
+  color: var(--cor-texto-suave);
+  text-decoration: none;
+  cursor: pointer;
+  transition: background .12s, color .12s;
+  margin-bottom: 1px;
+}
+.sidebarItem:hover {
+  background: var(--cor-destaque-suave);
+  color: var(--cor-texto);
+}
+
+.sidebarItemActive {
+  background: var(--cor-destaque-suave);
+  color: var(--cor-destaque-hover);
+  font-weight: 600;
+}
+
+.sidebarFooter {
+  padding: 12px 10px;
+  border-top: 1px solid var(--cor-borda);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.sidebarUserInfo {
+  flex: 1;
+  min-width: 0;
+  padding: 0 2px;
+}
+
+.sidebarUserName {
+  font-size: 12.5px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--cor-texto);
+}
+
+.sidebarUserRole {
+  font-size: 11px;
+  color: var(--cor-texto-secundario);
+  margin-top: 1px;
+}
+
+.sidebarLogout {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  border: none;
+  background: none;
+  color: var(--cor-texto-secundario);
+  cursor: pointer;
+  transition: background .12s, color .12s;
+  flex-shrink: 0;
+}
+.sidebarLogout:hover {
+  background: var(--cor-borda);
+  color: var(--cor-texto);
+}
+
+.appContent {
+  margin-left: 232px;
+  min-height: 100vh;
+  background: var(--cor-fundo);
+  flex: 1;
+  min-width: 0;
 }

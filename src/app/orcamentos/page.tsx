@@ -5,6 +5,8 @@ import { Plus } from 'lucide-react'
 import { formatMoeda } from '@/lib/utils'
 import AppLayout from '@/components/layout/AppLayout'
 import { FilterBar, FilterInput, FilterSelect, FilterDateRange, FilterCheckbox } from '@/components/filters/FilterBar'
+import { StatusSelect } from '@/components/ui/StatusSelect'
+import { ETAPA_FUNIL_OPCOES, STATUS_VENDA_OPCOES } from '@/lib/status-pedido-config'
 import styles from '@/styles/editorial.module.css'
 
 const POR_PAGINA = 20
@@ -25,6 +27,8 @@ interface PedidoResumo {
   origem: string
   numeroPedido: string | null
   criadoEm: string
+  etapaFunil: string | null
+  statusVenda: string | null
 }
 
 function fmtData(d: string | null): string {
@@ -137,6 +141,16 @@ export default function OrcamentosPage() {
     if (res.ok) buscarPedidos(1, true, filtroAtivo)
   }
 
+  async function salvarStatusPedido(id: string, campo: 'etapaFunil' | 'statusVenda', valor: string) {
+    const res = await fetch(`/api/comercial-pedidos/${id}/status`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ [campo]: valor }),
+    })
+    if (!res.ok) throw new Error('Falha ao salvar status')
+    setPedidos(prev => prev.map(p => p.id === id ? { ...p, [campo]: valor } : p))
+  }
+
   if (papel === null) {
     return (
       <AppLayout>
@@ -152,8 +166,8 @@ export default function OrcamentosPage() {
 
   const temMais = pedidos.length < total
   const colGrid = eVendedor
-    ? '2fr 1.3fr .9fr .9fr .65fr auto'
-    : '2fr .9fr 1.3fr .9fr .9fr .65fr auto'
+    ? '2fr 1.3fr .9fr .9fr .65fr 1fr 1fr auto'
+    : '2fr .9fr 1.3fr .9fr .9fr .65fr 1fr 1fr auto'
 
   return (
     <AppLayout>
@@ -252,7 +266,7 @@ export default function OrcamentosPage() {
                   letterSpacing: '.1em',
                   textTransform: 'uppercase' as const,
                   color: 'var(--ink3)',
-                  minWidth: 560,
+                  minWidth: 760,
                 }}
               >
                 <div>Cliente</div>
@@ -261,6 +275,8 @@ export default function OrcamentosPage() {
                 <div style={{ textAlign: 'right' }}>Valor Orçado</div>
                 <div>Data</div>
                 <div>Status</div>
+                <div>Etapa do Funil</div>
+                <div>Status da Venda</div>
                 <div />
               </div>
 
@@ -276,7 +292,7 @@ export default function OrcamentosPage() {
                     borderBottom: '1px solid var(--line)',
                     fontSize: 13,
                     alignItems: 'center',
-                    minWidth: 560,
+                    minWidth: 760,
                     textDecoration: 'none',
                     color: 'inherit',
                     cursor: 'pointer',
@@ -307,6 +323,24 @@ export default function OrcamentosPage() {
                     <span className={p.status === 'vendido' ? styles.badgeVen : p.status === 'perdido' ? styles.badgePer : styles.badgeOrc}>
                       {p.status === 'vendido' ? 'Vendido' : p.status === 'perdido' ? 'Perdido' : 'Orçado'}
                     </span>
+                  </div>
+                  <div>
+                    <StatusSelect
+                      value={p.etapaFunil ?? 'Novo'}
+                      opcoes={ETAPA_FUNIL_OPCOES}
+                      onSave={valor => salvarStatusPedido(p.id, 'etapaFunil', valor)}
+                    />
+                  </div>
+                  <div>
+                    {p.status === 'vendido' ? (
+                      <StatusSelect
+                        value={p.statusVenda ?? 'Venda Fechada'}
+                        opcoes={STATUS_VENDA_OPCOES}
+                        onSave={valor => salvarStatusPedido(p.id, 'statusVenda', valor)}
+                      />
+                    ) : (
+                      <span style={{ color: 'var(--ink3)' }}>—</span>
+                    )}
                   </div>
                   <div>
                     <button

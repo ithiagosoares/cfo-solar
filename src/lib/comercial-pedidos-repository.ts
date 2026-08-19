@@ -9,6 +9,13 @@ const TABELA = 'comercial_pedidos'
 // ─── Tipos públicos ───────────────────────────────────────────────────────────
 
 export type StatusPedido = 'orcado' | 'vendido' | 'perdido'
+export type EtapaFunil  = 'Novo' | 'Em contato' | 'Negociação' | 'Aguardando decisão' | 'Fechado' | 'Perdido'
+export type StatusVenda = 'Venda Fechada' | 'Faturamento Pendente' | 'Aguardando emissão de NF' | 'Faturado' | 'Entregue' | 'Problema Reportado' | 'Pós-venda Concluído'
+
+export const ETAPAS_FUNIL: readonly EtapaFunil[] =
+  ['Novo', 'Em contato', 'Negociação', 'Aguardando decisão', 'Fechado', 'Perdido']
+export const STATUS_VENDA_VALORES: readonly StatusVenda[] =
+  ['Venda Fechada', 'Faturamento Pendente', 'Aguardando emissão de NF', 'Faturado', 'Entregue', 'Problema Reportado', 'Pós-venda Concluído']
 
 export interface PedidoResumo {
   id: string
@@ -26,6 +33,8 @@ export interface PedidoResumo {
   numeroPedido: string | null
   criadoEm: string
   arquivado: boolean
+  etapaFunil: EtapaFunil | null
+  statusVenda: StatusVenda | null
 }
 
 export interface PedidoCompleto extends PedidoResumo {
@@ -112,6 +121,7 @@ export async function inserirPedidosImportacao(
     numero_pedido:   r.numeroOrcamento || null,
     origem:          'upload_estruturado' as const,
     importacao_id:   importacaoId,
+    status_venda:    r.status === 'vendido' ? ('Venda Fechada' as StatusVenda) : null,
   }))
 
   const semNumeroPedido = rows.filter(r => r.numero_pedido === null)
@@ -160,6 +170,7 @@ export async function inserirPedidoManual(dados: DadosPedidoManual): Promise<voi
       status:         dados.status,
       valor_vendido:  dados.status === 'vendido' ? dados.valorVendido : null,
       data_venda:     dados.status === 'vendido' ? (dados.dataVenda || null) : null,
+      status_venda:   dados.status === 'vendido' ? ('Venda Fechada' as StatusVenda) : null,
       numero_pedido:  null,
       origem:         'manual' as const,
       importacao_id:  null,
@@ -177,6 +188,7 @@ export async function inserirPedidoManual(dados: DadosPedidoManual): Promise<voi
 // ─── VendaResumo ─────────────────────────────────────────────────────────────
 
 export interface VendaResumo {
+  id: string
   vendedorId: string | null
   empresa: string
   filial: string
@@ -185,6 +197,7 @@ export interface VendaResumo {
   dataVenda: string
   origem: string
   numeroPedido: string | null
+  statusVenda: StatusVenda | null
 }
 
 // ─── Queries ──────────────────────────────────────────────────────────────────
@@ -222,12 +235,14 @@ export async function listarPedidos(filtros: {
     numero_pedido: string | null
     created_at: string
     arquivado: boolean
+    etapa_funil: EtapaFunil | null
+    status_venda: StatusVenda | null
   }
 
   let query = supabaseAdmin
     .from(TABELA)
     .select(
-      'id, vendedor_id, empresa, filial, cliente, cliente_cnpj, valor_orcado, data_orcamento, status, valor_vendido, data_venda, origem, numero_pedido, created_at, arquivado',
+      'id, vendedor_id, empresa, filial, cliente, cliente_cnpj, valor_orcado, data_orcamento, status, valor_vendido, data_venda, origem, numero_pedido, created_at, arquivado, etapa_funil, status_venda',
       { count: 'exact' },
     )
     .order('created_at', { ascending: false })
@@ -261,6 +276,8 @@ export async function listarPedidos(filtros: {
       numeroPedido:  row.numero_pedido,
       criadoEm:      row.created_at,
       arquivado:     row.arquivado,
+      etapaFunil:    row.etapa_funil,
+      statusVenda:   row.status_venda,
     })),
     total: count ?? 0,
   }
@@ -285,11 +302,13 @@ export async function buscarPedidoPorId(id: string): Promise<PedidoCompleto | nu
     importacao_id: string | null
     created_at: string
     arquivado: boolean
+    etapa_funil: EtapaFunil | null
+    status_venda: StatusVenda | null
   }
 
   const { data, error } = await supabaseAdmin
     .from(TABELA)
-    .select('id, vendedor_id, empresa, filial, cliente, cliente_cnpj, valor_orcado, data_orcamento, status, valor_vendido, data_venda, origem, numero_pedido, importacao_id, created_at, arquivado')
+    .select('id, vendedor_id, empresa, filial, cliente, cliente_cnpj, valor_orcado, data_orcamento, status, valor_vendido, data_venda, origem, numero_pedido, importacao_id, created_at, arquivado, etapa_funil, status_venda')
     .eq('id', id)
     .single()
 
@@ -313,6 +332,8 @@ export async function buscarPedidoPorId(id: string): Promise<PedidoCompleto | nu
     importacaoId:  row.importacao_id,
     criadoEm:      row.created_at,
     arquivado:     row.arquivado,
+    etapaFunil:    row.etapa_funil,
+    statusVenda:   row.status_venda,
   }
 }
 
@@ -325,9 +346,14 @@ export interface DadosAtualizacaoPedido {
   dataOrcamento?: string | null
   valorVendido?: number | null
   dataVenda?: string | null
+  etapaFunil?: EtapaFunil
+  statusVenda?: StatusVenda
 }
 
 // Atualiza campos editáveis de um pedido. Retorna true se atualizado com sucesso.
+// Centraliza a regra "status virou vendido -> status_venda = 'Venda Fechada'" aqui,
+// para valer em qualquer chamador (PATCH genérico de orçamento, endpoint de status, etc.)
+// sem duplicar a lógica em cada rota — ver CLAUDE.md, seção 7, regra 4.
 export async function atualizarPedido(id: string, dados: DadosAtualizacaoPedido): Promise<void> {
   const patch: Record<string, unknown> = {}
   if (dados.empresa       !== undefined) patch.empresa       = dados.empresa
@@ -338,11 +364,18 @@ export async function atualizarPedido(id: string, dados: DadosAtualizacaoPedido)
   if (dados.dataOrcamento !== undefined) patch.data_orcamento = dados.dataOrcamento
   if (dados.valorVendido  !== undefined) patch.valor_vendido = dados.valorVendido
   if (dados.dataVenda     !== undefined) patch.data_venda    = dados.dataVenda
+  if (dados.etapaFunil    !== undefined) patch.etapa_funil   = dados.etapaFunil
+  if (dados.statusVenda   !== undefined) patch.status_venda  = dados.statusVenda
 
-  // Se status mudou para orcado ou perdido, limpa campos de venda
+  // Se status mudou para orcado ou perdido, limpa campos de venda (status_venda
+  // só faz sentido pós-venda). Se virou vendido, garante status_venda preenchido
+  // — a menos que o chamador já tenha passado um statusVenda explícito nesta mesma chamada.
   if (dados.status === 'orcado' || dados.status === 'perdido') {
     patch.valor_vendido = null
     patch.data_venda    = null
+    patch.status_venda  = null
+  } else if (dados.status === 'vendido' && dados.statusVenda === undefined) {
+    patch.status_venda = 'Venda Fechada' as StatusVenda
   }
 
   const { error } = await supabaseAdmin
@@ -372,6 +405,7 @@ export async function listarVendas(filtros: {
   const to        = from + porPagina - 1
 
   type Row = {
+    id: string
     vendedor_id: string | null
     empresa: string
     filial: string
@@ -380,12 +414,13 @@ export async function listarVendas(filtros: {
     data_venda: string | null
     origem: string
     numero_pedido: string | null
+    status_venda: StatusVenda | null
   }
 
   let dataQuery = supabaseAdmin
     .from(TABELA)
     .select(
-      'vendedor_id, empresa, filial, cliente, valor_vendido, data_venda, origem, numero_pedido',
+      'id, vendedor_id, empresa, filial, cliente, valor_vendido, data_venda, origem, numero_pedido, status_venda',
       { count: 'exact' },
     )
     .eq('status', 'vendido')
@@ -436,6 +471,7 @@ export async function listarVendas(filtros: {
 
   return {
     vendas: (dataResult.data ?? []).map((row: Row) => ({
+      id:           row.id,
       vendedorId:   row.vendedor_id,
       empresa:      row.empresa,
       filial:       row.filial,
@@ -444,6 +480,7 @@ export async function listarVendas(filtros: {
       dataVenda:    row.data_venda ?? '',
       origem:       row.origem,
       numeroPedido: row.numero_pedido,
+      statusVenda:  row.status_venda,
     })),
     total:        dataResult.count ?? 0,
     totalVendido,

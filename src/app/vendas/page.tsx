@@ -4,11 +4,14 @@ import { useState, useEffect, useCallback } from 'react'
 import { formatMoeda } from '@/lib/utils'
 import AppLayout from '@/components/layout/AppLayout'
 import { FilterBar, FilterInput, FilterSelect, FilterMonth, FilterNumberRange } from '@/components/filters/FilterBar'
+import { StatusSelect } from '@/components/ui/StatusSelect'
+import { STATUS_VENDA_OPCOES } from '@/lib/status-pedido-config'
 import styles from '@/styles/editorial.module.css'
 
 const POR_PAGINA = 20
 
 interface VendaResumo {
+  id: string
   vendedorId: string | null
   empresa: string
   filial: string
@@ -17,6 +20,7 @@ interface VendaResumo {
   dataVenda: string
   origem: string
   numeroPedido: string | null
+  statusVenda: string | null
 }
 
 interface VendasApiResponse {
@@ -140,6 +144,16 @@ export default function VendasPage() {
   function handleFiltrar() { setFiltroAtivo({ ...filtro }) }
   function handleLimpar()  { setFiltro(FILTROS_ZERO); setFiltroAtivo(FILTROS_ZERO) }
 
+  async function salvarStatusVenda(id: string, valor: string) {
+    const res = await fetch(`/api/comercial-pedidos/${id}/status`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ statusVenda: valor }),
+    })
+    if (!res.ok) throw new Error('Falha ao salvar status')
+    setVendas(prev => prev.map(v => v.id === id ? { ...v, statusVenda: valor } : v))
+  }
+
   if (papel === null) {
     return (
       <AppLayout>
@@ -155,8 +169,8 @@ export default function VendasPage() {
 
   const temMais = vendas.length < total
   const colGrid = eVendedor
-    ? '2.5fr 1.2fr 1.3fr .9fr'
-    : '2fr 1fr 1.2fr 1.3fr .9fr'
+    ? '2.5fr 1.2fr 1.3fr .9fr 1fr'
+    : '2fr 1fr 1.2fr 1.3fr .9fr 1fr'
 
   // Valor a exibir como total principal: oficial (ERP) se disponível, senão calculado
   const valorExibido  = totalVendidoOficial ?? totalVendido
@@ -296,7 +310,7 @@ export default function VendasPage() {
                   letterSpacing: '.1em',
                   textTransform: 'uppercase' as const,
                   color: 'var(--ink3)',
-                  minWidth: 520,
+                  minWidth: 620,
                 }}
               >
                 <div>Cliente</div>
@@ -304,12 +318,13 @@ export default function VendasPage() {
                 <div>Empresa / Filial</div>
                 <div style={{ textAlign: 'right' }}>Valor Vendido</div>
                 <div>Data Venda</div>
+                <div>Status da Venda</div>
               </div>
 
               {/* Linhas */}
-              {vendas.map((v, i) => (
+              {vendas.map(v => (
                 <div
-                  key={i}
+                  key={v.id}
                   style={{
                     display: 'grid',
                     gridTemplateColumns: colGrid,
@@ -318,7 +333,7 @@ export default function VendasPage() {
                     borderBottom: '1px solid var(--line)',
                     fontSize: 13,
                     alignItems: 'center',
-                    minWidth: 520,
+                    minWidth: 620,
                   }}
                 >
                   <div style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -338,6 +353,13 @@ export default function VendasPage() {
                   </div>
                   <div className={styles.num} style={{ fontSize: 12.5, color: 'var(--ink2)' }}>
                     {fmtData(v.dataVenda)}
+                  </div>
+                  <div>
+                    <StatusSelect
+                      value={v.statusVenda ?? 'Venda Fechada'}
+                      opcoes={STATUS_VENDA_OPCOES}
+                      onSave={valor => salvarStatusVenda(v.id, valor)}
+                    />
                   </div>
                 </div>
               ))}

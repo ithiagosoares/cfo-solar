@@ -196,6 +196,26 @@ create policy "apenas_service_role" on comercial_importacoes using (false);
 --   alter table comercial_pedidos
 --     add constraint uniq_pedido_empresa unique (numero_pedido, empresa);
 
+-- ─── comercial_pedidos — etapa_funil / status_venda — adicionado 2026-08-19 ─
+-- etapa_funil: estágio do pedido no funil comercial (editável livremente pelo usuário).
+-- status_venda: acompanhamento leve de pós-venda, só relevante quando status='vendido'.
+-- Ambos os campos NÃO são o status técnico do ERP (comercial_pedidos.status) — são
+-- camadas de acompanhamento comercial por cima, como status_pos_venda já era.
+-- Já rodado manualmente no SQL Editor do Supabase:
+--
+--   alter table comercial_pedidos add column etapa_funil text default 'Novo';
+--   alter table comercial_pedidos add column status_venda text default null;
+--   alter table comercial_pedidos add constraint etapa_funil_check
+--     check (etapa_funil in ('Novo', 'Em contato', 'Negociação', 'Aguardando decisão', 'Fechado', 'Perdido'));
+--   alter table comercial_pedidos add constraint status_venda_check
+--     check (status_venda is null or status_venda in (
+--       'Venda Fechada', 'Faturamento Pendente', 'Aguardando emissão de NF',
+--       'Faturado', 'Entregue', 'Problema Reportado', 'Pós-venda Concluído'
+--     ));
+--
+-- Nenhum GRANT/RLS adicional necessário — as colunas novas herdam o grant a
+-- service_role e a policy "apenas_service_role" já existentes na tabela.
+
 -- ─── investimentos_capex — adicionado 2026-07-13 ───────────────────────────
 
 create table investimentos_capex (

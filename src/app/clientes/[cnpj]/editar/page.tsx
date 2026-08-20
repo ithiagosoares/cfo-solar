@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import AppLayout from '@/components/layout/AppLayout'
+import { useListasCrm } from '@/hooks/useListasCrm'
 import styles from '@/styles/editorial.module.css'
 
 // ─── Constantes ──────────────────────────────────────────────────────────────
@@ -26,15 +27,6 @@ const ORIGEM_LEAD_OPT = [
   { value: 'outro',             label: 'Outro' },
 ]
 
-const STATUS_CRM_OPT = [
-  { value: 'novo_lead',     label: 'Novo Lead' },
-  { value: 'em_contato',    label: 'Em Contato' },
-  { value: 'negociando',    label: 'Negociando' },
-  { value: 'cliente_ativo', label: 'Cliente Ativo' },
-  { value: 'inativo',       label: 'Inativo' },
-  { value: 'perdido',       label: 'Perdido' },
-]
-
 const CANAL_OPT = [
   { value: '',          label: 'Não definido' },
   { value: 'whatsapp',  label: 'WhatsApp' },
@@ -55,7 +47,7 @@ interface ClienteCompleto {
   telefone: string
   nomeContato: string | null
   email: string | null
-  statusCrm: string
+  listaId: string
   ultimoContato: string | null
   proximaAcao: string | null
   proximaAcaoData: string | null
@@ -156,7 +148,8 @@ export default function EditarClientePage() {
   const [emailContato, setEmailContato] = useState('')
 
   // Dados CRM
-  const [statusCrm, setStatusCrm] = useState('novo_lead')
+  const { listas } = useListasCrm()
+  const [listaId, setListaId] = useState('')
   const [ultimoContato, setUltimoContato] = useState('')
   const [proximaAcao, setProximaAcao] = useState('')
   const [proximaAcaoData, setProximaAcaoData] = useState('')
@@ -191,7 +184,7 @@ export default function EditarClientePage() {
         setTelefone(c.telefone)
         setNomeContato(c.nomeContato ?? '')
         setEmailContato(c.email ?? '')
-        setStatusCrm(c.statusCrm)
+        setListaId(c.listaId)
         setUltimoContato(c.ultimoContato ?? '')
         setProximaAcao(c.proximaAcao ?? '')
         setProximaAcaoData(c.proximaAcaoData ?? '')
@@ -235,7 +228,7 @@ export default function EditarClientePage() {
       telefone:          telefone.trim(),
       nomeContato:       nomeContato.trim() || null,
       emailContato:      emailContato.trim() || null,
-      statusCrm,
+      listaId,
       ultimoContato:     ultimoContato || null,
       proximaAcao:       proximaAcao.trim() || null,
       proximaAcaoData:   proximaAcaoData || null,
@@ -436,9 +429,9 @@ export default function EditarClientePage() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 24px' }}>
-                <Campo label="Status CRM">
-                  <select className={styles.select} value={statusCrm} onChange={e => setStatusCrm(e.target.value)}>
-                    {STATUS_CRM_OPT.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                <Campo label="Lista">
+                  <select className={styles.select} value={listaId} onChange={e => setListaId(e.target.value)}>
+                    {listas.map(l => <option key={l.id} value={l.id}>{l.nome}</option>)}
                   </select>
                 </Campo>
 

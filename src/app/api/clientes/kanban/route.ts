@@ -8,7 +8,8 @@ export interface ClienteKanban {
   razaoSocial: string
   cidade: string
   estado: string
-  statusCrm: string
+  listaId: string
+  posicao: number
   ultimoContato: string | null
   totalVendido: number
 }
@@ -25,7 +26,8 @@ export async function GET(request: Request) {
     razao_social: string
     cidade: string
     estado: string
-    status_crm: string
+    lista_id: string
+    posicao: number
     ultimo_contato: string | null
     vendedor_id: string | null
     criado_por: string
@@ -33,7 +35,7 @@ export async function GET(request: Request) {
 
   let query = supabaseAdmin
     .from('clientes')
-    .select('cnpj, razao_social, cidade, estado, status_crm, ultimo_contato, vendedor_id, criado_por')
+    .select('cnpj, razao_social, cidade, estado, lista_id, posicao, ultimo_contato, vendedor_id, criado_por')
     .eq('arquivado', false)
 
   if (papel === 'vendedor') {
@@ -72,7 +74,8 @@ export async function GET(request: Request) {
     razaoSocial:   c.razao_social,
     cidade:        c.cidade,
     estado:        c.estado,
-    statusCrm:     c.status_crm,
+    listaId:       c.lista_id,
+    posicao:       c.posicao,
     ultimoContato: c.ultimo_contato,
     totalVendido:  totaisPorCnpj[c.cnpj] ?? 0,
   }))

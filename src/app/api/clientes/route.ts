@@ -1,6 +1,6 @@
 import { getPapel, getVendedorId, requireComercialAccess } from '@/lib/comercial-auth'
 import { criarCliente, listarClientes } from '@/lib/clientes-repository'
-import type { FiltrosCliente, TipoCliente, OrigemCliente, StatusCliente, StatusCrm } from '@/lib/clientes-repository'
+import type { FiltrosCliente, TipoCliente, OrigemCliente, StatusCliente } from '@/lib/clientes-repository'
 
 const POR_PAGINA_MAX = 100
 
@@ -16,7 +16,7 @@ export async function GET(request: Request) {
   const filtros: FiltrosCliente = {}
 
   if (searchParams.get('status'))    filtros.status    = searchParams.get('status')    as StatusCliente
-  if (searchParams.get('statusCrm')) filtros.statusCrm = searchParams.get('statusCrm') as StatusCrm
+  if (searchParams.get('listaId'))   filtros.listaId   = searchParams.get('listaId')!
   if (searchParams.get('tipo'))      filtros.tipo      = searchParams.get('tipo')      as TipoCliente
   if (searchParams.get('origem'))    filtros.origem    = searchParams.get('origem')    as OrigemCliente
   if (searchParams.get('busca'))             filtros.busca             = searchParams.get('busca')!
@@ -82,12 +82,14 @@ export async function POST(request: Request) {
     cidade, estado, telefone,
     nomeContato, emailContato,
     vendedorId: vendedorIdBody,
+    listaId,
   } = body as {
     cnpj?: unknown; razaoSocial?: unknown; tipo?: unknown; origem?: unknown
     origemLeadDetalhe?: unknown
     cidade?: unknown; estado?: unknown; telefone?: unknown
     nomeContato?: unknown; emailContato?: unknown
     vendedorId?: unknown
+    listaId?: unknown
   }
 
   // Validações obrigatórias de estrutura
@@ -137,6 +139,7 @@ export async function POST(request: Request) {
         nomeContato:         typeof nomeContato  === 'string' ? nomeContato  : null,
         emailContato:        typeof emailContato === 'string' ? emailContato : null,
         vendedorId:          resolvedVendedorId,
+        listaId:             typeof listaId === 'string' && listaId ? listaId : undefined,
       },
       criadoPor,
     )

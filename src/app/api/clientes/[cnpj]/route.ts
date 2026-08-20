@@ -5,7 +5,7 @@ import {
   arquivarCliente,
   normalizarCNPJ,
 } from '@/lib/clientes-repository'
-import type { DadosAtualizacaoCliente, StatusCrm, CanalPreferido, TipoCliente, OrigemCliente } from '@/lib/clientes-repository'
+import type { DadosAtualizacaoCliente, CanalPreferido, TipoCliente, OrigemCliente } from '@/lib/clientes-repository'
 
 // Verifica se o usuário tem permissão sobre o cliente.
 // vendedor → apenas os da própria carteira (vendedor_id = x-vendedor-id header)
@@ -101,7 +101,8 @@ export async function PATCH(
   if (body.telefone          !== undefined) dados.telefone           = String(body.telefone)
   if (body.nomeContato       !== undefined) dados.nomeContato        = body.nomeContato as string | null
   if (body.emailContato      !== undefined) dados.emailContato       = body.emailContato as string | null
-  if (body.statusCrm         !== undefined) dados.statusCrm          = body.statusCrm as StatusCrm
+  if (body.listaId           !== undefined) dados.listaId            = String(body.listaId)
+  if (body.posicao           !== undefined) dados.posicao            = Number(body.posicao)
   if (body.ultimoContato     !== undefined) dados.ultimoContato      = body.ultimoContato as string | null
   if (body.proximaAcao       !== undefined) dados.proximaAcao        = body.proximaAcao as string | null
   if (body.proximaAcaoData   !== undefined) dados.proximaAcaoData    = body.proximaAcaoData as string | null

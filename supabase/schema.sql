@@ -256,3 +256,77 @@ insert into investimentos_capex (nome, tipo_parcela, status) values
 insert into investimentos_capex (nome, tipo_parcela, status, observacoes) values
   ('Prensa', 'sem_parcelamento', 'em_andamento', 'Aguardando detalhamento de valor e prazo');
 */
+
+-- ─── crm_listas — adicionado 2026-08-19 ────────────────────────────────────
+-- Substitui o funil fixo clientes.status_crm (6 valores hardcoded) por listas
+-- dinâmicas no modelo do Trello: usuário cria/renomeia/reordena/arquiva listas,
+-- e cada cliente (cartão) pertence a uma lista com uma posição própria dentro
+-- dela. Fonte única — vale tanto para /clientes/kanban quanto para a coluna
+-- "Lista" da tabela em /clientes/cadastro, para não duplicar o conceito de
+-- funil em dois lugares (CLAUDE.md, seção 7, regra 4).
+--
+-- posicao é numeric (não int): ao arrastar um cartão/lista para entre dois
+-- vizinhos, calculamos a média das posições deles em vez de reindexar a
+-- lista inteira a cada drag — é assim que o Trello faz por baixo dos panos.
+--
+-- Rodar no SQL Editor do Supabase, NA ORDEM:
+
+-- 1. Criar a tabela de listas:
+create table crm_listas (
+  id uuid primary key default gen_random_uuid(),
+  nome text not null,
+  cor text not null default '#3A6080',
+  posicao numeric not null default 0,
+  arquivado boolean not null default false,
+  created_at timestamptz default now()
+);
+
+create index idx_crm_listas_posicao on crm_listas(posicao);
+
+grant select, insert, update, delete on crm_listas to service_role;
+alter table crm_listas enable row level security;
+create policy "apenas_service_role" on crm_listas using (false);
+
+-- 2. Semear as 6 listas iniciais, preservando nome/cor/ordem do Kanban atual
+--    (IDs fixos para o backfill do passo 4 não depender de matching por nome):
+insert into crm_listas (id, nome, cor, posicao) values
+  ('a0000000-0000-4000-8000-000000000001', 'Novo Lead',     '#3A6080', 1000),
+  ('a0000000-0000-4000-8000-000000000002', 'Em Contato',    '#A07830', 2000),
+  ('a0000000-0000-4000-8000-000000000003', 'Negociando',    '#C78A2E', 3000),
+  ('a0000000-0000-4000-8000-000000000004', 'Cliente Ativo', '#3E6B63', 4000),
+  ('a0000000-0000-4000-8000-000000000005', 'Inativo',       '#8A857C', 5000),
+  ('a0000000-0000-4000-8000-000000000006', 'Perdido',       '#A8452F', 6000);
+
+-- 3. Adicionar as colunas novas em clientes (lista_id ainda nullable — vira
+--    NOT NULL só depois do backfill no passo 4):
+alter table clientes add column lista_id uuid references crm_listas(id);
+alter table clientes add column posicao numeric not null default 0;
+
+-- 4. Backfill: migrar status_crm -> lista_id, e gerar uma posicao inicial
+--    por cliente dentro da lista (ordenado pelo created_at existente):
+update clientes set lista_id = case status_crm
+  when 'novo_lead'     then 'a0000000-0000-4000-8000-000000000001'
+  when 'em_contato'    then 'a0000000-0000-4000-8000-000000000002'
+  when 'negociando'    then 'a0000000-0000-4000-8000-000000000003'
+  when 'cliente_ativo' then 'a0000000-0000-4000-8000-000000000004'
+  when 'inativo'       then 'a0000000-0000-4000-8000-000000000005'
+  when 'perdido'       then 'a0000000-0000-4000-8000-000000000006'
+  else 'a0000000-0000-4000-8000-000000000001'
+end::uuid;
+
+alter table clientes alter column lista_id set not null;
+
+with numerado as (
+  select cnpj, (row_number() over (partition by lista_id order by created_at))::numeric * 1000 as rn
+  from clientes
+)
+update clientes c set posicao = numerado.rn
+from numerado
+where c.cnpj = numerado.cnpj;
+
+-- 5. Diagnóstico — confirmar que todo mundo migrou antes de seguir (deve dar 0):
+--   select count(*) from clientes where lista_id is null;
+
+-- 6. SÓ DEPOIS de validar o app funcionando com lista_id — remove a coluna
+--    antiga (o CHECK constraint dela cai junto, não precisa dropar à parte):
+-- alter table clientes drop column status_crm;

@@ -1,6 +1,7 @@
 // Server-only — usa supabaseAdmin (service_role key). Nunca importar de 'use client'.
 
 import { supabaseAdmin } from './supabase-admin'
+import { listarListas } from './crm-listas-repository'
 
 const TABELA = 'clientes'
 
@@ -29,7 +30,6 @@ export function normalizarCNPJ(raw: string): string {
 export type TipoCliente      = 'distribuidora' | 'integrador'
 export type OrigemCliente    = 'prospeccao' | 'lead'
 export type StatusCliente    = 'em_fila' | 'atribuido' | 'liberado'
-export type StatusCrm        = 'novo_lead' | 'em_contato' | 'negociando' | 'cliente_ativo' | 'inativo' | 'perdido'
 export type CanalPreferido   = 'whatsapp' | 'telefone' | 'email'
 export type OrigemLeadDetalhe =
   | 'indicacao' | 'site_formulario' | 'instagram' | 'facebook' | 'google_ads'
@@ -50,7 +50,8 @@ interface ClienteRow {
   data_atribuicao: string | null
   data_vencimento: string | null
   status: StatusCliente
-  status_crm: StatusCrm
+  lista_id: string
+  posicao: number
   ultimo_contato: string | null
   proxima_acao: string | null
   proxima_acao_data: string | null
@@ -80,7 +81,8 @@ export interface Cliente {
   dataAtribuicao: string | null
   dataVencimento: string | null
   status: StatusCliente
-  statusCrm: StatusCrm
+  listaId: string
+  posicao: number
   ultimoContato: string | null
   proximaAcao: string | null
   proximaAcaoData: string | null
@@ -107,11 +109,12 @@ export interface DadosNovoCliente {
   nomeContato?: string | null
   emailContato?: string | null
   vendedorId?: string | null
+  listaId?: string
 }
 
 export interface FiltrosCliente {
   status?: StatusCliente
-  statusCrm?: StatusCrm
+  listaId?: string
   vendedorId?: string
   tipo?: TipoCliente
   origem?: OrigemCliente
@@ -132,7 +135,8 @@ export interface DadosAtualizacaoCliente {
   telefone?: string
   nomeContato?: string | null
   emailContato?: string | null
-  statusCrm?: StatusCrm
+  listaId?: string
+  posicao?: number
   ultimoContato?: string | null
   proximaAcao?: string | null
   proximaAcaoData?: string | null
@@ -159,7 +163,8 @@ function mapearLinha(row: ClienteRow): Cliente {
     dataAtribuicao:     row.data_atribuicao,
     dataVencimento:     row.data_vencimento,
     status:             row.status,
-    statusCrm:          row.status_crm,
+    listaId:            row.lista_id,
+    posicao:            row.posicao,
     ultimoContato:      row.ultimo_contato,
     proximaAcao:        row.proxima_acao,
     proximaAcaoData:    row.proxima_acao_data,
@@ -194,6 +199,23 @@ export async function criarCliente(dados: DadosNovoCliente, criadoPor: string): 
   }
   // Para 'prospeccao', origemLeadDetalhe fica null independente do que veio
 
+  // Lista de destino: a informada, ou a primeira lista ativa (menor posicao) por padrão.
+  let listaId = dados.listaId
+  if (!listaId) {
+    const listas = await listarListas()
+    if (listas.length === 0) throw new Error('Nenhuma lista de CRM cadastrada')
+    listaId = listas[0].id
+  }
+
+  const { data: ultimoCartao } = await supabaseAdmin
+    .from(TABELA)
+    .select('posicao')
+    .eq('lista_id', listaId)
+    .order('posicao', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  const posicao = ((ultimoCartao as { posicao: number } | null)?.posicao ?? 0) + 1000
+
   const { data, error } = await supabaseAdmin
     .from(TABELA)
     .insert({
@@ -209,6 +231,8 @@ export async function criarCliente(dados: DadosNovoCliente, criadoPor: string): 
       email:               dados.emailContato?.trim() || null,
       vendedor_id:         dados.vendedorId ?? null,
       criado_por:          criadoPor,
+      lista_id:            listaId,
+      posicao,
     })
     .select()
     .single()
@@ -234,7 +258,7 @@ export async function listarClientes(filtros: FiltrosCliente = {}): Promise<{ cl
     .range(from, to)
 
   if (filtros.status)     query = query.eq('status',      filtros.status)
-  if (filtros.statusCrm)  query = query.eq('status_crm',  filtros.statusCrm)
+  if (filtros.listaId)    query = query.eq('lista_id',    filtros.listaId)
   if (filtros.vendedorId) query = query.eq('vendedor_id', filtros.vendedorId)
   if (filtros.tipo)       query = query.eq('tipo',        filtros.tipo)
   if (filtros.origem)     query = query.eq('origem',      filtros.origem)
@@ -279,7 +303,8 @@ export async function atualizarCliente(cnpj: string, dados: DadosAtualizacaoClie
   if (dados.telefone       !== undefined) patch.telefone            = dados.telefone.trim()
   if (dados.nomeContato    !== undefined) patch.nome_contato        = dados.nomeContato?.trim() || null
   if (dados.emailContato   !== undefined) patch.email               = dados.emailContato?.trim() || null
-  if (dados.statusCrm      !== undefined) patch.status_crm          = dados.statusCrm
+  if (dados.listaId        !== undefined) patch.lista_id            = dados.listaId
+  if (dados.posicao        !== undefined) patch.posicao             = dados.posicao
   if (dados.ultimoContato  !== undefined) patch.ultimo_contato      = dados.ultimoContato
   if (dados.proximaAcao    !== undefined) patch.proxima_acao        = dados.proximaAcao
   if (dados.proximaAcaoData !== undefined) patch.proxima_acao_data  = dados.proximaAcaoData

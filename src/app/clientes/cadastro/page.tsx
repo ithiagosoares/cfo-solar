@@ -290,7 +290,7 @@ export default function CadastroClientePage() {
                 return (
                   <div
                     key={c.cnpj}
-                    onClick={() => { if (editavel) router.push(`/clientes/${c.cnpj}/editar`) }}
+                    onClick={() => { if (editavel) router.push(`/clientes/${c.cnpj}`) }}
                     style={{
                       display: 'grid',
                       gridTemplateColumns: colGrid,

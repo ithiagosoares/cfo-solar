@@ -259,6 +259,7 @@ export interface VendaResumo {
 // Ordena por data de criação decrescente (mais recente primeiro).
 export async function listarPedidos(filtros: {
   vendedorId?: string
+  clienteCnpj?: string
   busca?: string
   status?: StatusPedido
   dataInicio?: string
@@ -302,6 +303,7 @@ export async function listarPedidos(filtros: {
     .range(from, to)
 
   if (filtros.vendedorId)  query = query.eq('vendedor_id', filtros.vendedorId)
+  if (filtros.clienteCnpj) query = query.eq('cliente_cnpj', filtros.clienteCnpj)
   if (filtros.busca)      query = query.ilike('empresa', `%${filtros.busca}%`)
   if (filtros.status)     query = query.eq('status', filtros.status)
   if (filtros.dataInicio) query = query.gte('data_orcamento', filtros.dataInicio)

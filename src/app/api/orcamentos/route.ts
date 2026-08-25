@@ -27,6 +27,7 @@ export async function GET(request: Request) {
     filtros.vendedorId = searchParams.get('vendedor_id')!
   }
 
+  if (searchParams.get('clienteCnpj'))    filtros.clienteCnpj       = searchParams.get('clienteCnpj')!
   if (searchParams.get('busca'))          filtros.busca             = searchParams.get('busca')!
   if (searchParams.get('status'))         filtros.status            = searchParams.get('status') as StatusPedido
   if (searchParams.get('dataInicio'))     filtros.dataInicio        = searchParams.get('dataInicio')!

@@ -92,7 +92,7 @@ function CartaoCliente({ cliente, cor }: { cliente: ClienteKanban; cor: string }
       }}
     >
       <Link
-        href={`/clientes/${cliente.cnpj}/editar`}
+        href={`/clientes/${cliente.cnpj}`}
         style={{ display: 'block', textDecoration: 'none', color: 'inherit' }}
         onClick={e => { if (isDragging) e.preventDefault() }}
       >

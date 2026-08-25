@@ -397,6 +397,7 @@ export async function buscarPedidoPorId(id: string): Promise<PedidoCompleto | nu
 }
 
 export interface DadosAtualizacaoPedido {
+  vendedorId?: string | null
   empresa?: string
   filial?: string
   cliente?: string
@@ -415,6 +416,7 @@ export interface DadosAtualizacaoPedido {
 // sem duplicar a lógica em cada rota — ver CLAUDE.md, seção 7, regra 4.
 export async function atualizarPedido(id: string, dados: DadosAtualizacaoPedido): Promise<void> {
   const patch: Record<string, unknown> = {}
+  if (dados.vendedorId    !== undefined) patch.vendedor_id   = dados.vendedorId
   if (dados.empresa       !== undefined) patch.empresa       = dados.empresa
   if (dados.filial        !== undefined) patch.filial        = dados.filial
   if (dados.cliente       !== undefined) patch.cliente       = dados.cliente
@@ -654,10 +656,9 @@ export interface DadosVinculoPdf {
 // vendedor_id definido, usa o vendedor resolvido a partir do PDF como fallback —
 // nunca sobrescreve um vendedor_id já existente, e nunca aceita esse valor vindo
 // direto do cliente sem ter passado pela extração/resolução determinística. Mesma
-// lógica de fallback para numero_pedido: pedidos cadastrados manualmente (via
-// /orcamentos/cadastro) nunca têm esse campo preenchido — o PDF é a chance de
-// enriquecer o registro com a chave real do ERP, sem nunca sobrescrever um valor
-// já existente.
+// lógica de fallback para numero_pedido — hoje sempre preenchido na criação
+// manual/por PDF (ver salvarPedidoManual e /api/comercial-pedidos/criar-de-pdf),
+// mas o fallback continua útil pra pedidos antigos cadastrados antes disso.
 export async function vincularPdfPedido(id: string, dados: DadosVinculoPdf): Promise<void> {
   const pedido = await buscarPedidoPorId(id)
   if (!pedido) throw new Error('Pedido não encontrado')

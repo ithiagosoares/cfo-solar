@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import {
   BarChart2, FileText, TrendingUp, Upload,
-  UserPlus, FilePlus, Users, Shield, LogOut, Kanban,
+  UserPlus, Users, Shield, LogOut, Kanban,
 } from 'lucide-react'
 import { createSupabaseBrowserClient } from '@/lib/supabase-client'
 import styles from '@/styles/editorial.module.css'
@@ -47,7 +47,6 @@ const MENU: MenuSection[] = [
     items: [
       { label: 'Cadastro de Cliente',    href: '/clientes/cadastro',    icon: UserPlus },
       { label: 'Kanban de Clientes',     href: '/clientes/kanban',      icon: Kanban },
-      { label: 'Cadastro de Orçamento',  href: '/orcamentos/cadastro',  icon: FilePlus, papeis: ['administrador', 'gestor', 'vendedor'] },
     ],
   },
   {

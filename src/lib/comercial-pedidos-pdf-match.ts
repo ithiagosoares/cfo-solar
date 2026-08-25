@@ -29,9 +29,9 @@ export function avaliarCorrespondencia(
 ): ResultadoCorrespondencia {
   const motivos: string[] = []
 
-  // Pedidos cadastrados manualmente (via /orcamentos/cadastro) nunca têm numero_pedido
-  // preenchido — CLAUDE.md, seção 4, é a chave do ERP, não um campo de preenchimento
-  // livre. Nesse caso a ausência não deve, sozinha, empurrar o resultado para
+  // Pedidos antigos, cadastrados manualmente antes de numero_pedido virar obrigatório
+  // no formulário (ver ModalNovoOrcamento), podem não ter esse campo preenchido.
+  // Nesse caso a ausência não deve, sozinha, empurrar o resultado para
   // "duvidosa": data+valor batendo bem já é evidência suficiente. Só penaliza quando
   // os dois lados têm número e eles divergem.
   const numeroPresente = extraido.numeroPedido !== null && pedido.numeroPedido !== null

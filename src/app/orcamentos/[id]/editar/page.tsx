@@ -5,17 +5,11 @@ import { useParams, useRouter } from 'next/navigation'
 import { formatMoeda } from '@/lib/utils'
 import AppLayout from '@/components/layout/AppLayout'
 import UploadOrcamentoPdf from '@/components/comercial/UploadOrcamentoPdf'
+import { ComboboxBusca, type OpcaoCombobox } from '@/components/ui/ComboboxBusca'
+import { FILIAIS, EMPRESA_POR_FILIAL, type Filial } from '@/lib/empresa-filial'
 import styles from '@/styles/editorial.module.css'
 
 // ─── Constantes ──────────────────────────────────────────────────────────────
-
-const EMPRESAS = [
-  'CFO Solar Estruturas Ltda',
-  'CFO Solar Distribuição Norte',
-  'CFO Solar Participações',
-  'CFO Solar Comercial Sul',
-  'CFO Solar Trading Ltda',
-]
 
 const STATUS_OPT = [
   { value: 'orcado',  label: 'Aberto' },
@@ -148,9 +142,14 @@ export default function EditarOrcamentoPage() {
   const [salvando, setSalvando]     = useState(false)
   const [feedback, setFeedback]     = useState<{ tipo: 'ok' | 'erro'; msg: string } | null>(null)
 
+  // Vendedor responsável, papel do usuário logado
+  const [papel,         setPapel]         = useState<string | null>(null)
+  const [vendedorId,    setVendedorId]    = useState<string | null>(null)
+  const [vendedoresOpt, setVendedoresOpt] = useState<OpcaoCombobox[]>([])
+  const [mapaVendedores, setMapaVendedores] = useState<Record<string, string>>({})
+
   // Campos editáveis
-  const [empresa,       setEmpresa]       = useState('')
-  const [filial,        setFilial]        = useState('São Paulo')
+  const [filial,        setFilial]        = useState<Filial>('São Paulo')
   const [cliente,       setCliente]       = useState('')
   const [status,        setStatus]        = useState<StatusPedido>('orcado')
   const [dataOrcamento, setDataOrcamento] = useState('')
@@ -179,8 +178,8 @@ export default function EditarOrcamentoPage() {
           return
         }
         const p = json.pedido
-        setEmpresa(p.empresa)
-        setFilial(p.filial)
+        setFilial(p.filial === 'Paraná' ? 'Paraná' : 'São Paulo')
+        setVendedorId(p.vendedorId)
         setCliente(p.cliente)
         setStatus(p.status)
         setDataOrcamento(p.dataOrcamento ?? '')
@@ -218,14 +217,36 @@ export default function EditarOrcamentoPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
 
+  useEffect(() => {
+    fetch('/api/me')
+      .then(r => r.json() as Promise<{ papel?: string }>)
+      .then(d => setPapel(d.papel ?? 'sem_acesso'))
+      .catch(() => setPapel('sem_acesso'))
+  }, [])
+
+  useEffect(() => {
+    fetch('/api/comercial/vendedores')
+      .then(r => r.json() as Promise<{ ok: boolean; vendedores?: { id: string; nome: string }[] }>)
+      .then(json => {
+        if (json.ok && json.vendedores) {
+          setVendedoresOpt(json.vendedores.map(v => ({ id: v.id, label: v.nome })))
+          const mapa: Record<string, string> = {}
+          json.vendedores.forEach(v => { mapa[v.id] = v.nome })
+          setMapaVendedores(mapa)
+        }
+      })
+      .catch(() => {})
+  }, [])
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setFeedback(null)
     setSalvando(true)
 
     const body: Record<string, unknown> = {
-      empresa,
+      empresa:       EMPRESA_POR_FILIAL[filial],
       filial,
+      vendedorId,
       cliente:       cliente.trim(),
       status,
       valorOrcado:   parseFloat(valorOrcado) || 0,
@@ -356,6 +377,25 @@ export default function EditarOrcamentoPage() {
             </div>
 
             <div>
+              <label style={labelStyle}>Vendedor</label>
+              {papel === 'administrador' || papel === 'gestor' ? (
+                <ComboboxBusca
+                  opcoes={vendedoresOpt}
+                  valorId={vendedorId}
+                  valorLabel={vendedorId ? (mapaVendedores[vendedorId] ?? '') : ''}
+                  onChange={opcao => setVendedorId(opcao?.id ?? null)}
+                  placeholder="Sem vendedor atribuído"
+                />
+              ) : (
+                <input
+                  readOnly
+                  value={vendedorId ? (mapaVendedores[vendedorId] ?? 'Carregando…') : '—'}
+                  style={inputROStyle}
+                />
+              )}
+            </div>
+
+            <div>
               <label style={labelStyle}>Data de Criação</label>
               <input
                 readOnly
@@ -396,35 +436,17 @@ export default function EditarOrcamentoPage() {
           {/* ── Seção: Cliente ────────────────────────────────────────── */}
           <div style={sectionDivStyle}>Cliente</div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px 24px', marginBottom: 20 }}>
-
-            <div>
-              <label style={labelStyle}>Empresa</label>
-              <select
-                value={empresa}
-                onChange={e => setEmpresa(e.target.value)}
-                style={{ ...inputStyle, cursor: 'pointer' }}
-                onFocus={onFocus}
-                onBlur={onBlur}
-              >
-                {EMPRESAS.map(emp => <option key={emp} value={emp}>{emp}</option>)}
-              </select>
-            </div>
-
-            <div>
-              <label style={labelStyle}>Filial</label>
-              <select
-                value={filial}
-                onChange={e => setFilial(e.target.value)}
-                style={{ ...inputStyle, cursor: 'pointer' }}
-                onFocus={onFocus}
-                onBlur={onBlur}
-              >
-                <option value="São Paulo">São Paulo</option>
-                <option value="Paraná">Paraná</option>
-              </select>
-            </div>
-
+          <div style={{ marginBottom: 20 }}>
+            <label style={labelStyle}>Filial</label>
+            <select
+              value={filial}
+              onChange={e => setFilial(e.target.value as Filial)}
+              style={{ ...inputStyle, cursor: 'pointer' }}
+              onFocus={onFocus}
+              onBlur={onBlur}
+            >
+              {FILIAIS.map(f => <option key={f} value={f}>{f}</option>)}
+            </select>
           </div>
 
           <div style={{ marginBottom: 20 }}>

@@ -73,6 +73,11 @@ export async function PATCH(
   }
 
   const dados: DadosAtualizacaoPedido = {}
+  // vendedorId: só administrador/gestor podem reatribuir o responsável — vendedor
+  // nunca, mesmo mandando o próprio id (nunca aceitar essa decisão vinda do cliente).
+  if (body.vendedorId !== undefined && (papel === 'administrador' || papel === 'gestor')) {
+    dados.vendedorId = body.vendedorId === null ? null : String(body.vendedorId)
+  }
   if (body.empresa       !== undefined) dados.empresa       = String(body.empresa)
   if (body.filial        !== undefined) dados.filial        = String(body.filial)
   if (body.cliente       !== undefined) dados.cliente       = String(body.cliente)

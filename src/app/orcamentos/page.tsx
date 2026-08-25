@@ -7,6 +7,7 @@ import AppLayout from '@/components/layout/AppLayout'
 import { FilterBar, FilterInput, FilterSelect, FilterDateRange, FilterCheckbox } from '@/components/filters/FilterBar'
 import { StatusSelect } from '@/components/ui/StatusSelect'
 import { ETAPA_FUNIL_OPCOES, STATUS_VENDA_OPCOES } from '@/lib/status-pedido-config'
+import ModalNovoOrcamento from '@/components/comercial/ModalNovoOrcamento'
 import styles from '@/styles/editorial.module.css'
 
 const POR_PAGINA = 20
@@ -75,6 +76,9 @@ export default function OrcamentosPage() {
   const [carregandoLista, setCarregandoLista] = useState(true)
   const [carregandoMais, setCarregandoMais] = useState(false)
 
+  const [modalAberto, setModalAberto] = useState(false)
+  const [toast, setToast] = useState<string | null>(null)
+
   const eVendedor = papel === 'vendedor'
 
   useEffect(() => {
@@ -141,6 +145,13 @@ export default function OrcamentosPage() {
     if (res.ok) buscarPedidos(1, true, filtroAtivo)
   }
 
+  function handleSalvo(msg: string) {
+    setModalAberto(false)
+    setToast(msg)
+    buscarPedidos(1, true, filtroAtivo)
+    setTimeout(() => setToast(null), 3500)
+  }
+
   async function salvarStatusPedido(id: string, campo: 'etapaFunil' | 'statusVenda', valor: string) {
     const res = await fetch(`/api/comercial-pedidos/${id}/status`, {
       method: 'PATCH',
@@ -184,15 +195,31 @@ export default function OrcamentosPage() {
                 : 'Todos os orçamentos e pedidos cadastrados.'}
             </p>
           </div>
-          <a
-            href="/orcamentos/cadastro"
+          <button
+            type="button"
+            onClick={() => setModalAberto(true)}
             className={styles.btnPrimary}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 13, textDecoration: 'none', flexShrink: 0 }}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 13, flexShrink: 0 }}
           >
             <Plus style={{ width: 14, height: 14 }} />
-            Cadastrar
-          </a>
+            Cadastrar Orçamento
+          </button>
         </div>
+
+        {toast && (
+          <div
+            className={styles.notice}
+            style={{ marginBottom: 16, borderLeftColor: 'var(--positivo)', color: 'var(--positivo)' }}
+          >
+            <span>{toast}</span>
+          </div>
+        )}
+
+        <ModalNovoOrcamento
+          aberto={modalAberto}
+          onFechar={() => setModalAberto(false)}
+          onSalvo={handleSalvo}
+        />
 
         <FilterBar
           onFiltrar={handleFiltrar}

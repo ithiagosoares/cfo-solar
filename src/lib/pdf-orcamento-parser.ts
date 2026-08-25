@@ -19,6 +19,7 @@
 
 import { parseValorBR, parseDataBR } from './formato-br'
 import { normalizarCNPJ } from './cnpj-utils'
+import { UF_PARA_FILIAL, type Filial } from './empresa-filial'
 import path from 'node:path'
 
 // ─── Tipos públicos ────────────────────────────────────────────────────────────
@@ -39,6 +40,7 @@ export interface DadosExtraidosOrcamento {
   clienteNome: string | null
   clienteCnpj: string | null     // normalizado, só dígitos
   valorTotal: number | null
+  filial: Filial | null          // derivada da UF no cabeçalho do emitente (ver extrairFilial)
   itens: ItemExtraido[]
   camposNaoEncontrados: string[] // para diagnosticar extração de baixa confiança
 }
@@ -157,6 +159,18 @@ function extrairCliente(linhas: string[]): { clienteNome: string | null; cliente
   return { clienteNome: null, clienteCnpj: null }
 }
 
+// Filial do emitente, a partir do padrão "CIDADE - UF - CEP" no cabeçalho
+// (ex: "COLOMBO - PR - 83401520") — mesmo padrão usado em extrairOrigemRelatorio()
+// para os relatórios HTML (comercial-relatorios-parser.ts). UF sem mapeamento
+// conhecido (nem SP nem PR) → null, não adivinha.
+function extrairFilial(linhas: string[]): Filial | null {
+  for (const linha of linhas) {
+    const m = linha.match(/-\s*([A-Z]{2})\s*-\s*\d{5,8}/)
+    if (m) return UF_PARA_FILIAL[m[1]] ?? null
+  }
+  return null
+}
+
 // Pega o valor da linha que COMEÇA com "Total:" — nunca "Sub-Total:" (a
 // checagem de sub-total fica redundante com a âncora ^, mas mantida por
 // clareza) nem linhas como "Qtde Total: 8" (contagem de itens, não valor;
@@ -226,6 +240,7 @@ export function parseOrcamentoPdf(linhas: string[]): DadosExtraidosOrcamento {
   const cabecalho = extrairCabecalho(linhas)
   const cliente = extrairCliente(linhas)
   const valorTotal = extrairValorTotal(linhas)
+  const filial = extrairFilial(linhas)
   const itens = extrairItens(linhas)
 
   const camposNaoEncontrados: string[] = []
@@ -234,6 +249,7 @@ export function parseOrcamentoPdf(linhas: string[]): DadosExtraidosOrcamento {
   if (!cabecalho.vendedorNomeExtraido) camposNaoEncontrados.push('vendedorNomeExtraido')
   if (!cliente.clienteNome) camposNaoEncontrados.push('clienteNome')
   if (valorTotal === null) camposNaoEncontrados.push('valorTotal')
+  if (!filial) camposNaoEncontrados.push('filial')
   if (itens.length === 0) camposNaoEncontrados.push('itens')
 
   return {
@@ -243,6 +259,7 @@ export function parseOrcamentoPdf(linhas: string[]): DadosExtraidosOrcamento {
     clienteNome: cliente.clienteNome,
     clienteCnpj: cliente.clienteCnpj,
     valorTotal,
+    filial,
     itens,
     camposNaoEncontrados,
   }

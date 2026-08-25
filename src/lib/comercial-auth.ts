@@ -33,3 +33,20 @@ export function requireComercialAccess(request: Request): Response | null {
   if (getComercialRole(request) !== null) return null
   return Response.json({ ok: false, error: 'Acesso negado' }, { status: 403 })
 }
+
+// Verifica se o papel do usuário tem permissão sobre um pedido específico (usado
+// pelas rotas de anexo de PDF de orçamento). vendedor → só o dono do pedido
+// (vendedor_id do pedido == x-vendedor-id do próprio usuário, nunca o inverso);
+// gestor/administrador → qualquer pedido; demais papéis (sdr, sem_acesso) → negado.
+export function verificarPermissaoPedido(
+  papel: Papel,
+  request: Request,
+  pedidoVendedorId: string | null,
+): Response | null {
+  if (papel === 'administrador' || papel === 'gestor') return null
+  if (papel === 'vendedor') {
+    const vendedorId = getVendedorId(request)
+    if (pedidoVendedorId !== null && pedidoVendedorId === vendedorId) return null
+  }
+  return Response.json({ ok: false, error: 'Acesso negado' }, { status: 403 })
+}

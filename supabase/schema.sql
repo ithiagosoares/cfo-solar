@@ -330,3 +330,69 @@ where c.cnpj = numerado.cnpj;
 -- 6. SÓ DEPOIS de validar o app funcionando com lista_id — remove a coluna
 --    antiga (o CHECK constraint dela cai junto, não precisa dropar à parte):
 -- alter table clientes drop column status_crm;
+
+-- ─── comercial_pedidos — anexo de PDF de orçamento — adicionado 2026-08-2x ──
+-- pdf_url / pdf_google_drive_id: referência ao arquivo no Google Drive depois
+-- de vinculado (ver /api/comercial-pedidos/[id]/vincular-pdf). vendedor_atribuido:
+-- vendedor resolvido a partir do nome extraído do PDF — só usado como fallback
+-- quando vendedor_id do pedido ainda está nulo (nunca sobrescreve). Já rodado
+-- manualmente no SQL Editor do Supabase:
+--
+--   alter table comercial_pedidos add column if not exists pdf_url text;
+--   alter table comercial_pedidos add column if not exists pdf_google_drive_id text;
+--   alter table comercial_pedidos add column if not exists vendedor_atribuido uuid references vendedores(id);
+--
+-- Nenhum GRANT/RLS adicional necessário — as colunas novas herdam o grant a
+-- service_role e a policy "apenas_service_role" já existentes na tabela.
+
+-- ─── comercial_pedidos_itens — adicionado 2026-08-2x ───────────────────────
+-- Itens extraídos do PDF de orçamento (código, descrição, quantidade, unidade,
+-- valor unitário, valor total) — populados por /vincular-pdf via
+-- substituirItensPedido, que apaga e reinsere tudo a cada vínculo (idempotente,
+-- permite reprocessar o mesmo PDF sem duplicar linhas).
+
+create table comercial_pedidos_itens (
+  id uuid primary key default gen_random_uuid(),
+  comercial_pedido_id uuid not null references comercial_pedidos(id) on delete cascade,
+  codigo text,
+  descricao text not null,
+  quantidade numeric not null,
+  unidade text not null,
+  valor_unitario numeric not null,
+  valor_total numeric not null,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+create index idx_pedidos_itens_pedido on comercial_pedidos_itens(comercial_pedido_id);
+
+grant select, insert, update, delete on comercial_pedidos_itens to service_role;
+alter table comercial_pedidos_itens enable row level security;
+create policy "apenas_service_role" on comercial_pedidos_itens using (false);
+
+-- ─── integracoes_google_drive — adicionado 2026-08-21 ──────────────────────
+-- Testado o upload real: service account SEM Shared Drive não tem quota de
+-- storage própria no Drive (erro 403 storageQuotaExceeded — limitação da API do
+-- Google, não do código). Trocado para OAuth2 de usuário real (conta pessoal do
+-- Thiago): autoriza uma vez via /api/admin/google-drive/conectar, o
+-- refresh_token fica guardado aqui (nunca no client, nunca em log) e é trocado
+-- por um access_token novo a cada upload/download. Linha única (singleton) —
+-- sempre a mais recente.
+--
+-- usuario_id é o uuid real do Supabase Auth (session.user.id, via header
+-- x-user-id injetado pelo proxy), não o id de usuarios_autorizados (chaveada
+-- por email).
+
+create table integracoes_google_drive (
+  id uuid primary key default gen_random_uuid(),
+  usuario_id uuid not null references auth.users(id),
+  refresh_token text not null,
+  access_token text,
+  token_expires_at timestamptz,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+grant select, insert, update, delete on integracoes_google_drive to service_role;
+alter table integracoes_google_drive enable row level security;
+create policy "apenas_service_role" on integracoes_google_drive using (false);

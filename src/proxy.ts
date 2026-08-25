@@ -144,6 +144,7 @@ export async function proxy(request: NextRequest) {
     '/clientes/kanban':     ['administrador', 'gestor', 'sdr', 'vendedor'],
     '/admin/vendedores':    ['administrador'],
     '/admin/usuarios':      ['administrador'],
+    '/admin/google-drive':  ['administrador'],
     '/comercial/upload':    ['administrador', 'gestor'],
     '/orcamentos':          ['administrador', 'gestor', 'vendedor'],
     '/dashboard':           ['administrador', 'gestor', 'vendedor'],
@@ -168,6 +169,7 @@ export async function proxy(request: NextRequest) {
   // Injeta role, email, nível comercial e papel nos headers para uso em API routes / Server Components
   const requestHeaders = new Headers(request.headers)
   requestHeaders.set('x-user-role', autorizado.role)
+  requestHeaders.set('x-user-id', user.id)
   requestHeaders.set('x-user-email', user.email)
   requestHeaders.set('x-comercial-role', comercialRole ?? '')
   requestHeaders.set('x-papel', papel)

@@ -47,6 +47,7 @@ type FormState = {
   empresa: string
   filial: string
   cliente: string
+  numeroPedido: string
   valorOrcado: string
   dataOrcamento: string
   status: StatusPedido
@@ -60,6 +61,7 @@ const FORM_INICIAL: FormState = {
   empresa:       EMPRESAS[0],
   filial:        'São Paulo',
   cliente:       '',
+  numeroPedido:  '',
   valorOrcado:   '',
   dataOrcamento: '',
   status:        'orcado',
@@ -77,6 +79,7 @@ function fmtData(d: string | null): string {
 
 export default function OrcamentosCadastroPage() {
   const [papel, setPapel] = useState<string | null>(null)
+  const [meuVendedorId, setMeuVendedorId] = useState<string | null>(null)
   const eVendedor = papel === 'vendedor'
 
   // Modal
@@ -100,18 +103,21 @@ export default function OrcamentosCadastroPage() {
   const [carregandoMais, setCarregandoMais] = useState(false)
   const [mostrarArquivados, setMostrarArquivados] = useState(false)
 
-  // Efeito 1: descobrir o papel do usuário
+  // Efeito 1: descobrir o papel e o vendedor_id do usuário
   useEffect(() => {
     fetch('/api/me')
-      .then(r => r.json() as Promise<{ papel?: string }>)
-      .then(d => setPapel(d.papel ?? 'sem_acesso'))
+      .then(r => r.json() as Promise<{ papel?: string; vendedorId?: string | null }>)
+      .then(d => {
+        setPapel(d.papel ?? 'sem_acesso')
+        setMeuVendedorId(d.vendedorId ?? null)
+      })
       .catch(() => setPapel('sem_acesso'))
   }, [])
 
-  // Efeito 2: carregar vendedores (combobox — apenas para não-vendedores)
+  // Efeito 2: carregar vendedores — combobox para admin/gestor, e para resolver o
+  // nome do próprio vendedor logado (campo somente-leitura pré-preenchido)
   useEffect(() => {
     if (papel === null) return
-    if (papel === 'vendedor') { setCarregandoVend(false); return }
 
     fetch('/api/comercial/vendedores')
       .then(r => r.json() as Promise<{ ok: boolean; vendedores?: { id: string; nome: string }[] }>)
@@ -179,11 +185,17 @@ export default function OrcamentosCadastroPage() {
       setFeedback({ tipo: 'erro', msg: 'Selecione um vendedor.' })
       return
     }
+    if (!form.numeroPedido.trim()) {
+      setFeedback({ tipo: 'erro', msg: 'Informe o número do pedido.' })
+      return
+    }
 
+    const numeroPedido = form.numeroPedido.trim()
     const body: Record<string, unknown> = {
       empresa:       form.empresa,
       filial:        form.filial,
       cliente:       form.cliente.trim(),
+      numeroPedido,
       valorOrcado:   parseFloat(form.valorOrcado) || 0,
       dataOrcamento: form.dataOrcamento || null,
       status:        form.status,
@@ -199,18 +211,26 @@ export default function OrcamentosCadastroPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       })
-      const json = await res.json() as { ok: boolean; error?: string }
+      const json = await res.json() as { ok: boolean; error?: string; criado?: boolean }
 
       if (!res.ok) {
         setFeedback({ tipo: 'erro', msg: json.error ?? 'Erro ao cadastrar orçamento.' })
         return
       }
 
-      // Sucesso: limpar form e fechar modal
-      setForm(FORM_INICIAL)
-      setFeedback(null)
-      setModalAberto(false)
+      // Sucesso: mostra o resultado da deduplicação, limpa a lista e fecha o modal
+      setFeedback({
+        tipo: 'ok',
+        msg: json.criado
+          ? 'Novo pedido criado.'
+          : `Pedido #${numeroPedido} já existe. Dados atualizados.`,
+      })
       buscarPedidos(1, true, mostrarArquivados)
+      setTimeout(() => {
+        setForm(FORM_INICIAL)
+        setFeedback(null)
+        setModalAberto(false)
+      }, 1400)
     } finally {
       setSalvando(false)
     }
@@ -259,8 +279,20 @@ export default function OrcamentosCadastroPage() {
       >
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
 
-          {/* Vendedor (apenas para admin/gestor) */}
-          {!eVendedor && (
+          {/* Vendedor: dropdown de busca para admin/gestor; somente-leitura,
+              pré-preenchido com o próprio nome, para o papel vendedor */}
+          {eVendedor ? (
+            <div className={styles.field}>
+              <label className={styles.fieldLabel}>Vendedor</label>
+              <input
+                type="text"
+                value={(meuVendedorId && mapaVendedores[meuVendedorId]) || 'Carregando…'}
+                readOnly
+                className={styles.input}
+                style={{ background: 'var(--cor-fundo, #f5f5f5)', color: 'var(--ink2)', cursor: 'default' }}
+              />
+            </div>
+          ) : (
             <div className={styles.field}>
               <label className={styles.fieldLabel}>Vendedor</label>
               <ComboboxBusca
@@ -300,6 +332,19 @@ export default function OrcamentosCadastroPage() {
               placeholder="Razão social do cliente"
               value={form.cliente}
               onChange={e => upd({ cliente: e.target.value })}
+              className={styles.input}
+              required
+            />
+          </div>
+
+          {/* Número do Pedido — chave de deduplicação junto com a empresa */}
+          <div className={styles.field}>
+            <label className={styles.fieldLabel}>Número do Pedido</label>
+            <input
+              type="text"
+              placeholder="Ex.: 1503"
+              value={form.numeroPedido}
+              onChange={e => upd({ numeroPedido: e.target.value })}
               className={styles.input}
               required
             />

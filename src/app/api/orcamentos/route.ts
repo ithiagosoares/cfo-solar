@@ -1,5 +1,5 @@
 import { getPapel, getVendedorId, requireComercialAccess } from '@/lib/comercial-auth'
-import { inserirPedidoManual, listarPedidos } from '@/lib/comercial-pedidos-repository'
+import { salvarPedidoManual, listarPedidos } from '@/lib/comercial-pedidos-repository'
 import type { DadosPedidoManual, StatusPedido } from '@/lib/comercial-pedidos-repository'
 
 const PAPEIS_CRIACAO = new Set(['administrador', 'gestor', 'vendedor'])
@@ -56,7 +56,7 @@ export async function POST(request: Request) {
   }
 
   const {
-    empresa, filial, cliente, valorOrcado,
+    empresa, filial, cliente, valorOrcado, numeroPedido,
     dataOrcamento, status, valorVendido, dataVenda,
     vendedorId: vendedorIdBody,
   } = body
@@ -67,6 +67,8 @@ export async function POST(request: Request) {
     return Response.json({ ok: false, error: 'filial é obrigatório' }, { status: 400 })
   if (!cliente || typeof cliente !== 'string')
     return Response.json({ ok: false, error: 'cliente é obrigatório' }, { status: 400 })
+  if (!numeroPedido || typeof numeroPedido !== 'string' || !numeroPedido.trim())
+    return Response.json({ ok: false, error: 'numeroPedido é obrigatório' }, { status: 400 })
   if (typeof valorOrcado !== 'number' || valorOrcado <= 0)
     return Response.json({ ok: false, error: 'valorOrcado inválido' }, { status: 400 })
   if (status !== 'orcado' && status !== 'vendido')
@@ -88,6 +90,7 @@ export async function POST(request: Request) {
     empresa:       empresa as string,
     filial:        filial  as string,
     cliente:       cliente as string,
+    numeroPedido:  (numeroPedido as string).trim(),
     valorOrcado:   valorOrcado as number,
     dataOrcamento: typeof dataOrcamento === 'string' ? dataOrcamento : null,
     status:        status as StatusPedido,
@@ -96,8 +99,8 @@ export async function POST(request: Request) {
   }
 
   try {
-    await inserirPedidoManual(dados)
-    return Response.json({ ok: true }, { status: 201 })
+    const resultado = await salvarPedidoManual(dados)
+    return Response.json({ ok: true, criado: resultado.criado }, { status: resultado.criado ? 201 : 200 })
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Erro desconhecido'
     return Response.json({ ok: false, error: msg }, { status: 500 })

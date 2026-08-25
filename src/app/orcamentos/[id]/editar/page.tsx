@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { formatMoeda } from '@/lib/utils'
 import AppLayout from '@/components/layout/AppLayout'
+import UploadOrcamentoPdf from '@/components/comercial/UploadOrcamentoPdf'
 import styles from '@/styles/editorial.module.css'
 
 // ─── Constantes ──────────────────────────────────────────────────────────────
@@ -42,12 +43,24 @@ interface PedidoCompleto {
   numeroPedido: string | null
   criadoEm: string
   arquivado?: boolean
+  pdfUrl?: string | null
+  pdfGoogleDriveId?: string | null
 }
 
 interface ClienteContato {
   nomeContato: string | null
   email: string | null
   telefone: string
+}
+
+interface ItemPedido {
+  id: string
+  codigo: string | null
+  descricao: string
+  quantidade: number
+  unidade: string | null
+  valorUnitario: number
+  valorTotal: number
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -154,10 +167,12 @@ export default function EditarOrcamentoPage() {
   const [clienteCnpj,   setClienteCnpj]  = useState<string | null>(null)
   const [contato,       setContato]       = useState<ClienteContato | null>(null)
   const [origem,        setOrigem]        = useState('')
+  const [pdfUrl,        setPdfUrl]        = useState<string | null>(null)
+  const [itens,         setItens]         = useState<ItemPedido[]>([])
 
-  useEffect(() => {
-    fetch(`/api/orcamentos/${id}`)
-      .then(r => r.json() as Promise<{ ok: boolean; pedido?: PedidoCompleto; error?: string }>)
+  function carregarPedido() {
+    return fetch(`/api/orcamentos/${id}`)
+      .then(r => r.json() as Promise<{ ok: boolean; pedido?: PedidoCompleto; itens?: ItemPedido[]; error?: string }>)
       .then(json => {
         if (!json.ok || !json.pedido) {
           setErro(json.error ?? 'Orçamento não encontrado.')
@@ -177,6 +192,8 @@ export default function EditarOrcamentoPage() {
         setClienteCnpj(p.clienteCnpj)
         setOrigem(p.origem)
         setArquivado(p.arquivado ?? false)
+        setPdfUrl(p.pdfGoogleDriveId ? `/api/comercial-pedidos/${id}/pdf` : null)
+        setItens(json.itens ?? [])
 
         if (p.clienteCnpj) {
           fetch(`/api/clientes/${p.clienteCnpj}`)
@@ -194,7 +211,11 @@ export default function EditarOrcamentoPage() {
         }
       })
       .catch(() => setErro('Erro de rede ao carregar orçamento.'))
-      .finally(() => setCarregando(false))
+  }
+
+  useEffect(() => {
+    carregarPedido().finally(() => setCarregando(false))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
 
   async function handleSubmit(e: React.FormEvent) {
@@ -529,6 +550,49 @@ export default function EditarOrcamentoPage() {
               </span>
             </div>
           )}
+
+          {/* ── Seção: Anexo (PDF do orçamento) ─────────────────────────── */}
+          <div style={sectionDivStyle}>Anexo</div>
+
+          {pdfUrl && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16, fontSize: 13 }}>
+              <a href={pdfUrl} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--cor-destaque)', fontWeight: 600, textDecoration: 'none' }}>
+                Ver PDF do orçamento →
+              </a>
+              {itens.length > 0 && (
+                <span style={{ color: 'var(--cor-texto-suave)' }}>{itens.length} item(ns) extraído(s)</span>
+              )}
+            </div>
+          )}
+
+          {itens.length > 0 && (
+            <div style={{ marginBottom: 16, overflowX: 'auto' }}>
+              <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid var(--cor-borda-sutil)', color: 'var(--cor-texto-suave)' }}>
+                    <th style={{ textAlign: 'left', padding: '4px 6px' }}>Código</th>
+                    <th style={{ textAlign: 'left', padding: '4px 6px' }}>Descrição</th>
+                    <th style={{ textAlign: 'right', padding: '4px 6px' }}>Qtd.</th>
+                    <th style={{ textAlign: 'right', padding: '4px 6px' }}>Vlr. Unit.</th>
+                    <th style={{ textAlign: 'right', padding: '4px 6px' }}>Vlr. Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {itens.map(item => (
+                    <tr key={item.id} style={{ borderBottom: '1px solid var(--cor-borda-sutil)' }}>
+                      <td style={{ padding: '4px 6px' }}>{item.codigo ?? '—'}</td>
+                      <td style={{ padding: '4px 6px' }}>{item.descricao}</td>
+                      <td style={{ padding: '4px 6px', textAlign: 'right', ...numStyle }}>{item.quantidade}</td>
+                      <td style={{ padding: '4px 6px', textAlign: 'right', ...numStyle }}>{formatMoeda(item.valorUnitario)}</td>
+                      <td style={{ padding: '4px 6px', textAlign: 'right', ...numStyle }}>{formatMoeda(item.valorTotal)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          <UploadOrcamentoPdf pedidoId={id} jaTemPdf={!!pdfUrl} onVinculado={carregarPedido} />
 
           {/* ── Ações ────────────────────────────────────────────────── */}
           <div style={{ marginTop: 32, display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>

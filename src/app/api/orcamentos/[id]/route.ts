@@ -5,6 +5,7 @@ import {
   arquivarPedido,
 } from '@/lib/comercial-pedidos-repository'
 import type { DadosAtualizacaoPedido, StatusPedido } from '@/lib/comercial-pedidos-repository'
+import { listarItensPedido } from '@/lib/comercial-pedidos-itens-repository'
 
 export async function GET(
   request: Request,
@@ -27,7 +28,9 @@ export async function GET(
     }
   }
 
-  return Response.json({ ok: true, pedido })
+  const itens = await listarItensPedido(id)
+
+  return Response.json({ ok: true, pedido, itens })
 }
 
 export async function PATCH(

@@ -1,5 +1,5 @@
 // Server-only — usa supabaseAdmin (service_role key). Nunca importar de 'use client'.
-// Exporta também inserirPedidoManual e listarPedidos usados por /api/orcamentos.
+// Exporta também salvarPedidoManual e listarPedidos usados por /api/orcamentos.
 
 import { supabaseAdmin } from './supabase-admin'
 import type { RegistroPreview } from './comercial-importacoes-repository'
@@ -39,6 +39,9 @@ export interface PedidoResumo {
 
 export interface PedidoCompleto extends PedidoResumo {
   importacaoId: string | null
+  pdfUrl: string | null
+  pdfGoogleDriveId: string | null
+  vendedorAtribuido: string | null
 }
 
 export interface DadosPedidoManual {
@@ -46,11 +49,17 @@ export interface DadosPedidoManual {
   empresa: string
   filial: string
   cliente: string
+  numeroPedido: string
   valorOrcado: number
   dataOrcamento: string | null
   status: StatusPedido
   valorVendido: number | null
   dataVenda: string | null
+}
+
+export interface ResultadoPedidoManual {
+  id: string
+  criado: boolean
 }
 
 // ─── Helpers internos ────────────────────────────────────────────────────────
@@ -149,40 +158,84 @@ export async function inserirPedidosImportacao(
   await Promise.all(vendidosComCnpj.map(r => atualizarDataUltimaCompra(r.cliente_cnpj!, r.data_venda!)))
 }
 
-// Insere um único pedido cadastrado manualmente (origem='manual', sem numero_pedido).
-// Registros manuais com numero_pedido=null não conflitam pela constraint
-// uniq_pedido_empresa (NULL ≠ NULL no Postgres) — INSERT simples é seguro.
-export async function inserirPedidoManual(dados: DadosPedidoManual): Promise<void> {
+// Cria ou atualiza um pedido cadastrado manualmente (origem='manual'), deduplicando
+// pela chave de negócio (numero_pedido, empresa) — a mesma usada pelo upsert de
+// importação de ERP (ver uniq_pedido_empresa em schema.sql). Se já existe um pedido
+// com esse par, atualiza apenas os dados do pedido (filial, cliente, valores, datas,
+// status) e preserva vendedor_id/origem originais — reenviar o mesmo número de pedido
+// nunca reatribui o dono. Se não existe, insere um registro novo.
+export async function salvarPedidoManual(dados: DadosPedidoManual): Promise<ResultadoPedidoManual> {
   const cnpjPorNome = dados.cliente
     ? await resolverClienteCnpj([dados.cliente])
     : {}
+  const clienteCnpj = cnpjPorNome[dados.cliente] ?? null
 
-  const { error } = await supabaseAdmin
+  const camposPedido = {
+    filial:         dados.filial,
+    cliente:        dados.cliente,
+    cliente_cnpj:   clienteCnpj,
+    valor_orcado:   dados.valorOrcado,
+    data_orcamento: dados.dataOrcamento || null,
+    status:         dados.status,
+    valor_vendido:  dados.status === 'vendido' ? dados.valorVendido : null,
+    data_venda:     dados.status === 'vendido' ? (dados.dataVenda || null) : null,
+    status_venda:   dados.status === 'vendido' ? ('Venda Fechada' as StatusVenda) : null,
+  }
+
+  const { data: existente, error: erroBusca } = await supabaseAdmin
+    .from(TABELA)
+    .select('id')
+    .eq('numero_pedido', dados.numeroPedido)
+    .eq('empresa', dados.empresa)
+    .maybeSingle()
+
+  if (erroBusca) throw new Error(`Falha ao verificar pedido existente: ${erroBusca.message}`)
+
+  if (existente) {
+    const { error } = await supabaseAdmin.from(TABELA).update(camposPedido).eq('id', existente.id)
+    if (error) throw new Error(`Falha ao atualizar pedido: ${error.message}`)
+
+    if (dados.status === 'vendido' && dados.dataVenda && clienteCnpj) {
+      await atualizarDataUltimaCompra(clienteCnpj, dados.dataVenda)
+    }
+    return { id: existente.id, criado: false }
+  }
+
+  const { data: inserido, error } = await supabaseAdmin
     .from(TABELA)
     .insert({
-      vendedor_id:    dados.vendedorId,
-      empresa:        dados.empresa,
-      filial:         dados.filial,
-      cliente:        dados.cliente,
-      cliente_cnpj:   cnpjPorNome[dados.cliente] ?? null,
-      valor_orcado:   dados.valorOrcado,
-      data_orcamento: dados.dataOrcamento || null,
-      status:         dados.status,
-      valor_vendido:  dados.status === 'vendido' ? dados.valorVendido : null,
-      data_venda:     dados.status === 'vendido' ? (dados.dataVenda || null) : null,
-      status_venda:   dados.status === 'vendido' ? ('Venda Fechada' as StatusVenda) : null,
-      numero_pedido:  null,
-      origem:         'manual' as const,
-      importacao_id:  null,
+      vendedor_id:   dados.vendedorId,
+      empresa:       dados.empresa,
+      numero_pedido: dados.numeroPedido,
+      origem:        'manual' as const,
+      importacao_id: null,
+      ...camposPedido,
     })
+    .select('id')
+    .single()
 
-  if (error) throw new Error(`Falha ao inserir pedido manual: ${error.message}`)
+  // Corrida rara: outro pedido com o mesmo (numero_pedido, empresa) foi inserido
+  // entre a checagem acima e este insert — trata como atualização em vez de erro.
+  if (error?.code === '23505') {
+    const { data: concorrente, error: erroConcorrente } = await supabaseAdmin
+      .from(TABELA)
+      .select('id')
+      .eq('numero_pedido', dados.numeroPedido)
+      .eq('empresa', dados.empresa)
+      .single()
+    if (erroConcorrente || !concorrente) throw new Error('Falha ao resolver conflito de pedido duplicado')
 
-  // Sincroniza data_ultima_compra se o pedido foi cadastrado como vendido
-  if (dados.status === 'vendido' && dados.dataVenda) {
-    const cnpjCliente = cnpjPorNome[dados.cliente] ?? null
-    if (cnpjCliente) await atualizarDataUltimaCompra(cnpjCliente, dados.dataVenda)
+    const { error: erroUpdate } = await supabaseAdmin.from(TABELA).update(camposPedido).eq('id', concorrente.id)
+    if (erroUpdate) throw new Error(`Falha ao atualizar pedido: ${erroUpdate.message}`)
+    return { id: concorrente.id, criado: false }
   }
+
+  if (error || !inserido) throw new Error(`Falha ao inserir pedido manual: ${error?.message ?? 'erro desconhecido'}`)
+
+  if (dados.status === 'vendido' && dados.dataVenda && clienteCnpj) {
+    await atualizarDataUltimaCompra(clienteCnpj, dados.dataVenda)
+  }
+  return { id: inserido.id, criado: true }
 }
 
 // ─── VendaResumo ─────────────────────────────────────────────────────────────
@@ -304,11 +357,14 @@ export async function buscarPedidoPorId(id: string): Promise<PedidoCompleto | nu
     arquivado: boolean
     etapa_funil: EtapaFunil | null
     status_venda: StatusVenda | null
+    pdf_url: string | null
+    pdf_google_drive_id: string | null
+    vendedor_atribuido: string | null
   }
 
   const { data, error } = await supabaseAdmin
     .from(TABELA)
-    .select('id, vendedor_id, empresa, filial, cliente, cliente_cnpj, valor_orcado, data_orcamento, status, valor_vendido, data_venda, origem, numero_pedido, importacao_id, created_at, arquivado, etapa_funil, status_venda')
+    .select('id, vendedor_id, empresa, filial, cliente, cliente_cnpj, valor_orcado, data_orcamento, status, valor_vendido, data_venda, origem, numero_pedido, importacao_id, created_at, arquivado, etapa_funil, status_venda, pdf_url, pdf_google_drive_id, vendedor_atribuido')
     .eq('id', id)
     .single()
 
@@ -334,6 +390,9 @@ export async function buscarPedidoPorId(id: string): Promise<PedidoCompleto | nu
     arquivado:     row.arquivado,
     etapaFunil:    row.etapa_funil,
     statusVenda:   row.status_venda,
+    pdfUrl:            row.pdf_url,
+    pdfGoogleDriveId:  row.pdf_google_drive_id,
+    vendedorAtribuido: row.vendedor_atribuido,
   }
 }
 
@@ -497,4 +556,124 @@ export async function arquivarPedido(id: string, arquivar: boolean): Promise<voi
     .update(patch)
     .eq('id', id)
   if (error) throw new Error(`Falha ao arquivar pedido: ${error.message}`)
+}
+
+// ─── Anexo de PDF de orçamento ────────────────────────────────────────────────
+
+export interface FiltrosCandidatoPedido {
+  numeroPedido: string | null
+  valorAproximado: number | null
+  vendedorId: string | null
+}
+
+export interface CandidatoPedido {
+  id: string
+  cliente: string
+  numeroPedido: string | null
+  valorOrcado: number
+  dataOrcamento: string | null
+}
+
+const TOLERANCIA_VALOR_CANDIDATO_PERCENTUAL = 0.05
+const TOLERANCIA_VALOR_CANDIDATO_MINIMA = 1
+const LIMITE_CANDIDATOS = 10
+
+type RowCandidato = {
+  id: string
+  cliente: string
+  numero_pedido: string | null
+  valor_orcado: number
+  data_orcamento: string | null
+}
+
+// Sugere pedidos possíveis para o usuário escolher manualmente quando a
+// correspondência automática do PDF ficou "duvidosa" (ver comercial-pedidos-pdf-match.ts).
+// Combina dois sinais, sem exigir os dois ao mesmo tempo: número do pedido exato
+// (forte, quando o PDF trouxe um) e valor aproximado (tolerância de 5%, mínimo
+// R$1 — mais folgada que a usada em avaliarCorrespondencia, pois aqui é só uma
+// sugestão pro usuário revisar, não uma decisão automática). vendedorId restringe
+// a busca à própria carteira quando quem está chamando é vendedor — nunca deve
+// sugerir pedido de outro vendedor pra ele vincular (CLAUDE.md, seção 3).
+export async function buscarCandidatosPedido(filtros: FiltrosCandidatoPedido): Promise<CandidatoPedido[]> {
+  const encontrados = new Map<string, RowCandidato>()
+
+  if (filtros.numeroPedido) {
+    let query = supabaseAdmin
+      .from(TABELA)
+      .select('id, cliente, numero_pedido, valor_orcado, data_orcamento')
+      .eq('numero_pedido', filtros.numeroPedido)
+      .eq('arquivado', false)
+    if (filtros.vendedorId) query = query.eq('vendedor_id', filtros.vendedorId)
+
+    const { data, error } = await query
+    if (error) throw new Error(`Falha ao buscar candidatos por número do pedido: ${error.message}`)
+    for (const row of (data ?? []) as RowCandidato[]) encontrados.set(row.id, row)
+  }
+
+  if (filtros.valorAproximado !== null && encontrados.size < LIMITE_CANDIDATOS) {
+    const tolerancia = Math.max(
+      TOLERANCIA_VALOR_CANDIDATO_MINIMA,
+      filtros.valorAproximado * TOLERANCIA_VALOR_CANDIDATO_PERCENTUAL,
+    )
+    let query = supabaseAdmin
+      .from(TABELA)
+      .select('id, cliente, numero_pedido, valor_orcado, data_orcamento')
+      .gte('valor_orcado', filtros.valorAproximado - tolerancia)
+      .lte('valor_orcado', filtros.valorAproximado + tolerancia)
+      .eq('arquivado', false)
+      .order('data_orcamento', { ascending: false })
+      .limit(LIMITE_CANDIDATOS)
+    if (filtros.vendedorId) query = query.eq('vendedor_id', filtros.vendedorId)
+
+    const { data, error } = await query
+    if (error) throw new Error(`Falha ao buscar candidatos por valor: ${error.message}`)
+    for (const row of (data ?? []) as RowCandidato[]) {
+      if (!encontrados.has(row.id)) encontrados.set(row.id, row)
+    }
+  }
+
+  return [...encontrados.values()]
+    .slice(0, LIMITE_CANDIDATOS)
+    .map(row => ({
+      id:            row.id,
+      cliente:       row.cliente,
+      numeroPedido:  row.numero_pedido,
+      valorOrcado:   row.valor_orcado,
+      dataOrcamento: row.data_orcamento,
+    }))
+}
+
+export interface DadosVinculoPdf {
+  pdfUrl: string
+  pdfGoogleDriveId: string
+  vendedorAtribuidoId: string | null
+  numeroPedidoExtraido?: string | null
+}
+
+// Vincula um PDF (já enviado ao Drive) a um pedido. Se o pedido ainda não tem
+// vendedor_id definido, usa o vendedor resolvido a partir do PDF como fallback —
+// nunca sobrescreve um vendedor_id já existente, e nunca aceita esse valor vindo
+// direto do cliente sem ter passado pela extração/resolução determinística. Mesma
+// lógica de fallback para numero_pedido: pedidos cadastrados manualmente (via
+// /orcamentos/cadastro) nunca têm esse campo preenchido — o PDF é a chance de
+// enriquecer o registro com a chave real do ERP, sem nunca sobrescrever um valor
+// já existente.
+export async function vincularPdfPedido(id: string, dados: DadosVinculoPdf): Promise<void> {
+  const pedido = await buscarPedidoPorId(id)
+  if (!pedido) throw new Error('Pedido não encontrado')
+
+  const patch: Record<string, unknown> = {
+    pdf_url:             dados.pdfUrl,
+    pdf_google_drive_id: dados.pdfGoogleDriveId,
+    vendedor_atribuido:  dados.vendedorAtribuidoId,
+  }
+  if (!pedido.vendedorId && dados.vendedorAtribuidoId) {
+    patch.vendedor_id = dados.vendedorAtribuidoId
+  }
+  if (!pedido.numeroPedido && dados.numeroPedidoExtraido) {
+    patch.numero_pedido = dados.numeroPedidoExtraido
+  }
+
+  const { error } = await supabaseAdmin.from(TABELA).update(patch).eq('id', id)
+  if (error) throw new Error(`Falha ao vincular PDF ao pedido: ${error.message}`)
 }

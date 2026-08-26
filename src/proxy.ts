@@ -104,6 +104,10 @@ export async function proxy(request: NextRequest) {
     return redir
   }
 
+  // Tela inicial (/inicio) removida — Dashboard Comercial é a tela principal.
+  // sdr não tem acesso a /dashboard (ver PAPEIS_POR_ROTA), então cai no Kanban.
+  const destinoPadrao = papel === 'sdr' ? '/clientes/kanban' : '/dashboard'
+
   // Módulo financeiro + página raiz original desativados — código mantido mas sem roteamento.
   // O Dashboard Comercial vive em /dashboard; a raiz (/) é a página original combinada, agora inativa.
   const APIS_FINANCEIRO = ['/api/analisar', '/api/historico', '/api/chat', '/api/comparativo']
@@ -117,7 +121,7 @@ export async function proxy(request: NextRequest) {
         headers: { 'Content-Type': 'application/json' },
       })
     }
-    const redir = NextResponse.redirect(new URL('/inicio', request.url))
+    const redir = NextResponse.redirect(new URL(destinoPadrao, request.url))
     redir.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate')
     return redir
   }
@@ -130,7 +134,7 @@ export async function proxy(request: NextRequest) {
     pathname === '/comercial' ||
     (pathname.startsWith('/comercial/') && !pathname.startsWith('/comercial/upload'))
   if (eComercialLegado) {
-    const redir = NextResponse.redirect(new URL('/inicio', request.url))
+    const redir = NextResponse.redirect(new URL(destinoPadrao, request.url))
     redir.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate')
     return redir
   }
@@ -157,8 +161,8 @@ export async function proxy(request: NextRequest) {
   for (const [rota, papeis] of rotasOrdenadas) {
     if (pathname === rota || pathname.startsWith(rota + '/')) {
       if (!(papeis as string[]).includes(papel)) {
-        // Papel sem permissão para esta rota → hub (não acesso-negado, que é só para sem_acesso)
-        const redir = NextResponse.redirect(new URL('/inicio', request.url))
+        // Papel sem permissão para esta rota → destino padrão (não acesso-negado, que é só para sem_acesso)
+        const redir = NextResponse.redirect(new URL(destinoPadrao, request.url))
         redir.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate')
         return redir
       }

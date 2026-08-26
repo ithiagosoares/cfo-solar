@@ -37,7 +37,7 @@ export default function LoginPage() {
       setCarregandoSenha(false)
       return
     }
-    window.location.href = '/inicio'
+    window.location.href = '/dashboard'
   }
 
   const algumCarregando = carregando || carregandoSenha

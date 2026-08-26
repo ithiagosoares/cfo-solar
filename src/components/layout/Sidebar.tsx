@@ -1,13 +1,15 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import {
   BarChart2, FileText, TrendingUp, Upload,
-  UserPlus, Users, Shield, LogOut, Kanban,
+  UserPlus, Users, Shield, LogOut, Kanban, Bell,
 } from 'lucide-react'
 import { createSupabaseBrowserClient } from '@/lib/supabase-client'
 import styles from '@/styles/editorial.module.css'
+import NotificacoesModal from './NotificacoesModal'
+import type { AlertaItem } from '@/lib/alertas'
 
 type Papel = 'administrador' | 'gestor' | 'sdr' | 'vendedor' | 'sem_acesso'
 
@@ -67,16 +69,44 @@ const LABEL_PAPEL: Record<Papel, string> = {
   sem_acesso:    'Sem acesso',
 }
 
+// Mesmos 3 papéis com acesso ao botão de Notificações em /api/alertas.
+const PAPEIS_COM_ALERTAS: Papel[] = ['administrador', 'gestor', 'vendedor']
+
 export default function Sidebar() {
   const pathname = usePathname()
   const router   = useRouter()
   const [me, setMe] = useState<MeData | null>(null)
+  const [alertas, setAlertas] = useState<AlertaItem[]>([])
+  const [carregandoAlertas, setCarregandoAlertas] = useState(true)
+  const [modalAberto, setModalAberto] = useState(false)
 
   useEffect(() => {
     fetch('/api/me')
       .then(r => r.json())
       .then((d: MeData) => setMe(d))
       .catch(() => {})
+  }, [])
+
+  // carregandoAlertas só cobre a primeira carga — refetches disparados pelo
+  // modal (após uma ação rápida) atualizam a lista em silêncio, sem spinner.
+  const recarregarAlertas = useCallback(async () => {
+    try {
+      const json = await fetch('/api/alertas').then(r => r.json()) as { ok: boolean; alertas?: AlertaItem[] }
+      setAlertas(json.ok && json.alertas ? json.alertas : [])
+    } catch {
+      setAlertas([])
+    } finally {
+      setCarregandoAlertas(false)
+    }
+  }, [])
+
+  // On-demand: recalcula a cada carregamento da sidebar (cada navegação), sem cron.
+  useEffect(() => {
+    fetch('/api/alertas')
+      .then(r => r.json())
+      .then((json: { ok: boolean; alertas?: AlertaItem[] }) => setAlertas(json.ok && json.alertas ? json.alertas : []))
+      .catch(() => setAlertas([]))
+      .finally(() => setCarregandoAlertas(false))
   }, [])
 
   async function handleSair() {
@@ -87,6 +117,8 @@ export default function Sidebar() {
 
   const papel         = me?.papel ?? 'sem_acesso'
   const nomeExibicao  = me?.nome ?? me?.email ?? '…'
+  const temAlertas    = PAPEIS_COM_ALERTAS.includes(papel)
+  const totalCriticos = alertas.filter(a => a.nivel === 'critico').length
 
   return (
     <aside className={styles.sidebar}>
@@ -124,6 +156,31 @@ export default function Sidebar() {
             </div>
           )
         })}
+
+        {temAlertas && (
+          <div className={styles.sidebarSection}>
+            <button
+              onClick={() => setModalAberto(true)}
+              className={styles.sidebarItem}
+              style={{
+                width: '100%', border: 'none', background: 'none', cursor: 'pointer',
+                font: 'inherit', textAlign: 'left',
+              }}
+            >
+              <Bell style={{ width: 16, height: 16, flexShrink: 0 }} />
+              Notificações
+              {totalCriticos > 0 && (
+                <span style={{
+                  marginLeft: 'auto', minWidth: 18, height: 18, padding: '0 5px', borderRadius: 999,
+                  background: '#ef4444', color: '#fff',
+                  fontSize: 11, fontWeight: 700, lineHeight: '18px', textAlign: 'center',
+                }}>
+                  {totalCriticos}
+                </span>
+              )}
+            </button>
+          </div>
+        )}
       </nav>
 
       {/* Footer */}
@@ -141,6 +198,17 @@ export default function Sidebar() {
           <LogOut style={{ width: 14, height: 14 }} />
         </button>
       </div>
+
+      {temAlertas && (
+        <NotificacoesModal
+          aberto={modalAberto}
+          onFechar={() => setModalAberto(false)}
+          alertas={alertas}
+          carregando={carregandoAlertas}
+          ehGestor={papel === 'administrador' || papel === 'gestor'}
+          onRecarregar={recarregarAlertas}
+        />
+      )}
     </aside>
   )
 }

@@ -4,6 +4,7 @@ import { useState } from 'react'
 import Modal from '@/components/ui/Modal'
 import styles from '@/styles/editorial.module.css'
 import { TIPOS_ATIVIDADE, RESULTADOS_POR_TIPO, type TipoAtividade, type ResultadoAtividade } from '@/lib/atividade-config'
+import { notificarAtividadeSalva } from '@/lib/alertas-eventos'
 import type { AtividadeComNome } from './AtividadeCard'
 
 interface ModalRegistrarAtividadeProps {
@@ -83,6 +84,7 @@ export function ModalRegistrarAtividade({ aberto, cnpj, atividadeParaConcluir, o
         setErro(json.error ?? 'Erro ao salvar.')
         return
       }
+      notificarAtividadeSalva()
       onSalvo()
       fecharEResetar()
     } catch {

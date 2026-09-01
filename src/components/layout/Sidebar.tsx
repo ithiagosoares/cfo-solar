@@ -10,6 +10,7 @@ import { createSupabaseBrowserClient } from '@/lib/supabase-client'
 import styles from '@/styles/editorial.module.css'
 import NotificacoesModal from './NotificacoesModal'
 import type { AlertaItem } from '@/lib/alertas'
+import { ouvirAtividadeSalva } from '@/lib/alertas-eventos'
 
 type Papel = 'administrador' | 'gestor' | 'sdr' | 'vendedor' | 'sem_acesso'
 
@@ -90,10 +91,14 @@ export default function Sidebar() {
   // carregandoAlertas só cobre a primeira carga — refetches disparados pelo
   // modal (após uma ação rápida) atualizam a lista em silêncio, sem spinner.
   const recarregarAlertas = useCallback(async () => {
+    console.log('[Sidebar] recarregarAlertas() chamada — iniciando fetch de /api/alertas')
     try {
       const json = await fetch('/api/alertas').then(r => r.json()) as { ok: boolean; alertas?: AlertaItem[] }
-      setAlertas(json.ok && json.alertas ? json.alertas : [])
-    } catch {
+      const novaLista = json.ok && json.alertas ? json.alertas : []
+      setAlertas(novaLista)
+      console.log('[Sidebar] Refetch completo, novo estado:', novaLista)
+    } catch (e) {
+      console.log('[Sidebar] Refetch falhou:', e)
       setAlertas([])
     } finally {
       setCarregandoAlertas(false)
@@ -108,6 +113,18 @@ export default function Sidebar() {
       .catch(() => setAlertas([]))
       .finally(() => setCarregandoAlertas(false))
   }, [])
+
+  // ModalRegistrarAtividade/ModalAgendarAtividade também são usados fora da
+  // NotificacoesModal (ex: página de detalhe do cliente), então precisam de
+  // um jeito de avisar a Sidebar mesmo sem referência ao onRecarregar dela.
+  useEffect(() => {
+    console.log('[Sidebar] Registrando listener de alertas-eventos')
+    const handler = () => {
+      console.log('[Sidebar] Evento recebido, refetchando alertas')
+      void recarregarAlertas()
+    }
+    return ouvirAtividadeSalva(handler)
+  }, [recarregarAlertas])
 
   async function handleSair() {
     const supabase = createSupabaseBrowserClient()

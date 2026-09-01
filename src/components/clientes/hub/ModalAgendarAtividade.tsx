@@ -4,6 +4,7 @@ import { useState } from 'react'
 import Modal from '@/components/ui/Modal'
 import styles from '@/styles/editorial.module.css'
 import { TIPOS_ATIVIDADE, type TipoAtividade } from '@/lib/atividade-config'
+import { notificarAtividadeSalva } from '@/lib/alertas-eventos'
 
 interface ModalAgendarAtividadeProps {
   aberto: boolean
@@ -55,6 +56,7 @@ export function ModalAgendarAtividade({ aberto, cnpj, onFechar, onSalvo }: Modal
         setErro(json.error ?? 'Erro ao salvar.')
         return
       }
+      notificarAtividadeSalva()
       onSalvo()
       fecharEResetar()
     } catch {

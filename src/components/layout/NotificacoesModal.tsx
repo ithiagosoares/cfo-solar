@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { AlertTriangle, Clock, AlertCircle, Info, ExternalLink } from 'lucide-react'
+import { AlertTriangle, Clock, CalendarClock, Calendar, AlertCircle, Info, ExternalLink } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
 import styles from '@/styles/editorial.module.css'
 import type { AlertaItem, NivelAlerta, TipoAlerta } from '@/lib/alertas'
@@ -26,22 +26,28 @@ const NIVEL_CONFIG: Record<NivelAlerta, { fg: string; bg: string; label: string;
 }
 
 const TIPO_ICON: Record<TipoAlerta, typeof AlertTriangle> = {
-  acao_vencida: AlertTriangle,
-  acao_urgente: Clock,
+  atividade_atrasada: AlertTriangle,
+  atividade_hoje: Clock,
+  atividade_amanha: CalendarClock,
+  atividade_semana: Calendar,
   cliente_esfriando: AlertCircle,
   sem_atividade: Info,
 }
 
 const TIPO_LABEL: Record<TipoAlerta, string> = {
-  acao_vencida: 'Ação Vencida',
-  acao_urgente: 'Ação Urgente',
+  atividade_atrasada: 'Atrasado',
+  atividade_hoje: 'Hoje',
+  atividade_amanha: 'Amanhã',
+  atividade_semana: 'Esta Semana',
   cliente_esfriando: 'Cliente Esfriando',
   sem_atividade: 'Sem Atividade Recente',
 }
 
 const TIPO_ACAO_LABEL: Record<TipoAlerta, string> = {
-  acao_vencida: 'Marcar Realizado',
-  acao_urgente: 'Realizar Agora',
+  atividade_atrasada: 'Marcar Realizado',
+  atividade_hoje: 'Realizar Agora',
+  atividade_amanha: 'Confirmar',
+  atividade_semana: 'Acompanhar',
   cliente_esfriando: 'Registrar Contato',
   sem_atividade: 'Agendar Visita',
 }
@@ -107,9 +113,11 @@ export function NotificacoesModal({ aberto, onFechar, alertas, carregando, ehGes
   }
 
   function handleAcaoRapida(alerta: AlertaItem) {
-    if (alerta.tipo === 'acao_vencida' || alerta.tipo === 'acao_urgente') setConcluirAlvo(alerta)
-    else if (alerta.tipo === 'cliente_esfriando') setContatoAlvo(alerta)
-    else setAgendarAlvo(alerta)
+    // As 4 categorias de atividade agendada (atrasada/hoje/amanhã/semana)
+    // sempre concluem a mesma atividade pendente — só o rótulo do botão muda.
+    if (alerta.tipo === 'cliente_esfriando') setContatoAlvo(alerta)
+    else if (alerta.tipo === 'sem_atividade') setAgendarAlvo(alerta)
+    else setConcluirAlvo(alerta)
   }
 
   function handleSalvo() {

@@ -9,13 +9,8 @@ export async function GET(request: Request) {
   const denied = requireComercialAccess(request)
   if (denied) return denied
 
-  const papelHeader = request.headers.get('x-papel')
-  const vendedorIdHeader = request.headers.get('x-vendedor-id')
-  console.log('[api/alertas] headers recebidos — x-papel:', JSON.stringify(papelHeader), 'x-vendedor-id:', JSON.stringify(vendedorIdHeader))
-
   const papel = getPapel(request)
   if (!papel || !PAPEIS_COM_ALERTAS.has(papel)) {
-    console.log('[api/alertas] papel', JSON.stringify(papel), 'não está em PAPEIS_COM_ALERTAS — retornando alertas: [] sem chamar calcularAlertas')
     return Response.json({ ok: true, alertas: [] })
   }
 
@@ -25,11 +20,7 @@ export async function GET(request: Request) {
 
   try {
     const alertas = await calcularAlertas({ papel, vendedorId })
-    console.log('[api/alertas] retorno de calcularAlertas — total:', alertas.length, '— conteúdo:', JSON.stringify(alertas))
-
-    const respostaJson = { ok: true, alertas }
-    console.log('[api/alertas] JSON final enviado ao cliente:', JSON.stringify(respostaJson))
-    return Response.json(respostaJson)
+    return Response.json({ ok: true, alertas })
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Erro desconhecido'
     console.error('[GET /api/alertas] erro:', msg, err)

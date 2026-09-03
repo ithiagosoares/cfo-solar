@@ -342,6 +342,28 @@ export async function listarPedidos(filtros: {
   }
 }
 
+// Conta pedidos em aberto (status='orcado', não arquivados) por etapa do funil —
+// usado no bloco de Pipeline do Centro de Comando (/dashboard).
+export async function contarPorEtapaFunil(filtros: { vendedorId?: string } = {}): Promise<Record<EtapaFunil, number>> {
+  let query = supabaseAdmin
+    .from(TABELA)
+    .select('etapa_funil')
+    .eq('status', 'orcado')
+    .eq('arquivado', false)
+
+  if (filtros.vendedorId) query = query.eq('vendedor_id', filtros.vendedorId)
+
+  const { data, error } = await query
+  if (error) throw new Error(`Falha ao contar pedidos por etapa do funil: ${error.message}`)
+
+  const contagem = Object.fromEntries(ETAPAS_FUNIL.map(e => [e, 0])) as Record<EtapaFunil, number>
+  for (const row of (data as { etapa_funil: EtapaFunil | null }[]) ?? []) {
+    const etapa = row.etapa_funil ?? 'Novo'
+    if (etapa in contagem) contagem[etapa]++
+  }
+  return contagem
+}
+
 // Busca um único pedido pelo id (UUID). Retorna null se não encontrado.
 export async function buscarPedidoPorId(id: string): Promise<PedidoCompleto | null> {
   type Row = {

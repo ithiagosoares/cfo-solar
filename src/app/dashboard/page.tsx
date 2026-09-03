@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { ComercialDashboard } from '@/components/comercial/ComercialDashboard'
+import { CentroComando } from '@/components/comercial/CentroComando'
 import AppLayout from '@/components/layout/AppLayout'
 import styles from '@/styles/editorial.module.css'
 
@@ -44,6 +45,7 @@ export default function DashboardPage() {
         <p style={{ fontSize: 13, color: 'var(--ink2)', marginBottom: 36 }}>
           Desempenho por vendedor, indicadores e oportunidades em aberto.
         </p>
+        <CentroComando papel={me.papel} vendedorId={me.vendedorId} nome={me.nome} />
         <ComercialDashboard papel={me.papel} vendedorId={me.vendedorId} />
       </main>
     </AppLayout>

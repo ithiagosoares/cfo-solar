@@ -11,6 +11,7 @@ import {
   type AgregadoOficial,
   type FonteTotalOficial,
 } from './vendedores-totais-repository'
+import type { EtapaFunil } from './comercial-pedidos-repository'
 
 // ─── Tipos de filtro ──────────────────────────────────────────────────────────
 
@@ -40,6 +41,7 @@ interface PedidoRow {
   data_venda:     string | null
   proxima_acao:     string | null
   previsao_fechamento: string | null
+  etapa_funil:      EtapaFunil | null
   vendedores:     { nome: string } | null
 }
 
@@ -392,6 +394,7 @@ export interface OportunidadePedido {
   previsaoFechamento:  string | null
   empresa:             string | null
   filial:              string | null
+  etapaFunil:          EtapaFunil | null
 }
 
 export interface GrandesOportunidadesPorVendedor {
@@ -422,6 +425,7 @@ export async function buscarGrandesOportunidades(
       previsaoFechamento: p.previsao_fechamento ?? null,
       empresa:            p.empresa,
       filial:             p.filial,
+      etapaFunil:         p.etapa_funil ?? null,
     })
   }
 

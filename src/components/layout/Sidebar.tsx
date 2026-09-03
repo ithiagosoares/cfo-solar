@@ -40,6 +40,7 @@ const MENU: MenuSection[] = [
     items: [
       { label: 'Dashboard Comercial', href: '/dashboard',        icon: BarChart2 },
       { label: 'Orçamentos',          href: '/orcamentos',       icon: FileText },
+      { label: 'Importar PDF',        href: '/orcamentos/importacao', icon: Upload },
       { label: 'Vendas',              href: '/vendas',           icon: TrendingUp },
       { label: 'Upload de Relatório', href: '/comercial/upload', icon: Upload, papeis: ['administrador', 'gestor'] },
     ],

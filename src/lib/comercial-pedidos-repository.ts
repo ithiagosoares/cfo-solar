@@ -265,6 +265,8 @@ export async function listarPedidos(filtros: {
   dataInicio?: string
   dataFim?: string
   mostrarArquivados?: boolean
+  semPdf?: boolean
+  comPdf?: boolean
   pagina?: number
   porPagina?: number
 } = {}): Promise<{ pedidos: PedidoResumo[]; total: number }> {
@@ -308,6 +310,8 @@ export async function listarPedidos(filtros: {
   if (filtros.status)     query = query.eq('status', filtros.status)
   if (filtros.dataInicio) query = query.gte('data_orcamento', filtros.dataInicio)
   if (filtros.dataFim)    query = query.lte('data_orcamento', filtros.dataFim)
+  if (filtros.semPdf)     query = query.is('pdf_url', null)
+  if (filtros.comPdf)     query = query.not('pdf_url', 'is', null)
   query = query.eq('arquivado', filtros.mostrarArquivados === true)
 
   const { data, error, count } = await query

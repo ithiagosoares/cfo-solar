@@ -33,6 +33,8 @@ export async function GET(request: Request) {
   if (searchParams.get('dataInicio'))     filtros.dataInicio        = searchParams.get('dataInicio')!
   if (searchParams.get('dataFim'))        filtros.dataFim           = searchParams.get('dataFim')!
   if (searchParams.get('arquivados') === '1') filtros.mostrarArquivados = true
+  if (searchParams.get('sem_pdf') === '1') filtros.semPdf = true
+  if (searchParams.get('com_pdf') === '1') filtros.comPdf = true
 
   try {
     const result = await listarPedidos(filtros)

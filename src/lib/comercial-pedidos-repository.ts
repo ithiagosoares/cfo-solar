@@ -308,7 +308,7 @@ export async function listarPedidos(filtros: {
 
   if (filtros.vendedorId)  query = query.eq('vendedor_id', filtros.vendedorId)
   if (filtros.clienteCnpj) query = query.eq('cliente_cnpj', filtros.clienteCnpj)
-  if (buscaNorm)           query = query.ilike('empresa', `%${buscaNorm}%`)
+  if (buscaNorm)           query = query.ilike('cliente', `%${buscaNorm}%`)
   if (filtros.status)     query = query.eq('status', filtros.status)
   if (filtros.dataInicio) query = query.gte('data_orcamento', filtros.dataInicio)
   if (filtros.dataFim)    query = query.lte('data_orcamento', filtros.dataFim)

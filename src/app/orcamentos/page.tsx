@@ -229,10 +229,10 @@ export default function OrcamentosPage() {
             : undefined}
         >
           <FilterInput
-            label="Empresa"
+            label="Cliente"
             value={filtro.busca}
             onChange={v => setFiltro(f => ({ ...f, busca: v }))}
-            placeholder="Buscar empresa…"
+            placeholder="Buscar cliente…"
           />
           <FilterSelect
             label="Status"

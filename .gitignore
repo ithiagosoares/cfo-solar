@@ -37,6 +37,9 @@ yarn-error.log*
 # vercel
 .vercel
 
+# clone aninhado acidental (pasta duplicada do próprio repo, sem uso)
+/cfo-solar
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

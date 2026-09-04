@@ -16,7 +16,7 @@ export default function RecuperarSenhaPage() {
     setErro(null)
     const supabase = createSupabaseBrowserClient()
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: 'https://nihaobr.com.br/login/redefinir-senha',
+      redirectTo: `${window.location.origin}/login/redefinir-senha`,
     })
     // Nunca confirmar se o email existe ou não (prevenção de enumeração).
     // Exibimos sucesso independente do resultado, exceto erros de rede/config.

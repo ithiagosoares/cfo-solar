@@ -12,8 +12,15 @@ const nextConfig: NextConfig = {
   // detecta sozinho — sem isso o binário nativo fica de fora da function e dá
   // "Cannot find module '@napi-rs/canvas'" só em produção (funciona local por já
   // estar em node_modules sem passar por trace).
+  // pdfjs-dist também resolve o worker (pdf.worker.mjs) e as fontes padrão
+  // (standard_fonts/) via caminho relativo ao próprio pacote em tempo de execução
+  // — mesmo problema de file-tracing do @napi-rs/canvas acima, então inclui o
+  // pacote inteiro em vez de tentar adivinhar quais arquivos internos ele usa.
   outputFileTracingIncludes: {
-    '/api/comercial-pedidos/**': ['./node_modules/@napi-rs/canvas*/**/*'],
+    '/api/comercial-pedidos/**': [
+      './node_modules/@napi-rs/canvas*/**/*',
+      './node_modules/pdfjs-dist/**/*',
+    ],
   },
 };
 

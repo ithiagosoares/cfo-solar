@@ -304,9 +304,11 @@ export async function listarPedidos(filtros: {
     .order('created_at', { ascending: false })
     .range(from, to)
 
+  const buscaNorm = filtros.busca?.trim()
+
   if (filtros.vendedorId)  query = query.eq('vendedor_id', filtros.vendedorId)
   if (filtros.clienteCnpj) query = query.eq('cliente_cnpj', filtros.clienteCnpj)
-  if (filtros.busca)      query = query.ilike('empresa', `%${filtros.busca}%`)
+  if (buscaNorm)           query = query.ilike('empresa', `%${buscaNorm}%`)
   if (filtros.status)     query = query.eq('status', filtros.status)
   if (filtros.dataInicio) query = query.gte('data_orcamento', filtros.dataInicio)
   if (filtros.dataFim)    query = query.lte('data_orcamento', filtros.dataFim)
@@ -527,9 +529,10 @@ export async function listarVendas(filtros: {
     dataQuery = dataQuery.eq('vendedor_id', filtros.vendedorId)
     sumQuery  = sumQuery.eq('vendedor_id', filtros.vendedorId)
   }
-  if (filtros.busca) {
-    dataQuery = dataQuery.ilike('cliente', `%${filtros.busca}%`)
-    sumQuery  = sumQuery.ilike('cliente', `%${filtros.busca}%`)
+  const buscaNorm = filtros.busca?.trim()
+  if (buscaNorm) {
+    dataQuery = dataQuery.ilike('cliente', `%${buscaNorm}%`)
+    sumQuery  = sumQuery.ilike('cliente', `%${buscaNorm}%`)
   }
   if (filtros.valorMin !== undefined) {
     dataQuery = dataQuery.gte('valor_vendido', filtros.valorMin)

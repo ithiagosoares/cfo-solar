@@ -263,7 +263,8 @@ export async function listarClientes(filtros: FiltrosCliente = {}): Promise<{ cl
   if (filtros.tipo)       query = query.eq('tipo',        filtros.tipo)
   if (filtros.origem)     query = query.eq('origem',      filtros.origem)
   if (filtros.criadoPor)  query = query.eq('criado_por',  filtros.criadoPor)
-  if (filtros.busca)      query = query.ilike('razao_social', `%${filtros.busca}%`)
+  const buscaNorm = filtros.busca?.trim()
+  if (buscaNorm)          query = query.ilike('razao_social', `%${buscaNorm}%`)
   query = query.eq('arquivado', filtros.mostrarArquivados === true)
 
   const { data, error, count } = await query

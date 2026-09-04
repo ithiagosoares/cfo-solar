@@ -368,10 +368,11 @@ export default function KanbanPage() {
 
   useEffect(() => { void carregarTudo() }, [carregarTudo]) // eslint-disable-line react-hooks/set-state-in-effect
 
-  const clientesFiltrados = busca.trim()
+  const buscaNorm = busca.trim().toLowerCase()
+  const clientesFiltrados = buscaNorm
     ? clientes.filter(c =>
-        c.razaoSocial.toLowerCase().includes(busca.toLowerCase()) ||
-        c.cnpj.includes(busca.replace(/\D/g, ''))
+        c.razaoSocial.toLowerCase().includes(buscaNorm) ||
+        c.cnpj.includes(buscaNorm.replace(/\D/g, ''))
       )
     : clientes
 

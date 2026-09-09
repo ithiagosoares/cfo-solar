@@ -1,8 +1,10 @@
 import { getPapel, getVendedorId, requireComercialAccess } from '@/lib/comercial-auth'
 import { criarCliente, listarClientes } from '@/lib/clientes-repository'
-import type { FiltrosCliente, TipoCliente, OrigemCliente, StatusCliente } from '@/lib/clientes-repository'
+import type { FiltrosCliente, TipoCliente, OrigemCliente, StatusCliente, OrdenarClientes } from '@/lib/clientes-repository'
 
 const POR_PAGINA_MAX = 100
+const STATUS_VALIDOS = new Set<string>(['em_fila', 'atribuido', 'liberado'])
+const ORDENS_VALIDAS = new Set<string>(['recente', 'antigo', 'cliente'])
 
 const PAPEIS_CRIACAO = new Set(['sdr', 'administrador', 'gestor', 'vendedor'])
 
@@ -15,11 +17,17 @@ export async function GET(request: Request) {
 
   const filtros: FiltrosCliente = {}
 
-  if (searchParams.get('status'))    filtros.status    = searchParams.get('status')    as StatusCliente
+  if (searchParams.get('status')) {
+    filtros.status = searchParams.get('status')!.split(',').filter(v => STATUS_VALIDOS.has(v)) as StatusCliente[]
+  }
   if (searchParams.get('listaId'))   filtros.listaId   = searchParams.get('listaId')!
   if (searchParams.get('tipo'))      filtros.tipo      = searchParams.get('tipo')      as TipoCliente
   if (searchParams.get('origem'))    filtros.origem    = searchParams.get('origem')    as OrigemCliente
   if (searchParams.get('busca'))             filtros.busca             = searchParams.get('busca')!
+  if (searchParams.get('dataInicio'))        filtros.dataInicio        = searchParams.get('dataInicio')!
+  if (searchParams.get('dataFim'))           filtros.dataFim           = searchParams.get('dataFim')!
+  const ordenarPor = searchParams.get('ordenarPor')
+  if (ordenarPor && ORDENS_VALIDAS.has(ordenarPor)) filtros.ordenarPor = ordenarPor as OrdenarClientes
   if (searchParams.get('arquivados') === '1') filtros.mostrarArquivados = true
 
   const pagina    = parseInt(searchParams.get('pagina')    ?? '1',  10)

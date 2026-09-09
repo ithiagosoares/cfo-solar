@@ -162,7 +162,7 @@ export async function buscarCentroComando(opts: OpcoesCentroComando): Promise<Ce
     contarClientesNovosHoje(vendedorId),
     Promise.all(
       (['em_fila', 'atribuido', 'liberado'] as const).map(status =>
-        listarClientes({ status, vendedorId, porPagina: 1 }),
+        listarClientes({ status: [status], vendedorId, porPagina: 1 }),
       ),
     ),
     contarPorEtapaFunil({ vendedorId }),

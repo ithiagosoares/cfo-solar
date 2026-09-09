@@ -3,10 +3,13 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import AppLayout from '@/components/layout/AppLayout'
-import { FilterBar, FilterInput, FilterSelect, FilterCheckbox } from '@/components/filters/FilterBar'
+import {
+  FilterBar, FilterInput, FilterMultiSelect, FilterSelect, FilterDateRange, FilterSort, FilterCheckbox,
+} from '@/components/filters/FilterBar'
 import { ModalNovoCliente } from '@/components/clientes/ModalNovoCliente'
 import { StatusSelect } from '@/components/ui/StatusSelect'
 import { useListasCrm } from '@/hooks/useListasCrm'
+import { lerFiltrosDaUrl, paramArray } from '@/lib/filtro-url'
 import styles from '@/styles/editorial.module.css'
 
 function mascaraCNPJ(raw: string): string {
@@ -31,11 +34,49 @@ const ORIGEM_LABEL: Record<string, string> = {
 
 const POR_PAGINA = 20
 
-type FiltroCliente = { busca: string; listaId: string; vendedorId: string; mostrarArquivados: boolean }
-const FILTRO_ZERO: FiltroCliente = { busca: '', listaId: '', vendedorId: '', mostrarArquivados: false }
+const STATUS_OPTS = [
+  { value: 'em_fila',   label: 'Em fila' },
+  { value: 'atribuido', label: 'Atribuído' },
+  { value: 'liberado',  label: 'Liberado' },
+]
+
+const ORDENAR_OPTS = [
+  { value: 'recente', label: 'Mais recente' },
+  { value: 'antigo',  label: 'Mais antigo' },
+  { value: 'cliente', label: 'Cliente (A-Z)' },
+]
+
+type FiltroCliente = {
+  busca: string
+  status: string[]
+  listaId: string
+  vendedorId: string
+  dataInicio: string
+  dataFim: string
+  ordenarPor: string
+  mostrarArquivados: boolean
+}
+const FILTRO_ZERO: FiltroCliente = {
+  busca: '', status: [], listaId: '', vendedorId: '', dataInicio: '', dataFim: '',
+  ordenarPor: '', mostrarArquivados: false,
+}
+
+function filtroDaUrl(): FiltroCliente {
+  const params = lerFiltrosDaUrl()
+  return {
+    busca: params.get('busca') ?? '',
+    status: paramArray(params, 'status'),
+    listaId: params.get('listaId') ?? '',
+    vendedorId: params.get('vendedor_id') ?? '',
+    dataInicio: params.get('dataInicio') ?? '',
+    dataFim: params.get('dataFim') ?? '',
+    ordenarPor: params.get('ordenarPor') ?? '',
+    mostrarArquivados: params.get('arquivados') === '1',
+  }
+}
 
 function temFiltroAtivo(f: FiltroCliente) {
-  return f.busca || f.listaId || f.vendedorId
+  return f.busca || f.status.length > 0 || f.listaId || f.vendedorId || f.dataInicio || f.dataFim
 }
 
 interface ClienteResumo {
@@ -88,6 +129,16 @@ export default function CadastroClientePage() {
       .catch(() => setPapel('sem_acesso'))
   }, [])
 
+  // Restaura filtros da URL (link compartilhável) — feito num efeito, não no
+  // useState inicial, pra não divergir entre a renderização no servidor (sem
+  // window) e a hidratação no cliente.
+  useEffect(() => {
+    if (!window.location.search) return
+    const daUrl = filtroDaUrl()
+    setFiltro(daUrl)
+    setFiltroAtivo(daUrl)
+  }, [])
+
   useEffect(() => {
     if (papel === null) return
     if (papel === 'vendedor') { setCarregandoVend(false); return } // eslint-disable-line react-hooks/set-state-in-effect
@@ -110,8 +161,12 @@ export default function CadastroClientePage() {
       const params = new URLSearchParams({ pagina: String(pagina), porPagina: String(POR_PAGINA) })
       if (papel !== 'vendedor' && papel !== 'sdr') params.set('meus', '1')
       if (fa.busca)               params.set('busca',       fa.busca)
+      if (fa.status.length)       params.set('status',      fa.status.join(','))
       if (fa.listaId)             params.set('listaId',     fa.listaId)
       if (fa.vendedorId)          params.set('vendedor_id', fa.vendedorId)
+      if (fa.dataInicio)          params.set('dataInicio',  fa.dataInicio)
+      if (fa.dataFim)             params.set('dataFim',     fa.dataFim)
+      if (fa.ordenarPor)          params.set('ordenarPor',  fa.ordenarPor)
       if (fa.mostrarArquivados)   params.set('arquivados',  '1')
       window.history.replaceState(null, '', `?${params}`)
 
@@ -222,10 +277,16 @@ export default function CadastroClientePage() {
             : undefined}
         >
           <FilterInput
-            label="Empresa"
+            label="Buscar"
             value={filtro.busca}
             onChange={v => setFiltro(f => ({ ...f, busca: v }))}
-            placeholder="Buscar razão social…"
+            placeholder="Razão social ou CNPJ…"
+          />
+          <FilterMultiSelect
+            label="Status"
+            value={filtro.status}
+            onChange={v => setFiltro(f => ({ ...f, status: v }))}
+            options={STATUS_OPTS}
           />
           <FilterSelect
             label="Lista"
@@ -243,6 +304,18 @@ export default function CadastroClientePage() {
               width={170}
             />
           )}
+          <FilterDateRange
+            label="Cadastrado em"
+            from={filtro.dataInicio}
+            to={filtro.dataFim}
+            onFrom={v => setFiltro(f => ({ ...f, dataInicio: v }))}
+            onTo={v => setFiltro(f => ({ ...f, dataFim: v }))}
+          />
+          <FilterSort
+            value={filtro.ordenarPor || 'recente'}
+            onChange={v => setFiltro(f => ({ ...f, ordenarPor: v }))}
+            options={ORDENAR_OPTS}
+          />
           <FilterCheckbox
             label="Mostrar arquivados"
             checked={filtro.mostrarArquivados}

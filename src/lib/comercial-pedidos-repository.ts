@@ -255,15 +255,22 @@ export interface VendaResumo {
 
 // ─── Queries ──────────────────────────────────────────────────────────────────
 
+export type OrdenarPedidos = 'recente' | 'antigo' | 'maiorValor' | 'menorValor' | 'cliente'
+
 // Lista pedidos com paginação. Filtra por vendedor_id quando informado.
-// Ordena por data de criação decrescente (mais recente primeiro).
+// Ordena por data de criação decrescente (mais recente primeiro) por padrão.
 export async function listarPedidos(filtros: {
   vendedorId?: string
   clienteCnpj?: string
   busca?: string
-  status?: StatusPedido
+  status?: StatusPedido[]
+  etapaFunil?: EtapaFunil[]
+  filial?: string
+  valorMin?: number
+  valorMax?: number
   dataInicio?: string
   dataFim?: string
+  ordenarPor?: OrdenarPedidos
   mostrarArquivados?: boolean
   semPdf?: boolean
   comPdf?: boolean
@@ -301,20 +308,40 @@ export async function listarPedidos(filtros: {
       'id, vendedor_id, empresa, filial, cliente, cliente_cnpj, valor_orcado, data_orcamento, status, valor_vendido, data_venda, origem, numero_pedido, created_at, arquivado, etapa_funil, status_venda',
       { count: 'exact' },
     )
-    .order('created_at', { ascending: false })
     .range(from, to)
 
   const buscaNorm = filtros.busca?.trim()
 
   if (filtros.vendedorId)  query = query.eq('vendedor_id', filtros.vendedorId)
   if (filtros.clienteCnpj) query = query.eq('cliente_cnpj', filtros.clienteCnpj)
-  if (buscaNorm)           query = query.ilike('empresa', `%${buscaNorm}%`)
-  if (filtros.status)     query = query.eq('status', filtros.status)
+  // Busca em empresa, nome do cliente, número do pedido e CNPJ (quando o termo
+  // tem dígitos) — vírgula removida pois o .or() do PostgREST a usa como
+  // separador de condições.
+  if (buscaNorm) {
+    const termo = buscaNorm.replace(/,/g, ' ')
+    const digitos = termo.replace(/\D/g, '')
+    const condicoes = [`empresa.ilike.%${termo}%`, `cliente.ilike.%${termo}%`, `numero_pedido.ilike.%${termo}%`]
+    if (digitos) condicoes.push(`cliente_cnpj.ilike.%${digitos}%`)
+    query = query.or(condicoes.join(','))
+  }
+  if (filtros.status && filtros.status.length > 0)     query = query.in('status', filtros.status)
+  if (filtros.etapaFunil && filtros.etapaFunil.length > 0) query = query.in('etapa_funil', filtros.etapaFunil)
+  if (filtros.filial)     query = query.eq('filial', filtros.filial)
+  if (filtros.valorMin !== undefined) query = query.gte('valor_orcado', filtros.valorMin)
+  if (filtros.valorMax !== undefined) query = query.lte('valor_orcado', filtros.valorMax)
   if (filtros.dataInicio) query = query.gte('data_orcamento', filtros.dataInicio)
   if (filtros.dataFim)    query = query.lte('data_orcamento', filtros.dataFim)
   if (filtros.semPdf)     query = query.is('pdf_url', null)
   if (filtros.comPdf)     query = query.not('pdf_url', 'is', null)
   query = query.eq('arquivado', filtros.mostrarArquivados === true)
+
+  switch (filtros.ordenarPor) {
+    case 'antigo':      query = query.order('created_at', { ascending: true });  break
+    case 'maiorValor':  query = query.order('valor_orcado', { ascending: false }); break
+    case 'menorValor':  query = query.order('valor_orcado', { ascending: true });  break
+    case 'cliente':     query = query.order('cliente', { ascending: true });     break
+    default:            query = query.order('created_at', { ascending: false })
+  }
 
   const { data, error, count } = await query
 
@@ -483,10 +510,13 @@ export async function atualizarPedido(id: string, dados: DadosAtualizacaoPedido)
 export async function listarVendas(filtros: {
   vendedorId?: string
   busca?: string
+  statusVenda?: StatusVenda[]
+  filial?: string
   valorMin?: number
   valorMax?: number
   dataInicio?: string
   dataFim?: string
+  ordenarPor?: OrdenarPedidos
   pagina?: number
   porPagina?: number
 } = {}): Promise<{ vendas: VendaResumo[]; total: number; totalVendido: number }> {
@@ -516,7 +546,6 @@ export async function listarVendas(filtros: {
     )
     .eq('status', 'vendido')
     .eq('arquivado', false)
-    .order('data_venda', { ascending: false })
     .range(from, to)
 
   let sumQuery = supabaseAdmin
@@ -531,8 +560,23 @@ export async function listarVendas(filtros: {
   }
   const buscaNorm = filtros.busca?.trim()
   if (buscaNorm) {
-    dataQuery = dataQuery.ilike('cliente', `%${buscaNorm}%`)
-    sumQuery  = sumQuery.ilike('cliente', `%${buscaNorm}%`)
+    // Busca em cliente, número do pedido e CNPJ (quando o termo tem dígitos) —
+    // vírgula removida pois o .or() do PostgREST a usa como separador.
+    const termo = buscaNorm.replace(/,/g, ' ')
+    const digitos = termo.replace(/\D/g, '')
+    const condicoes = [`cliente.ilike.%${termo}%`, `numero_pedido.ilike.%${termo}%`]
+    if (digitos) condicoes.push(`cliente_cnpj.ilike.%${digitos}%`)
+    const condicao = condicoes.join(',')
+    dataQuery = dataQuery.or(condicao)
+    sumQuery  = sumQuery.or(condicao)
+  }
+  if (filtros.statusVenda && filtros.statusVenda.length > 0) {
+    dataQuery = dataQuery.in('status_venda', filtros.statusVenda)
+    sumQuery  = sumQuery.in('status_venda', filtros.statusVenda)
+  }
+  if (filtros.filial) {
+    dataQuery = dataQuery.eq('filial', filtros.filial)
+    sumQuery  = sumQuery.eq('filial', filtros.filial)
   }
   if (filtros.valorMin !== undefined) {
     dataQuery = dataQuery.gte('valor_vendido', filtros.valorMin)
@@ -549,6 +593,14 @@ export async function listarVendas(filtros: {
   if (filtros.dataFim) {
     dataQuery = dataQuery.lte('data_venda', filtros.dataFim)
     sumQuery  = sumQuery.lte('data_venda', filtros.dataFim)
+  }
+
+  switch (filtros.ordenarPor) {
+    case 'antigo':     dataQuery = dataQuery.order('data_venda', { ascending: true });  break
+    case 'maiorValor': dataQuery = dataQuery.order('valor_vendido', { ascending: false }); break
+    case 'menorValor': dataQuery = dataQuery.order('valor_vendido', { ascending: true });  break
+    case 'cliente':    dataQuery = dataQuery.order('cliente', { ascending: true });     break
+    default:           dataQuery = dataQuery.order('data_venda', { ascending: false })
   }
 
   const [dataResult, sumResult] = await Promise.all([dataQuery, sumQuery])

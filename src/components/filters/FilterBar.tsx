@@ -204,6 +204,71 @@ export function FilterNumberRange({
   )
 }
 
+export function FilterMultiSelect({
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  label: string
+  value: string[]
+  onChange: (v: string[]) => void
+  options: { value: string; label: string }[]
+}) {
+  function toggle(v: string) {
+    onChange(value.includes(v) ? value.filter(x => x !== v) : [...value, v])
+  }
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column' }}>
+      <span style={LABEL}>{label}</span>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, paddingTop: 2, maxWidth: 320 }}>
+        {options.map(o => (
+          <label key={o.value} style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={value.includes(o.value)}
+              onChange={() => toggle(o.value)}
+              style={{ width: 14, height: 14, cursor: 'pointer', accentColor: 'var(--cor-destaque)' }}
+            />
+            <span style={{ fontSize: 12.5, color: 'var(--cor-texto-suave)', userSelect: 'none', whiteSpace: 'nowrap' }}>{o.label}</span>
+          </label>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+export function FilterSort({
+  label = 'Ordenar por',
+  value,
+  onChange,
+  options,
+  width = 170,
+}: {
+  label?: string
+  value: string
+  onChange: (v: string) => void
+  options: { value: string; label: string }[]
+  width?: number
+}) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', width }}>
+      <span style={LABEL}>{label}</span>
+      <select
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        style={{ ...BASE, cursor: 'pointer' }}
+        onFocus={focusBorder}
+        onBlur={blurBorder}
+      >
+        {options.map(o => (
+          <option key={o.value} value={o.value}>{o.label}</option>
+        ))}
+      </select>
+    </div>
+  )
+}
+
 export function FilterCheckbox({
   label,
   checked,

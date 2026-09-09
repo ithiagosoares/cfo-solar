@@ -3,9 +3,13 @@
 import { useState, useEffect, useCallback } from 'react'
 import { formatMoeda } from '@/lib/utils'
 import AppLayout from '@/components/layout/AppLayout'
-import { FilterBar, FilterInput, FilterSelect, FilterMonth, FilterNumberRange } from '@/components/filters/FilterBar'
+import {
+  FilterBar, FilterInput, FilterSelect, FilterMultiSelect, FilterMonth, FilterNumberRange, FilterSort,
+} from '@/components/filters/FilterBar'
 import { StatusSelect } from '@/components/ui/StatusSelect'
 import { STATUS_VENDA_OPCOES } from '@/lib/status-pedido-config'
+import { FILIAIS } from '@/lib/empresa-filial'
+import { lerFiltrosDaUrl, paramArray } from '@/lib/filtro-url'
 import styles from '@/styles/editorial.module.css'
 
 const POR_PAGINA = 20
@@ -51,11 +55,52 @@ function mesParaRange(mes: string): { inicio: string; fim: string } {
   return { inicio, fim }
 }
 
-type Filtros = { busca: string; mes: string; valorMin: string; valorMax: string; vendedorId: string }
-const FILTROS_ZERO: Filtros = { busca: '', mes: '', valorMin: '', valorMax: '', vendedorId: '' }
+const STATUS_VENDA_OPTS = STATUS_VENDA_OPCOES.map(o => ({ value: o.value, label: o.label }))
+const FILIAL_OPTS = FILIAIS.map(f => ({ value: f, label: f }))
+
+const ORDENAR_OPTS = [
+  { value: 'recente',    label: 'Mais recente' },
+  { value: 'antigo',     label: 'Mais antigo' },
+  { value: 'maiorValor', label: 'Maior valor' },
+  { value: 'menorValor', label: 'Menor valor' },
+  { value: 'cliente',    label: 'Cliente (A-Z)' },
+]
+
+type Filtros = {
+  busca: string
+  mes: string
+  statusVenda: string[]
+  filial: string
+  valorMin: string
+  valorMax: string
+  vendedorId: string
+  ordenarPor: string
+}
+const FILTROS_ZERO: Filtros = {
+  busca: '', mes: '', statusVenda: [], filial: '', valorMin: '', valorMax: '', vendedorId: '', ordenarPor: '',
+}
+
+function filtrosDaUrl(): Filtros {
+  const params = lerFiltrosDaUrl()
+  const inicio = params.get('periodoInicio')
+  const fim    = params.get('periodoFim')
+  return {
+    busca: params.get('busca') ?? '',
+    // O período fica na URL como periodoInicio/periodoFim (range), não como
+    // 'mes' — reconstruir o mês só é possível quando o range é exatamente um
+    // mês calendário; fora isso, o filtro de mês fica vazio (usa o default).
+    mes: inicio && fim && inicio.slice(0, 7) === fim.slice(0, 7) ? inicio.slice(0, 7) : '',
+    statusVenda: paramArray(params, 'statusVenda'),
+    filial: params.get('filial') ?? '',
+    valorMin: params.get('valorMin') ?? '',
+    valorMax: params.get('valorMax') ?? '',
+    vendedorId: params.get('vendedor_id') ?? '',
+    ordenarPor: params.get('ordenarPor') ?? '',
+  }
+}
 
 function temFiltroAtivo(f: Filtros) {
-  return f.busca || f.mes || f.valorMin || f.valorMax || f.vendedorId
+  return f.busca || f.mes || f.statusVenda.length > 0 || f.filial || f.valorMin || f.valorMax || f.vendedorId
 }
 
 function fmtData(d: string): string {
@@ -91,6 +136,16 @@ export default function VendasPage() {
       .catch(() => setPapel('sem_acesso'))
   }, [])
 
+  // Restaura filtros da URL (link compartilhável) — feito num efeito, não no
+  // useState inicial, pra não divergir entre a renderização no servidor (sem
+  // window) e a hidratação no cliente.
+  useEffect(() => {
+    if (!window.location.search) return
+    const daUrl = filtrosDaUrl()
+    setFiltro(daUrl)
+    setFiltroAtivo(daUrl)
+  }, [])
+
   useEffect(() => {
     if (papel === null || papel === 'vendedor') return
     fetch('/api/comercial/vendedores')
@@ -114,10 +169,13 @@ export default function VendasPage() {
       const params = new URLSearchParams({ pagina: String(pagina), porPagina: String(POR_PAGINA) })
       params.set('periodoInicio', periodo.inicio)
       params.set('periodoFim',    periodo.fim)
-      if (fa.busca)     params.set('busca',      fa.busca)
-      if (fa.valorMin)  params.set('valorMin',   fa.valorMin)
-      if (fa.valorMax)  params.set('valorMax',   fa.valorMax)
-      if (fa.vendedorId) params.set('vendedor_id', fa.vendedorId)
+      if (fa.busca)       params.set('busca',       fa.busca)
+      if (fa.statusVenda.length) params.set('statusVenda', fa.statusVenda.join(','))
+      if (fa.filial)      params.set('filial',      fa.filial)
+      if (fa.valorMin)    params.set('valorMin',    fa.valorMin)
+      if (fa.valorMax)    params.set('valorMax',    fa.valorMax)
+      if (fa.vendedorId)  params.set('vendedor_id', fa.vendedorId)
+      if (fa.ordenarPor)  params.set('ordenarPor',  fa.ordenarPor)
       window.history.replaceState(null, '', `?${params}`)
 
       const res  = await fetch(`/api/vendas?${params}`)
@@ -203,16 +261,29 @@ export default function VendasPage() {
             : undefined}
         >
           <FilterInput
-            label="Cliente"
+            label="Buscar"
             value={filtro.busca}
             onChange={v => setFiltro(f => ({ ...f, busca: v }))}
-            placeholder="Buscar cliente…"
+            placeholder="Cliente ou nº do pedido…"
           />
           <FilterMonth
             label="Mês"
             value={filtro.mes}
             onChange={v => setFiltro(f => ({ ...f, mes: v }))}
             width={165}
+          />
+          <FilterMultiSelect
+            label="Status da venda"
+            value={filtro.statusVenda}
+            onChange={v => setFiltro(f => ({ ...f, statusVenda: v }))}
+            options={STATUS_VENDA_OPTS}
+          />
+          <FilterSelect
+            label="Filial"
+            value={filtro.filial}
+            onChange={v => setFiltro(f => ({ ...f, filial: v }))}
+            options={FILIAL_OPTS}
+            width={130}
           />
           <FilterNumberRange
             label="Valor vendido (R$)"
@@ -230,6 +301,11 @@ export default function VendasPage() {
               width={170}
             />
           )}
+          <FilterSort
+            value={filtro.ordenarPor || 'recente'}
+            onChange={v => setFiltro(f => ({ ...f, ordenarPor: v }))}
+            options={ORDENAR_OPTS}
+          />
         </FilterBar>
 
         {/* Card de resumo */}

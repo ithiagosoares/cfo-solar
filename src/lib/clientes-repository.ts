@@ -112,14 +112,19 @@ export interface DadosNovoCliente {
   listaId?: string
 }
 
+export type OrdenarClientes = 'recente' | 'antigo' | 'cliente'
+
 export interface FiltrosCliente {
-  status?: StatusCliente
+  status?: StatusCliente[]
   listaId?: string
   vendedorId?: string
   tipo?: TipoCliente
   origem?: OrigemCliente
   criadoPor?: string
   busca?: string
+  dataInicio?: string
+  dataFim?: string
+  ordenarPor?: OrdenarClientes
   mostrarArquivados?: boolean
   pagina?: number
   porPagina?: number
@@ -254,18 +259,36 @@ export async function listarClientes(filtros: FiltrosCliente = {}): Promise<{ cl
   let query = supabaseAdmin
     .from(TABELA)
     .select('*', { count: 'exact' })
-    .order('created_at', { ascending: false })
     .range(from, to)
 
-  if (filtros.status)     query = query.eq('status',      filtros.status)
+  if (filtros.status && filtros.status.length > 0) query = query.in('status', filtros.status)
   if (filtros.listaId)    query = query.eq('lista_id',    filtros.listaId)
   if (filtros.vendedorId) query = query.eq('vendedor_id', filtros.vendedorId)
   if (filtros.tipo)       query = query.eq('tipo',        filtros.tipo)
   if (filtros.origem)     query = query.eq('origem',      filtros.origem)
   if (filtros.criadoPor)  query = query.eq('criado_por',  filtros.criadoPor)
+
   const buscaNorm = filtros.busca?.trim()
-  if (buscaNorm)          query = query.ilike('razao_social', `%${buscaNorm}%`)
+  if (buscaNorm) {
+    // Busca em razão social sempre; em CNPJ só quando o termo tem dígitos —
+    // senão '%' vazio no ilike de cnpj bateria com qualquer linha.
+    const termo = buscaNorm.replace(/,/g, ' ')
+    const digitos = termo.replace(/\D/g, '')
+    const condicoes = [`razao_social.ilike.%${termo}%`]
+    if (digitos) condicoes.push(`cnpj.ilike.%${digitos}%`)
+    query = query.or(condicoes.join(','))
+  }
+
+  if (filtros.dataInicio) query = query.gte('created_at', filtros.dataInicio)
+  if (filtros.dataFim)    query = query.lte('created_at', `${filtros.dataFim}T23:59:59`)
+
   query = query.eq('arquivado', filtros.mostrarArquivados === true)
+
+  switch (filtros.ordenarPor) {
+    case 'antigo':  query = query.order('created_at', { ascending: true });  break
+    case 'cliente': query = query.order('razao_social', { ascending: true }); break
+    default:        query = query.order('created_at', { ascending: false })
+  }
 
   const { data, error, count } = await query
   if (error) throw new Error(`Falha ao listar clientes: ${error.message}`)

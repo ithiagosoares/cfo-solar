@@ -1,6 +1,10 @@
 import { getPapel, getVendedorId, requireComercialAccess } from '@/lib/comercial-auth'
 import { salvarPedidoManual, listarPedidos } from '@/lib/comercial-pedidos-repository'
-import type { DadosPedidoManual, StatusPedido } from '@/lib/comercial-pedidos-repository'
+import type { DadosPedidoManual, StatusPedido, EtapaFunil, OrdenarPedidos } from '@/lib/comercial-pedidos-repository'
+
+const STATUS_VALIDOS = new Set<string>(['orcado', 'vendido', 'perdido'])
+const ETAPAS_VALIDAS = new Set<string>(['Novo', 'Em contato', 'Negociação', 'Aguardando decisão', 'Fechado', 'Perdido'])
+const ORDENS_VALIDAS = new Set<string>(['recente', 'antigo', 'maiorValor', 'menorValor', 'cliente'])
 
 const PAPEIS_CRIACAO = new Set(['administrador', 'gestor', 'vendedor'])
 
@@ -29,9 +33,19 @@ export async function GET(request: Request) {
 
   if (searchParams.get('clienteCnpj'))    filtros.clienteCnpj       = searchParams.get('clienteCnpj')!
   if (searchParams.get('busca'))          filtros.busca             = searchParams.get('busca')!
-  if (searchParams.get('status'))         filtros.status            = searchParams.get('status') as StatusPedido
+  if (searchParams.get('status')) {
+    filtros.status = searchParams.get('status')!.split(',').filter(v => STATUS_VALIDOS.has(v)) as StatusPedido[]
+  }
+  if (searchParams.get('etapaFunil')) {
+    filtros.etapaFunil = searchParams.get('etapaFunil')!.split(',').filter(v => ETAPAS_VALIDAS.has(v)) as EtapaFunil[]
+  }
+  if (searchParams.get('filial'))         filtros.filial            = searchParams.get('filial')!
+  if (searchParams.get('valorMin'))       filtros.valorMin          = parseFloat(searchParams.get('valorMin')!)
+  if (searchParams.get('valorMax'))       filtros.valorMax          = parseFloat(searchParams.get('valorMax')!)
   if (searchParams.get('dataInicio'))     filtros.dataInicio        = searchParams.get('dataInicio')!
   if (searchParams.get('dataFim'))        filtros.dataFim           = searchParams.get('dataFim')!
+  const ordenarPor = searchParams.get('ordenarPor')
+  if (ordenarPor && ORDENS_VALIDAS.has(ordenarPor)) filtros.ordenarPor = ordenarPor as OrdenarPedidos
   if (searchParams.get('arquivados') === '1') filtros.mostrarArquivados = true
   if (searchParams.get('sem_pdf') === '1') filtros.semPdf = true
   if (searchParams.get('com_pdf') === '1') filtros.comPdf = true

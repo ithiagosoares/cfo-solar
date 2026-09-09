@@ -4,9 +4,14 @@ import { useState, useEffect, useCallback } from 'react'
 import { Plus } from 'lucide-react'
 import { formatMoeda } from '@/lib/utils'
 import AppLayout from '@/components/layout/AppLayout'
-import { FilterBar, FilterInput, FilterSelect, FilterDateRange, FilterCheckbox } from '@/components/filters/FilterBar'
+import {
+  FilterBar, FilterInput, FilterMultiSelect, FilterSelect, FilterDateRange,
+  FilterNumberRange, FilterSort, FilterCheckbox,
+} from '@/components/filters/FilterBar'
 import { StatusSelect } from '@/components/ui/StatusSelect'
 import { ETAPA_FUNIL_OPCOES, STATUS_VENDA_OPCOES } from '@/lib/status-pedido-config'
+import { FILIAIS } from '@/lib/empresa-filial'
+import { lerFiltrosDaUrl, paramArray } from '@/lib/filtro-url'
 import ModalNovoOrcamento from '@/components/comercial/ModalNovoOrcamento'
 import ModalMarcarVendido from '@/components/comercial/ModalMarcarVendido'
 import styles from '@/styles/editorial.module.css'
@@ -45,22 +50,71 @@ const STATUS_OPTS = [
   { value: 'perdido', label: 'Perdido' },
 ]
 
-type Filtros = { busca: string; status: string; dataInicio: string; dataFim: string; vendedorId: string; mostrarArquivados: boolean }
-const FILTROS_ZERO: Filtros = { busca: '', status: '', dataInicio: '', dataFim: '', vendedorId: '', mostrarArquivados: false }
+const ETAPA_FUNIL_OPTS = ETAPA_FUNIL_OPCOES.map(o => ({ value: o.value, label: o.label }))
+const FILIAL_OPTS = FILIAIS.map(f => ({ value: f, label: f }))
+
+const ORDENAR_OPTS = [
+  { value: 'recente',    label: 'Mais recente' },
+  { value: 'antigo',     label: 'Mais antigo' },
+  { value: 'maiorValor', label: 'Maior valor' },
+  { value: 'menorValor', label: 'Menor valor' },
+  { value: 'cliente',    label: 'Cliente (A-Z)' },
+]
+
+type Filtros = {
+  busca: string
+  status: string[]
+  etapaFunil: string[]
+  filial: string
+  dataInicio: string
+  dataFim: string
+  valorMin: string
+  valorMax: string
+  vendedorId: string
+  ordenarPor: string
+  mostrarArquivados: boolean
+}
+const FILTROS_ZERO: Filtros = {
+  busca: '', status: [], etapaFunil: [], filial: '', dataInicio: '', dataFim: '',
+  valorMin: '', valorMax: '', vendedorId: '', ordenarPor: '', mostrarArquivados: false,
+}
 
 function filtrosParaUrl(f: Filtros, pagina: number): URLSearchParams {
   const p = new URLSearchParams({ pagina: String(pagina), porPagina: String(POR_PAGINA) })
-  if (f.busca)       p.set('busca',      f.busca)
-  if (f.status)      p.set('status',     f.status)
-  if (f.dataInicio)  p.set('dataInicio', f.dataInicio)
-  if (f.dataFim)     p.set('dataFim',    f.dataFim)
+  if (f.busca)             p.set('busca',      f.busca)
+  if (f.status.length)     p.set('status',     f.status.join(','))
+  if (f.etapaFunil.length) p.set('etapaFunil', f.etapaFunil.join(','))
+  if (f.filial)             p.set('filial',     f.filial)
+  if (f.dataInicio)         p.set('dataInicio', f.dataInicio)
+  if (f.dataFim)             p.set('dataFim',    f.dataFim)
+  if (f.valorMin)            p.set('valorMin',   f.valorMin)
+  if (f.valorMax)            p.set('valorMax',   f.valorMax)
   if (f.vendedorId)          p.set('vendedor_id', f.vendedorId)
+  if (f.ordenarPor)          p.set('ordenarPor', f.ordenarPor)
   if (f.mostrarArquivados)   p.set('arquivados', '1')
   return p
 }
 
+function filtrosDaUrl(): Filtros {
+  const params = lerFiltrosDaUrl()
+  return {
+    busca: params.get('busca') ?? '',
+    status: paramArray(params, 'status'),
+    etapaFunil: paramArray(params, 'etapaFunil'),
+    filial: params.get('filial') ?? '',
+    dataInicio: params.get('dataInicio') ?? '',
+    dataFim: params.get('dataFim') ?? '',
+    valorMin: params.get('valorMin') ?? '',
+    valorMax: params.get('valorMax') ?? '',
+    vendedorId: params.get('vendedor_id') ?? '',
+    ordenarPor: params.get('ordenarPor') ?? '',
+    mostrarArquivados: params.get('arquivados') === '1',
+  }
+}
+
 function temFiltroAtivo(f: Filtros) {
-  return f.busca || f.status || f.dataInicio || f.dataFim || f.vendedorId
+  return f.busca || f.status.length > 0 || f.etapaFunil.length > 0 || f.filial
+    || f.dataInicio || f.dataFim || f.valorMin || f.valorMax || f.vendedorId
 }
 
 export default function OrcamentosPage() {
@@ -88,6 +142,16 @@ export default function OrcamentosPage() {
       .then(r => r.json() as Promise<{ papel?: string }>)
       .then(d => setPapel(d.papel ?? 'sem_acesso'))
       .catch(() => setPapel('sem_acesso'))
+  }, [])
+
+  // Restaura filtros da URL (link compartilhável) — feito num efeito, não no
+  // useState inicial, pra não divergir entre a renderização no servidor (sem
+  // window) e a hidratação no cliente.
+  useEffect(() => {
+    if (!window.location.search) return
+    const daUrl = filtrosDaUrl()
+    setFiltro(daUrl)
+    setFiltroAtivo(daUrl)
   }, [])
 
   useEffect(() => {
@@ -244,17 +308,23 @@ export default function OrcamentosPage() {
             : undefined}
         >
           <FilterInput
-            label="Empresa"
+            label="Buscar"
             value={filtro.busca}
             onChange={v => setFiltro(f => ({ ...f, busca: v }))}
-            placeholder="Buscar empresa…"
+            placeholder="Empresa, cliente ou nº do pedido…"
+            width={220}
           />
-          <FilterSelect
+          <FilterMultiSelect
             label="Status"
             value={filtro.status}
             onChange={v => setFiltro(f => ({ ...f, status: v }))}
             options={STATUS_OPTS}
-            width={130}
+          />
+          <FilterMultiSelect
+            label="Etapa do funil"
+            value={filtro.etapaFunil}
+            onChange={v => setFiltro(f => ({ ...f, etapaFunil: v }))}
+            options={ETAPA_FUNIL_OPTS}
           />
           <FilterDateRange
             label="Data do orçamento"
@@ -272,6 +342,25 @@ export default function OrcamentosPage() {
               width={170}
             />
           )}
+          <FilterSelect
+            label="Filial"
+            value={filtro.filial}
+            onChange={v => setFiltro(f => ({ ...f, filial: v }))}
+            options={FILIAL_OPTS}
+            width={130}
+          />
+          <FilterNumberRange
+            label="Valor orçado"
+            from={filtro.valorMin}
+            to={filtro.valorMax}
+            onFrom={v => setFiltro(f => ({ ...f, valorMin: v }))}
+            onTo={v => setFiltro(f => ({ ...f, valorMax: v }))}
+          />
+          <FilterSort
+            value={filtro.ordenarPor || 'recente'}
+            onChange={v => setFiltro(f => ({ ...f, ordenarPor: v }))}
+            options={ORDENAR_OPTS}
+          />
           <FilterCheckbox
             label="Mostrar arquivados"
             checked={filtro.mostrarArquivados}

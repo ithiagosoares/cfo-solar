@@ -4,6 +4,7 @@
 import { type NextRequest } from 'next/server'
 import { requireComercialAccess, getPapel, getVendedorId } from '@/lib/comercial-auth'
 import { listarVendas } from '@/lib/comercial-pedidos-repository'
+import type { StatusVenda, OrdenarPedidos } from '@/lib/comercial-pedidos-repository'
 import {
   buscarTotaisOficiaisMensais,
   deduplicarTotaisOficiais,
@@ -11,6 +12,11 @@ import {
 } from '@/lib/vendedores-totais-repository'
 
 const POR_PAGINA = 20
+const STATUS_VENDA_VALIDOS = new Set<string>([
+  'Venda Fechada', 'Faturamento Pendente', 'Aguardando emissão de NF',
+  'Faturado', 'Entregue', 'Problema Reportado', 'Pós-venda Concluído',
+])
+const ORDENS_VALIDAS = new Set<string>(['recente', 'antigo', 'maiorValor', 'menorValor', 'cliente'])
 
 export async function GET(request: NextRequest) {
   const denied = requireComercialAccess(request)
@@ -33,6 +39,13 @@ export async function GET(request: NextRequest) {
   const valorMaxStr = searchParams.get('valorMax')
   if (valorMinStr) { const n = parseFloat(valorMinStr); if (!isNaN(n)) filtros.valorMin = n }
   if (valorMaxStr) { const n = parseFloat(valorMaxStr); if (!isNaN(n)) filtros.valorMax = n }
+  if (searchParams.get('statusVenda')) {
+    filtros.statusVenda = searchParams.get('statusVenda')!
+      .split(',').filter(v => STATUS_VENDA_VALIDOS.has(v)) as StatusVenda[]
+  }
+  if (searchParams.get('filial')) filtros.filial = searchParams.get('filial')!
+  const ordenarPor = searchParams.get('ordenarPor')
+  if (ordenarPor && ORDENS_VALIDAS.has(ordenarPor)) filtros.ordenarPor = ordenarPor as OrdenarPedidos
 
   let vendedorId: string | null = null
   if (papel === 'vendedor') {

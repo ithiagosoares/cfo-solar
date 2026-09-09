@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import AppLayout from '@/components/layout/AppLayout'
 import styles from '@/styles/editorial.module.css'
 import { formatMoeda } from '@/lib/utils'
+import { FILIAIS, EMPRESA_POR_FILIAL, type Filial } from '@/lib/empresa-filial'
 
 // ─── Tipos (espelho do backend, sem importar código server-only) ──────────────
 
@@ -66,15 +67,14 @@ interface OpcaoVendedor {
   nome: string
 }
 
-// ─── Constantes ───────────────────────────────────────────────────────────────
-
-const EMPRESAS = [
-  'Solar System Matriz',
-  'Solar System Filial PR',
-  'Level2',
-  'Ni Hao',
-  'AluMarket',
-]
+interface UltimaImportacao {
+  confirmadoEm: string | null
+  filial: string | null
+  periodoInicio: string | null
+  periodoFim: string | null
+  totalRegistros: number
+  criadoPor: string | null
+}
 
 // ─── Página ───────────────────────────────────────────────────────────────────
 
@@ -93,10 +93,17 @@ export default function ComercialUploadPage() {
       .catch(() => {})
   }, [router])
 
+  useEffect(() => {
+    fetch('/api/comercial/upload-relatorio/ultima')
+      .then(r => r.json() as Promise<{ ok: boolean; importacao?: UltimaImportacao | null }>)
+      .then(d => { if (d.ok) setUltimaImportacao(d.importacao ?? null) })
+      .catch(() => {})
+  }, [])
+
   // ── Upload phase ────────────────────────────────────────────────────────────
   const [arquivos, setArquivos] = useState<File[]>([])
-  const [empresa, setEmpresa] = useState('')
   const [filial, setFilial] = useState('')
+  const [ultimaImportacao, setUltimaImportacao] = useState<UltimaImportacao | null>(null)
   const [periodoInicio, setPeriodoInicio] = useState('')
   const [periodoFim, setPeriodoFim] = useState('')
   const [isDragging, setIsDragging] = useState(false)
@@ -138,10 +145,12 @@ export default function ComercialUploadPage() {
   // ── Processar upload ─────────────────────────────────────────────────────────
 
   async function processarArquivos() {
-    if (!arquivos.length || !empresa || !filial) return
+    if (!arquivos.length || !filial) return
     setProcessando(true)
     setErroUpload(null)
     try {
+      // Empresa é sempre derivada da unidade selecionada — ver empresa-filial.ts.
+      const empresa = EMPRESA_POR_FILIAL[filial as Filial]
       const fd = new FormData()
       fd.append('empresa', empresa)
       fd.append('filial', filial)
@@ -538,10 +547,34 @@ export default function ComercialUploadPage() {
         <div className={`${styles.stitle} ${styles.serif}`} style={{ marginTop: 24, marginBottom: 6 }}>
           Upload de Relatório Comercial
         </div>
-        <div className={styles.scap} style={{ marginBottom: 32 }}>
+        <div className={styles.scap} style={{ marginBottom: 24 }}>
           Importe relatórios em formato <strong>HTML</strong> exportados do SSG para revisão antes de inserir no banco.
           Selecione ao menos o relatório de Pedidos de Orçamento. Os demais são opcionais.
         </div>
+
+        {ultimaImportacao && (
+          <div
+            style={{
+              display: 'flex', flexWrap: 'wrap', gap: '4px 6px', alignItems: 'baseline',
+              fontSize: 12.5, color: 'var(--ink3)',
+              padding: '10px 14px', marginBottom: 28,
+              background: 'var(--paper)', border: '1px solid var(--line)',
+            }}
+          >
+            <span>Último upload:</span>
+            <strong style={{ color: 'var(--ink2)' }}>{fmtDataHora(ultimaImportacao.confirmadoEm)}</strong>
+            <span>por</span>
+            <strong style={{ color: 'var(--ink2)' }}>{ultimaImportacao.criadoPor ?? 'desconhecido'}</strong>
+            {ultimaImportacao.filial && (
+              <>
+                <span>·</span>
+                <span>{ultimaImportacao.filial}</span>
+              </>
+            )}
+            <span>·</span>
+            <span>{ultimaImportacao.totalRegistros} registro{ultimaImportacao.totalRegistros !== 1 ? 's' : ''}</span>
+          </div>
+        )}
 
         {/* ── Drop zone ───────────────────────────────────────────────────── */}
         <div
@@ -613,19 +646,8 @@ export default function ComercialUploadPage() {
           </div>
         )}
 
-        {/* ── Empresa + Filial ─────────────────────────────────────────────── */}
-        <div style={{ display: 'flex', gap: 16, marginBottom: 28 }}>
-          <div className={styles.field} style={{ flex: 1, marginBottom: 0 }}>
-            <label className={styles.fieldLabel}>Empresa</label>
-            <select
-              className={styles.select}
-              value={empresa}
-              onChange={e => setEmpresa(e.target.value)}
-            >
-              <option value="">Selecione a empresa</option>
-              {EMPRESAS.map(e => <option key={e} value={e}>{e}</option>)}
-            </select>
-          </div>
+        {/* ── Unidade ──────────────────────────────────────────────────────── */}
+        <div style={{ marginBottom: 28 }}>
           <div className={styles.field} style={{ flex: '0 0 200px', marginBottom: 0 }}>
             <label className={styles.fieldLabel}>Unidade</label>
             <select
@@ -634,8 +656,7 @@ export default function ComercialUploadPage() {
               onChange={e => setFilial(e.target.value)}
             >
               <option value="">Selecione</option>
-              <option value="São Paulo">São Paulo</option>
-              <option value="Paraná">Paraná</option>
+              {FILIAIS.map(f => <option key={f} value={f}>{f}</option>)}
             </select>
           </div>
         </div>
@@ -682,13 +703,21 @@ export default function ComercialUploadPage() {
         <button
           className={styles.btnPrimary}
           onClick={processarArquivos}
-          disabled={!arquivos.length || !empresa || !filial || processando}
+          disabled={!arquivos.length || !filial || processando}
         >
           {processando ? 'Processando…' : 'Processar e revisar'}
         </button>
       </div>
     </AppLayout>
   )
+}
+
+// ─── Helpers ────────────────────────────────────────────────────────────────
+
+function fmtDataHora(iso: string | null): string {
+  if (!iso) return '—'
+  const d = new Date(iso)
+  return `${d.toLocaleDateString('pt-BR')} às ${d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`
 }
 
 // ─── Componentes auxiliares ───────────────────────────────────────────────────

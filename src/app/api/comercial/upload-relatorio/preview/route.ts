@@ -47,6 +47,7 @@ export async function POST(request: Request) {
   if (!papel || !PAPEIS_UPLOAD.has(papel)) {
     return Response.json({ ok: false, error: 'Acesso negado' }, { status: 403 })
   }
+  const criadoPor = request.headers.get('x-user-email')
   try {
     // ── 1. Ler form data ────────────────────────────────────────────────────
     const formData = await request.formData()
@@ -175,6 +176,7 @@ export async function POST(request: Request) {
     const importacao = await criarImportacao({
       empresa,
       filial,
+      criadoPor,
       arquivosProcessados: arquivosProcessados.map(a => ({ nome: a.nome, tipo: a.tipo })),
       totalRegistros:      registros.length,
       divergencias,

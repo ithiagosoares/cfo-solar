@@ -37,6 +37,7 @@ export interface RegistroPreview {
 export interface NovaImportacao {
   empresa: string
   filial: string
+  criadoPor: string | null
   arquivosProcessados: ArquivoProcessado[]
   totalRegistros: number
   divergencias: Divergencia[]
@@ -55,11 +56,13 @@ export interface NovaImportacao {
 //   arquivos (não arquivos_processados), registros_total (não total_registros),
 //   confirmado_at (não confirmado_em), registros_preview (adicionada via ALTER TABLE).
 // Adicionadas em 2026-07-30: periodo_inicio, periodo_fim, totais_vendedor, rentabilidade_vendedor.
+// Adicionada em 2026-09-09: criado_por (e-mail de quem fez o upload).
 interface ImportacaoRow {
   id: string
   status: string
   empresa: string | null
   filial: string | null
+  criado_por: string | null
   arquivos: ArquivoProcessado[]
   registros_total: number
   divergencias: Divergencia[]
@@ -78,6 +81,7 @@ export interface ComercialImportacao {
   status: string
   empresa: string | null
   filial: string | null
+  criadoPor: string | null
   arquivosProcessados: ArquivoProcessado[]
   totalRegistros: number
   divergencias: Divergencia[]
@@ -99,6 +103,7 @@ function mapearLinha(row: ImportacaoRow): ComercialImportacao {
     status: row.status,
     empresa: row.empresa,
     filial: row.filial,
+    criadoPor: row.criado_por,
     arquivosProcessados: row.arquivos,
     totalRegistros: row.registros_total,
     divergencias: row.divergencias,
@@ -121,6 +126,7 @@ export async function criarImportacao(dados: NovaImportacao): Promise<ComercialI
     .insert({
       empresa:                    dados.empresa,
       filial:                     dados.filial,
+      criado_por:                 dados.criadoPor,
       arquivos:                   dados.arquivosProcessados,
       registros_total:            dados.totalRegistros,
       divergencias:               dados.divergencias,
@@ -152,6 +158,22 @@ export async function buscarImportacao(id: string): Promise<ComercialImportacao>
   if (error) throw new Error(`Importação ${id} não encontrada: ${error.message}`)
 
   return mapearLinha(data as ImportacaoRow)
+}
+
+// Última importação efetivamente confirmada (registros inseridos) — usada pra
+// exibir "último upload feito, por quem" na tela de upload. Não considera
+// importações pendentes de revisão ou descartadas.
+export async function buscarUltimaImportacaoConfirmada(): Promise<ComercialImportacao | null> {
+  const { data, error } = await supabaseAdmin
+    .from(TABELA)
+    .select('*')
+    .eq('status', 'confirmado')
+    .order('confirmado_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (error) throw new Error(`Falha ao buscar última importação: ${error.message}`)
+  return data ? mapearLinha(data as ImportacaoRow) : null
 }
 
 export async function atualizarStatusImportacao(

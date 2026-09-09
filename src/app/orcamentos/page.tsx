@@ -8,6 +8,7 @@ import { FilterBar, FilterInput, FilterSelect, FilterDateRange, FilterCheckbox }
 import { StatusSelect } from '@/components/ui/StatusSelect'
 import { ETAPA_FUNIL_OPCOES, STATUS_VENDA_OPCOES } from '@/lib/status-pedido-config'
 import ModalNovoOrcamento from '@/components/comercial/ModalNovoOrcamento'
+import ModalMarcarVendido from '@/components/comercial/ModalMarcarVendido'
 import styles from '@/styles/editorial.module.css'
 
 const POR_PAGINA = 20
@@ -77,6 +78,7 @@ export default function OrcamentosPage() {
   const [carregandoMais, setCarregandoMais] = useState(false)
 
   const [modalAberto, setModalAberto] = useState(false)
+  const [pedidoParaVender, setPedidoParaVender] = useState<{ id: string; cliente: string; valorOrcado: number } | null>(null)
   const [toast, setToast] = useState<string | null>(null)
 
   const eVendedor = papel === 'vendedor'
@@ -152,6 +154,13 @@ export default function OrcamentosPage() {
     setTimeout(() => setToast(null), 3500)
   }
 
+  function handleVendaSalva(msg: string) {
+    setPedidoParaVender(null)
+    setToast(msg)
+    buscarPedidos(1, true, filtroAtivo)
+    setTimeout(() => setToast(null), 3500)
+  }
+
   async function salvarStatusPedido(id: string, campo: 'etapaFunil' | 'statusVenda', valor: string) {
     const res = await fetch(`/api/comercial-pedidos/${id}/status`, {
       method: 'PATCH',
@@ -219,6 +228,12 @@ export default function OrcamentosPage() {
           aberto={modalAberto}
           onFechar={() => setModalAberto(false)}
           onSalvo={handleSalvo}
+        />
+
+        <ModalMarcarVendido
+          pedido={pedidoParaVender}
+          onFechar={() => setPedidoParaVender(null)}
+          onSalvo={handleVendaSalva}
         />
 
         <FilterBar
@@ -369,7 +384,30 @@ export default function OrcamentosPage() {
                       <span style={{ color: 'var(--ink3)' }}>—</span>
                     )}
                   </div>
-                  <div>
+                  <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                    {p.status === 'orcado' && (
+                      <button
+                        type="button"
+                        onClick={e => {
+                          e.preventDefault(); e.stopPropagation()
+                          setPedidoParaVender({ id: p.id, cliente: p.cliente, valorOrcado: p.valorOrcado })
+                        }}
+                        style={{
+                          background: 'none',
+                          border: '1px solid var(--positivo)',
+                          borderRadius: 6,
+                          padding: '3px 8px',
+                          fontSize: 11,
+                          fontWeight: 600,
+                          color: 'var(--positivo)',
+                          cursor: 'pointer',
+                          fontFamily: 'inherit',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        Vendido
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={e => { e.preventDefault(); e.stopPropagation(); void arquivarInLinha(p.id, !filtroAtivo.mostrarArquivados) }}

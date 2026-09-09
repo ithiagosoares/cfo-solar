@@ -21,6 +21,7 @@ import ScoreClienteCard from '@/components/common/ScoreClienteCard'
 import AcoesRapidas from '@/components/clientes/hub/AcoesRapidas'
 import ModalRegistrarAtividade from '@/components/clientes/hub/ModalRegistrarAtividade'
 import ModalAgendarAtividade from '@/components/clientes/hub/ModalAgendarAtividade'
+import ModalMarcarVendido from '@/components/comercial/ModalMarcarVendido'
 import AbaInteligencia from '@/components/clientes/hub/AbaInteligencia'
 import AbaPipeline from '@/components/clientes/hub/AbaPipeline'
 import TimelineHistorico from '@/components/clientes/hub/TimelineHistorico'
@@ -51,6 +52,8 @@ export default function ClienteHubPage() {
   const [modalNovoContato, setModalNovoContato] = useState(false)
   const [modalAgendar, setModalAgendar] = useState(false)
   const [atividadeConcluir, setAtividadeConcluir] = useState<AtividadeComNome | null>(null)
+  const [pedidoParaVender, setPedidoParaVender] = useState<{ id: string; cliente: string; valorOrcado: number } | null>(null)
+  const [toast, setToast] = useState<string | null>(null)
 
   const recarregarCliente = useCallback(async () => {
     const json = await fetch(`/api/clientes/${cnpj}`).then(r => r.json()) as { ok: boolean; cliente?: Cliente }
@@ -60,6 +63,12 @@ export default function ClienteHubPage() {
   const recarregarAtividades = useCallback(async () => {
     const json = await fetch(`/api/clientes/${cnpj}/atividades`).then(r => r.json()) as { ok: boolean; atividades?: AtividadeComNome[] }
     if (json.ok && json.atividades) setAtividades(json.atividades)
+  }, [cnpj])
+
+  const recarregarPedidos = useCallback(async () => {
+    const json = await fetch(`/api/orcamentos?clienteCnpj=${encodeURIComponent(cnpj)}&porPagina=100`)
+      .then(r => r.json()) as { ok: boolean; pedidos?: PedidoResumo[] }
+    if (json.ok && json.pedidos) setPedidos(json.pedidos)
   }, [cnpj])
 
   useEffect(() => {
@@ -134,6 +143,15 @@ export default function ClienteHubPage() {
   const alertas = useMemo(() => cliente ? calcularAlertas(cliente, pedidos) : [], [cliente, pedidos])
   const produtosTop = useMemo(() => top3Produtos(todosItens), [todosItens])
   const filial = useMemo(() => filialMaisRecente(pedidos), [pedidos])
+  const pedidosAbertos = useMemo(() => pedidos.filter(p => p.status === 'orcado' && !p.arquivado), [pedidos])
+
+  function handleVendaSalva(msg: string) {
+    setPedidoParaVender(null)
+    setToast(msg)
+    void recarregarPedidos()
+    void recarregarCliente()
+    setTimeout(() => setToast(null), 3500)
+  }
 
   const detalhesPdf = useMemo(() => {
     const mapa: Record<string, { pdfUrl: string | null }> = {}
@@ -182,6 +200,15 @@ export default function ClienteHubPage() {
       <main className={styles.wrap} style={{ paddingTop: 40, paddingBottom: 80 }}>
         <CabecalhoCliente cliente={cliente} nomeVendedor={nomeVendedor} filial={filial} />
 
+        {toast && (
+          <div
+            className={styles.notice}
+            style={{ marginTop: 16, borderLeftColor: 'var(--positivo)', color: 'var(--positivo)' }}
+          >
+            <span>{toast}</span>
+          </div>
+        )}
+
         <div style={{ display: 'grid', gridTemplateColumns: '260px 1fr', gap: 32, marginTop: 32, alignItems: 'start' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 20, position: 'sticky', top: 24 }}>
             <ScoreClienteCard clienteCnpj={cliente.cnpj} size="large" showExplanation />
@@ -198,7 +225,13 @@ export default function ClienteHubPage() {
               {abaAtiva === 'inteligencia' && (
                 <AbaInteligencia cliente={cliente} pedidos={pedidos} chanceRecompra={chanceRecompra} produtosTop={produtosTop} />
               )}
-              {abaAtiva === 'pipeline' && <AbaPipeline etapaAtual={etapaPipeline} />}
+              {abaAtiva === 'pipeline' && (
+                <AbaPipeline
+                  etapaAtual={etapaPipeline}
+                  pedidosAbertos={pedidosAbertos}
+                  onMarcarVendido={setPedidoParaVender}
+                />
+              )}
               {abaAtiva === 'historico' && <TimelineHistorico atividades={atividades} />}
               {abaAtiva === 'documentos' && <AbaDocumentos pedidos={pedidos} detalhes={detalhesPdf} />}
               {abaAtiva === 'proximasAcoes' && (
@@ -222,6 +255,11 @@ export default function ClienteHubPage() {
         cnpj={cnpj}
         onFechar={() => setModalAgendar(false)}
         onSalvo={() => { void recarregarAtividades() }}
+      />
+      <ModalMarcarVendido
+        pedido={pedidoParaVender}
+        onFechar={() => setPedidoParaVender(null)}
+        onSalvo={handleVendaSalva}
       />
     </AppLayout>
   )

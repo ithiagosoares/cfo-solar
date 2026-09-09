@@ -4,7 +4,7 @@ import {
   atualizarPedido,
   arquivarPedido,
 } from '@/lib/comercial-pedidos-repository'
-import type { DadosAtualizacaoPedido, StatusPedido } from '@/lib/comercial-pedidos-repository'
+import type { DadosAtualizacaoPedido } from '@/lib/comercial-pedidos-repository'
 import { listarItensPedido } from '@/lib/comercial-pedidos-itens-repository'
 
 export async function GET(
@@ -81,7 +81,22 @@ export async function PATCH(
   if (body.empresa       !== undefined) dados.empresa       = String(body.empresa)
   if (body.filial        !== undefined) dados.filial        = String(body.filial)
   if (body.cliente       !== undefined) dados.cliente       = String(body.cliente)
-  if (body.status        !== undefined) dados.status        = body.status as StatusPedido
+  if (body.status !== undefined) {
+    const novoStatus = body.status
+    if (novoStatus !== 'orcado' && novoStatus !== 'vendido' && novoStatus !== 'perdido') {
+      return Response.json({ ok: false, error: 'Status inválido' }, { status: 400 })
+    }
+    // Só bloqueia a transição direta perdido -> vendido — reenviar o mesmo
+    // status (ex: re-salvar um pedido já vendido) continua permitido, senão
+    // o formulário de edição completo quebraria ao salvar sem mudar o status.
+    if (novoStatus === 'vendido' && pedido.status === 'perdido') {
+      return Response.json(
+        { ok: false, error: 'Não é possível marcar como vendido um orçamento perdido' },
+        { status: 400 },
+      )
+    }
+    dados.status = novoStatus
+  }
   if (body.valorOrcado   !== undefined) dados.valorOrcado   = Number(body.valorOrcado)
   if (body.dataOrcamento !== undefined) dados.dataOrcamento = body.dataOrcamento as string | null
   if (body.valorVendido  !== undefined) dados.valorVendido  = body.valorVendido !== null ? Number(body.valorVendido) : null

@@ -48,7 +48,7 @@
 
 - `vendedores` — nome (chave de matching com relatórios do ERP, deve ser EXATO), ativo
 - `clientes` — CNPJ como chave primária, tipo (distribuidora/integrador), origem, vendedor_id (nullable), data_vencimento (calculada automaticamente: +3 meses integrador / +6 meses distribuidor), status_crm (com cores), campos de CRM (ultimo_contato, proxima_acao, observacoes), arquivado (soft delete)
-- `comercial_pedidos` — orçamentos/vendas individuais, vinculados a vendedor_id, numero_pedido (chave de deduplicação junto com empresa), status técnico (orçado/vendido — **nunca editar à mão, vem do ERP**), status_funil (editável, funil comercial), status_pos_venda (editável, pós-venda leve), arquivado (soft delete)
+- `comercial_pedidos` — orçamentos/vendas individuais, vinculados a vendedor_id, numero_pedido (chave de deduplicação junto com empresa), status técnico (orçado/vendido/perdido — normalmente vem do ERP, mas pode ser convertido manualmente pelo vendedor via botão "Vendido"/tela de edição, ver seção 5 regra 1), etapa_funil (editável, funil comercial), status_venda (editável, acompanhamento pós-venda), arquivado (soft delete)
 - `comercial_importacoes` — log de cada upload de relatório
 - `vendedores_totais_oficiais` — totais oficiais por vendedor/filial/período/fonte, vindos dos relatórios de resumo do ERP (não dos pedidos individuais) — **fonte de verdade** para os valores exibidos no Dashboard e em Vendas
 - `usuarios_autorizados` — papel, vendedor_id (quando papel=vendedor)
@@ -57,7 +57,7 @@
 
 ## 5. Regras de negócio que não podem ser quebradas
 
-1. **`comercial_pedidos.status` (orçado/vendido) é dado do ERP, não é editável pelo usuário.** Reflete o que o relatório de orçamento disse. Nunca confundir com `status_funil` ou `status_pos_venda`, que são camadas de acompanhamento comercial por cima, editáveis livremente.
+1. **`comercial_pedidos.status` (orçado/vendido/perdido) normalmente vem do ERP, mas pode ser convertido manualmente pelo vendedor/gestor/admin** — ex: botão "Vendido" em `/orcamentos` e na aba Pipeline do cliente, que registra a data da venda escolhida (hoje ou uma data passada, para sincronizar com o ERP) e chama o mesmo `PATCH /api/orcamentos/[id]` usado pela tela de edição completa. Só a transição direta perdido→vendido é bloqueada; qualquer outra é permitida sem checagem extra além de dono do pedido. Nunca confundir `status` com `etapa_funil` ou `status_venda`, que são camadas de acompanhamento comercial por cima, editáveis livremente e sem restrição de transição.
 
 2. **Nem todo orçamento fechado no ERP corresponde a uma venda real, e vice-versa.** Existe divergência conhecida entre "orçamento marcado fechado" (dado de `comercial_pedidos`) e "venda faturada" (dado de `vendedores_totais_oficiais`, vindo de relatórios de Rentabilidade/Total de Venda). Isso é comportamento esperado do ERP da empresa, não bug — alguns vendedores (ex: Matheus) têm vendas reais sem orçamento formal correspondente. Nesses casos, o total exibido deve vir de `vendedores_totais_oficiais` (com selo "✓ oficial"), não da soma de `comercial_pedidos`.
 
@@ -102,7 +102,7 @@
 ## 9. O que este sistema explicitamente NÃO faz (por decisão, não por limitação)
 
 - Não usa IA para extrair, classificar ou calcular dados — tudo é código determinístico.
-- Não tem módulo de produção/logística/pós-venda completo (só um campo leve de `status_pos_venda` para follow-up).
+- Não tem módulo de produção/logística/pós-venda completo (só um campo leve de `status_venda` para follow-up).
 - Tem Score IA (cálculo determinístico de 8 critérios ponderados, `src/lib/score-repository.ts`, cacheado 24h em `clientes_score_cache`) — mas não tem chat comercial nem motor de recomendação (visão futura, documentada em `NORTH-STAR-visao-ia-comercial.md`, fora do escopo atual).
 - Não integra com Mercado Livre ainda (pausado, sem credencial).
 - Não dá login individual para vendedores fazerem tudo sozinhos sem supervisão de admin/gestor além do que já está definido nos 4 papéis.

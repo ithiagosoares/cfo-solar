@@ -9,8 +9,6 @@ import type { Cliente } from '@/lib/clientes-repository'
 import type { PedidoResumo } from '@/lib/comercial-pedidos-repository'
 import type { ItemPedido } from '@/lib/comercial-pedidos-itens-repository'
 import {
-  calcularScore,
-  calcularPotencial,
   calcularChanceRecompra,
   calcularEtapaPipeline,
   calcularAlertas,
@@ -19,7 +17,7 @@ import {
 } from '@/lib/cliente-inteligencia'
 
 import CabecalhoCliente from '@/components/clientes/hub/CabecalhoCliente'
-import ScoreCard from '@/components/clientes/hub/ScoreCard'
+import ScoreClienteCard from '@/components/common/ScoreClienteCard'
 import AcoesRapidas from '@/components/clientes/hub/AcoesRapidas'
 import ModalRegistrarAtividade from '@/components/clientes/hub/ModalRegistrarAtividade'
 import ModalAgendarAtividade from '@/components/clientes/hub/ModalAgendarAtividade'
@@ -131,8 +129,6 @@ export default function ClienteHubPage() {
   }, [cnpj])
 
   const todosItens = useMemo(() => Object.values(detalhesPedidos).flatMap(d => d.itens), [detalhesPedidos])
-  const resultadoScore = useMemo(() => cliente ? calcularScore(cliente, pedidos) : null, [cliente, pedidos])
-  const potencial = useMemo(() => resultadoScore ? calcularPotencial(resultadoScore.score) : null, [resultadoScore])
   const chanceRecompra = useMemo(() => cliente ? calcularChanceRecompra(cliente, pedidos) : null, [cliente, pedidos])
   const etapaPipeline = useMemo(() => cliente ? calcularEtapaPipeline(cliente, pedidos) : null, [cliente, pedidos])
   const alertas = useMemo(() => cliente ? calcularAlertas(cliente, pedidos) : [], [cliente, pedidos])
@@ -167,7 +163,7 @@ export default function ClienteHubPage() {
     )
   }
 
-  if (erro || !cliente || !resultadoScore || !potencial || !chanceRecompra || !etapaPipeline) {
+  if (erro || !cliente || !chanceRecompra || !etapaPipeline) {
     return (
       <AppLayout>
         <main className={styles.wrap} style={{ paddingTop: 40 }}>
@@ -188,7 +184,7 @@ export default function ClienteHubPage() {
 
         <div style={{ display: 'grid', gridTemplateColumns: '260px 1fr', gap: 32, marginTop: 32, alignItems: 'start' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 20, position: 'sticky', top: 24 }}>
-            <ScoreCard score={resultadoScore.score} potencial={potencial} detalhe={resultadoScore.detalhe} />
+            <ScoreClienteCard clienteCnpj={cliente.cnpj} size="large" showExplanation />
             <AcoesRapidas
               cliente={cliente}
               onRegistrarContato={() => setModalNovoContato(true)}

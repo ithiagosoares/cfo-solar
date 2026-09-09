@@ -103,7 +103,7 @@
 
 - Não usa IA para extrair, classificar ou calcular dados — tudo é código determinístico.
 - Não tem módulo de produção/logística/pós-venda completo (só um campo leve de `status_pos_venda` para follow-up).
-- Não tem Score IA, chat comercial, ou motor de recomendação (visão futura, documentada em `NORTH-STAR-visao-ia-comercial.md`, fora do escopo atual).
+- Tem Score IA (cálculo determinístico de 8 critérios ponderados, `src/lib/score-repository.ts`, cacheado 24h em `clientes_score_cache`) — mas não tem chat comercial nem motor de recomendação (visão futura, documentada em `NORTH-STAR-visao-ia-comercial.md`, fora do escopo atual).
 - Não integra com Mercado Livre ainda (pausado, sem credencial).
 - Não dá login individual para vendedores fazerem tudo sozinhos sem supervisão de admin/gestor além do que já está definido nos 4 papéis.
 

@@ -396,3 +396,21 @@ create table integracoes_google_drive (
 grant select, insert, update, delete on integracoes_google_drive to service_role;
 alter table integracoes_google_drive enable row level security;
 create policy "apenas_service_role" on integracoes_google_drive using (false);
+
+-- Cache de 24h do Score IA (ver src/lib/score-repository.ts). Score é
+-- recalculado sob demanda quando o cache está ausente ou mais velho que
+-- clientes_score_cache.calculado_em > 24h atrás — nunca calculado aqui, só
+-- armazenado.
+create table clientes_score_cache (
+  cliente_cnpj text primary key references clientes(cnpj),
+  score_final integer not null,
+  detalhes jsonb not null,
+  explicacao text not null,
+  cor text not null,
+  top2 jsonb not null,
+  calculado_em timestamptz not null default now()
+);
+
+grant select, insert, update, delete on clientes_score_cache to service_role;
+alter table clientes_score_cache enable row level security;
+create policy "apenas_service_role" on clientes_score_cache using (false);

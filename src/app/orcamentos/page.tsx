@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { Plus } from 'lucide-react'
+import { Plus, FileX } from 'lucide-react'
 import { formatMoeda } from '@/lib/utils'
 import AppLayout from '@/components/layout/AppLayout'
 import {
@@ -37,6 +37,7 @@ interface PedidoResumo {
   criadoEm: string
   etapaFunil: string | null
   statusVenda: string | null
+  temPdf: boolean
 }
 
 function fmtData(d: string | null): string {
@@ -445,8 +446,15 @@ export default function OrcamentosPage() {
                   onMouseEnter={e => (e.currentTarget.style.background = 'var(--cor-destaque-suave)')}
                   onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                 >
-                  <div style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {p.cliente}
+                  <div style={{ fontWeight: 500, display: 'flex', alignItems: 'center', gap: 5, overflow: 'hidden' }}>
+                    {!p.temPdf && (
+                      <span title="Este orçamento não possui PDF vinculado" style={{ display: 'inline-flex', flexShrink: 0 }}>
+                        <FileX aria-label="Sem PDF vinculado" style={{ width: 14, height: 14, color: 'var(--critico)' }} />
+                      </span>
+                    )}
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {p.cliente}
+                    </span>
                   </div>
                   {!eVendedor && (
                     <div style={{ color: 'var(--ink2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>

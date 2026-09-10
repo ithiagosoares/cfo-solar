@@ -36,6 +36,7 @@ export interface PedidoResumo {
   arquivado: boolean
   etapaFunil: EtapaFunil | null
   statusVenda: StatusVenda | null
+  temPdf: boolean
 }
 
 export interface PedidoCompleto extends PedidoResumo {
@@ -341,12 +342,13 @@ export async function listarPedidos(filtros: {
     arquivado: boolean
     etapa_funil: EtapaFunil | null
     status_venda: StatusVenda | null
+    pdf_url: string | null
   }
 
   let query = supabaseAdmin
     .from(TABELA)
     .select(
-      'id, vendedor_id, empresa, filial, cliente, cliente_cnpj, valor_orcado, data_orcamento, status, valor_vendido, data_venda, origem, numero_pedido, created_at, arquivado, etapa_funil, status_venda',
+      'id, vendedor_id, empresa, filial, cliente, cliente_cnpj, valor_orcado, data_orcamento, status, valor_vendido, data_venda, origem, numero_pedido, created_at, arquivado, etapa_funil, status_venda, pdf_url',
       { count: 'exact' },
     )
     .range(from, to)
@@ -407,6 +409,7 @@ export async function listarPedidos(filtros: {
       arquivado:     row.arquivado,
       etapaFunil:    row.etapa_funil,
       statusVenda:   row.status_venda,
+      temPdf:        row.pdf_url !== null,
     })),
     total: count ?? 0,
   }
@@ -488,6 +491,7 @@ export async function buscarPedidoPorId(id: string): Promise<PedidoCompleto | nu
     arquivado:     row.arquivado,
     etapaFunil:    row.etapa_funil,
     statusVenda:   row.status_venda,
+    temPdf:            row.pdf_url !== null,
     pdfUrl:            row.pdf_url,
     pdfGoogleDriveId:  row.pdf_google_drive_id,
     vendedorAtribuido: row.vendedor_atribuido,

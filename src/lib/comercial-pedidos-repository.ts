@@ -3,6 +3,7 @@
 
 import { supabaseAdmin } from './supabase-admin'
 import type { RegistroPreview } from './comercial-importacoes-repository'
+import { garantirClienteParaPedido } from './clientes-repository'
 
 const TABELA = 'comercial_pedidos'
 
@@ -49,6 +50,21 @@ export interface DadosPedidoManual {
   empresa: string
   filial: string
   cliente: string
+  // CNPJ já conhecido (ex.: extraído do PDF do orçamento) — quando informado,
+  // tem prioridade sobre a resolução por nome (ver salvarPedidoManual). Undefined
+  // (não informado) cai no fallback de nome; null explícito força "sem CNPJ".
+  clienteCnpj?: string | null
+  // Dados de contato do cliente (ex.: extraídos do PDF) — usados só se for preciso
+  // cadastrar automaticamente um cliente novo em `clientes` pra satisfazer a FK de
+  // cliente_cnpj (ver garantirClienteParaPedido). Não afetam um cliente já existente.
+  clienteCidade?: string | null
+  clienteEstado?: string | null
+  clienteTelefone?: string | null
+  clienteContato?: string | null
+  clienteEmail?: string | null
+  // E-mail de quem disparou a criação do pedido — vira criado_por se um cliente
+  // novo precisar ser cadastrado automaticamente.
+  criadoPor?: string | null
   numeroPedido: string
   valorOrcado: number
   dataOrcamento: string | null
@@ -165,10 +181,35 @@ export async function inserirPedidosImportacao(
 // status) e preserva vendedor_id/origem originais — reenviar o mesmo número de pedido
 // nunca reatribui o dono. Se não existe, insere um registro novo.
 export async function salvarPedidoManual(dados: DadosPedidoManual): Promise<ResultadoPedidoManual> {
-  const cnpjPorNome = dados.cliente
-    ? await resolverClienteCnpj([dados.cliente])
-    : {}
-  const clienteCnpj = cnpjPorNome[dados.cliente] ?? null
+  // CNPJ já conhecido (ex.: extraído do próprio PDF do orçamento) tem prioridade —
+  // só cai na resolução por nome (cadastro manual, onde não há CNPJ disponível)
+  // quando o chamador nem sequer informou o campo.
+  let clienteCnpj: string | null
+  if (dados.clienteCnpj !== undefined) {
+    clienteCnpj = dados.clienteCnpj
+  } else {
+    const cnpjPorNome = dados.cliente
+      ? await resolverClienteCnpj([dados.cliente])
+      : {}
+    clienteCnpj = cnpjPorNome[dados.cliente] ?? null
+  }
+
+  // comercial_pedidos.cliente_cnpj tem FK pra clientes(cnpj) — garante que o
+  // cliente existe (cria automaticamente ou assume um já cadastrado sem
+  // vendedor) antes de referenciá-lo; cai pra null se não for possível, em vez
+  // de quebrar a FK no insert/update abaixo.
+  if (clienteCnpj) {
+    clienteCnpj = await garantirClienteParaPedido(clienteCnpj, {
+      razaoSocial: dados.cliente,
+      cidade:      dados.clienteCidade ?? null,
+      estado:      dados.clienteEstado ?? null,
+      telefone:    dados.clienteTelefone ?? null,
+      nomeContato: dados.clienteContato ?? null,
+      email:       dados.clienteEmail ?? null,
+      vendedorId:  dados.vendedorId,
+      criadoPor:   dados.criadoPor ?? null,
+    })
+  }
 
   const camposPedido = {
     filial:         dados.filial,

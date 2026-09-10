@@ -250,6 +250,82 @@ export async function criarCliente(dados: DadosNovoCliente, criadoPor: string): 
   return mapearLinha(data as ClienteRow)
 }
 
+export interface DadosClienteAutomatico {
+  razaoSocial: string
+  cidade: string | null
+  estado: string | null
+  telefone: string | null
+  nomeContato: string | null
+  email: string | null
+  vendedorId: string | null
+  criadoPor: string | null
+}
+
+// Garante que existe uma linha em `clientes` para o CNPJ informado — chamada por
+// salvarPedidoManual antes de gravar comercial_pedidos.cliente_cnpj, porque a FK
+// comercial_pedidos_cliente_cnpj_fkey exige que o cliente já exista (criada direto
+// no Supabase, fora do schema.sql rastreado).
+//
+// Cliente já cadastrado: só assume pro vendedor do pedido quando ainda não tem
+// nenhum vendedor_id (regra de negócio da seção 5.6 do CLAUDE.md) — nunca
+// sobrescreve dado já cadastrado manualmente.
+// Cliente novo: cria com os dados já disponíveis no pedido (tipicamente extraídos
+// do PDF do orçamento) — exige cidade/estado/telefone, que `clientes` torna
+// obrigatórios; sem eles, não dá pra cadastrar. `tipo` fica fixo em 'integrador'
+// porque não há como inferir isso a partir de um pedido.
+//
+// Retorna o CNPJ garantido, ou null quando não foi possível garantir — o chamador
+// deve então gravar cliente_cnpj = null em vez de violar a FK.
+export async function garantirClienteParaPedido(
+  cnpj: string,
+  dados: DadosClienteAutomatico,
+): Promise<string | null> {
+  const cnpjNorm = normalizarCNPJ(cnpj)
+  if (!validarCNPJ(cnpjNorm)) return null
+
+  const existente = await buscarCliente(cnpjNorm)
+  if (existente) {
+    if (!existente.vendedorId && dados.vendedorId) {
+      try {
+        await atribuirVendedor(cnpjNorm, dados.vendedorId)
+      } catch (err) {
+        console.warn('[clientes-repository] falha ao assumir cliente automaticamente:', err instanceof Error ? err.message : err)
+      }
+    }
+    return cnpjNorm
+  }
+
+  if (!dados.cidade || !dados.estado || !dados.telefone) {
+    console.warn(`[clientes-repository] cliente ${cnpjNorm} não cadastrado automaticamente — faltam cidade/estado/telefone no pedido de origem`)
+    return null
+  }
+
+  try {
+    await criarCliente(
+      {
+        cnpj:         cnpjNorm,
+        razaoSocial:  dados.razaoSocial,
+        tipo:         'integrador',
+        origem:       'prospeccao',
+        cidade:       dados.cidade,
+        estado:       dados.estado,
+        telefone:     dados.telefone,
+        nomeContato:  dados.nomeContato,
+        emailContato: dados.email,
+        vendedorId:   dados.vendedorId,
+      },
+      dados.criadoPor ?? 'sistema',
+    )
+    return cnpjNorm
+  } catch (err) {
+    // Corrida rara: outro pedido do mesmo lote criou o cliente entre o buscarCliente
+    // e este insert — trata como sucesso, o cliente já existe de qualquer forma.
+    if (err instanceof Error && err.message === 'CNPJ já cadastrado') return cnpjNorm
+    console.warn('[clientes-repository] falha ao criar cliente automaticamente:', err instanceof Error ? err.message : err)
+    return null
+  }
+}
+
 export async function listarClientes(filtros: FiltrosCliente = {}): Promise<{ clientes: Cliente[]; total: number }> {
   const pagina    = Math.max(1, filtros.pagina    ?? 1)
   const porPagina = Math.min(100, Math.max(1, filtros.porPagina ?? 20))

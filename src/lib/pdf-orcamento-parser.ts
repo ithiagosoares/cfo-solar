@@ -39,6 +39,11 @@ export interface DadosExtraidosOrcamento {
   vendedorNomeExtraido: string | null
   clienteNome: string | null
   clienteCnpj: string | null     // normalizado, só dígitos
+  clienteCidade: string | null
+  clienteEstado: string | null   // sigla UF, 2 letras
+  clienteTelefone: string | null
+  clienteContato: string | null
+  clienteEmail: string | null
   valorTotal: number | null
   filial: Filial | null          // derivada da UF no cabeçalho do emitente (ver extrairFilial)
   itens: ItemExtraido[]
@@ -159,6 +164,46 @@ function extrairCliente(linhas: string[]): { clienteNome: string | null; cliente
   return { clienteNome: null, clienteCnpj: null }
 }
 
+// Contato do cliente — cidade/UF vem da linha "Bairro: ... Cidade/UF: <cidade> -
+// <UF> CEP: ...", os demais são linhas próprias de rótulo/valor ("Telefone:",
+// "Contato:", "E-mail:"). Usados só pra cadastro automático de cliente (ver
+// garantirClienteParaPedido) quando o CNPJ do pedido ainda não existe em
+// `clientes` — nenhum é obrigatório pro orçamento em si.
+function extrairContatoCliente(linhas: string[]): {
+  clienteCidade: string | null
+  clienteEstado: string | null
+  clienteTelefone: string | null
+  clienteContato: string | null
+  clienteEmail: string | null
+} {
+  let clienteCidade: string | null = null
+  let clienteEstado: string | null = null
+  let clienteTelefone: string | null = null
+  let clienteContato: string | null = null
+  let clienteEmail: string | null = null
+
+  for (const linha of linhas) {
+    if (!clienteCidade) {
+      const m = linha.match(/Cidade\/UF:\s*(.+?)\s*-\s*([A-Z]{2})\s+CEP:/i)
+      if (m) { clienteCidade = m[1].trim(); clienteEstado = m[2].toUpperCase() }
+    }
+    if (!clienteTelefone) {
+      const m = linha.match(/^Telefone:\s*(.+)$/i)
+      if (m) clienteTelefone = m[1].trim()
+    }
+    if (!clienteContato) {
+      const m = linha.match(/^Contato:\s*(.+)$/i)
+      if (m) clienteContato = m[1].trim()
+    }
+    if (!clienteEmail) {
+      const m = linha.match(/^E-mail:\s*(.+)$/i)
+      if (m) clienteEmail = m[1].trim()
+    }
+  }
+
+  return { clienteCidade, clienteEstado, clienteTelefone, clienteContato, clienteEmail }
+}
+
 // Filial do emitente, a partir do padrão "CIDADE - UF - CEP" no cabeçalho
 // (ex: "COLOMBO - PR - 83401520") — mesmo padrão usado em extrairOrigemRelatorio()
 // para os relatórios HTML (comercial-relatorios-parser.ts). UF sem mapeamento
@@ -239,6 +284,7 @@ function extrairItens(linhas: string[]): ItemExtraido[] {
 export function parseOrcamentoPdf(linhas: string[]): DadosExtraidosOrcamento {
   const cabecalho = extrairCabecalho(linhas)
   const cliente = extrairCliente(linhas)
+  const contatoCliente = extrairContatoCliente(linhas)
   const valorTotal = extrairValorTotal(linhas)
   const filial = extrairFilial(linhas)
   const itens = extrairItens(linhas)
@@ -258,6 +304,11 @@ export function parseOrcamentoPdf(linhas: string[]): DadosExtraidosOrcamento {
     vendedorNomeExtraido: cabecalho.vendedorNomeExtraido,
     clienteNome: cliente.clienteNome,
     clienteCnpj: cliente.clienteCnpj,
+    clienteCidade: contatoCliente.clienteCidade,
+    clienteEstado: contatoCliente.clienteEstado,
+    clienteTelefone: contatoCliente.clienteTelefone,
+    clienteContato: contatoCliente.clienteContato,
+    clienteEmail: contatoCliente.clienteEmail,
     valorTotal,
     filial,
     itens,

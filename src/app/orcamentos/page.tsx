@@ -14,6 +14,7 @@ import { FILIAIS } from '@/lib/empresa-filial'
 import { lerFiltrosDaUrl, paramArray } from '@/lib/filtro-url'
 import ModalNovoOrcamento from '@/components/comercial/ModalNovoOrcamento'
 import ModalMarcarVendido from '@/components/comercial/ModalMarcarVendido'
+import OrcamentoEditModal from '@/components/comercial/OrcamentoEditModal'
 import styles from '@/styles/editorial.module.css'
 
 const POR_PAGINA = 20
@@ -133,6 +134,7 @@ export default function OrcamentosPage() {
 
   const [modalAberto, setModalAberto] = useState(false)
   const [pedidoParaVender, setPedidoParaVender] = useState<{ id: string; cliente: string; valorOrcado: number } | null>(null)
+  const [pedidoSelecionadoId, setPedidoSelecionadoId] = useState<string | null>(null)
   const [toast, setToast] = useState<string | null>(null)
 
   const eVendedor = papel === 'vendedor'
@@ -202,13 +204,16 @@ export default function OrcamentosPage() {
     setFiltroAtivo(FILTROS_ZERO)
   }
 
-  async function arquivarInLinha(id: string, arquivar: boolean) {
-    const res = await fetch(`/api/orcamentos/${id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ arquivar }),
-    })
-    if (res.ok) buscarPedidos(1, true, filtroAtivo)
+  function fecharModalEdicao() {
+    setPedidoSelecionadoId(null)
+    buscarPedidos(1, true, filtroAtivo)
+  }
+
+  function handleModalEdicaoSalvo(msg: string) {
+    setPedidoSelecionadoId(null)
+    setToast(msg)
+    buscarPedidos(1, true, filtroAtivo)
+    setTimeout(() => setToast(null), 3500)
   }
 
   function handleSalvo(msg: string) {
@@ -298,6 +303,12 @@ export default function OrcamentosPage() {
           pedido={pedidoParaVender}
           onFechar={() => setPedidoParaVender(null)}
           onSalvo={handleVendaSalva}
+        />
+
+        <OrcamentoEditModal
+          pedidoId={pedidoSelecionadoId}
+          onFechar={fecharModalEdicao}
+          onSalvo={handleModalEdicaoSalvo}
         />
 
         <FilterBar
@@ -412,9 +423,12 @@ export default function OrcamentosPage() {
               </div>
 
               {pedidos.map((p) => (
-                <a
+                <div
                   key={p.id}
-                  href={`/orcamentos/${p.id}/editar`}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setPedidoSelecionadoId(p.id)}
+                  onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setPedidoSelecionadoId(p.id) } }}
                   style={{
                     display: 'grid',
                     gridTemplateColumns: colGrid,
@@ -424,7 +438,6 @@ export default function OrcamentosPage() {
                     fontSize: 13,
                     alignItems: 'center',
                     minWidth: 760,
-                    textDecoration: 'none',
                     color: 'inherit',
                     cursor: 'pointer',
                     transition: 'background .1s',
@@ -497,25 +510,8 @@ export default function OrcamentosPage() {
                         Vendido
                       </button>
                     )}
-                    <button
-                      type="button"
-                      onClick={e => { e.preventDefault(); e.stopPropagation(); void arquivarInLinha(p.id, !filtroAtivo.mostrarArquivados) }}
-                      style={{
-                        background: 'none',
-                        border: '1px solid var(--cor-borda-sutil)',
-                        borderRadius: 6,
-                        padding: '3px 8px',
-                        fontSize: 11,
-                        color: 'var(--cor-texto-suave)',
-                        cursor: 'pointer',
-                        fontFamily: 'inherit',
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
-                      {filtroAtivo.mostrarArquivados ? 'Restaurar' : 'Arquivar'}
-                    </button>
                   </div>
-                </a>
+                </div>
               ))}
             </div>
 
